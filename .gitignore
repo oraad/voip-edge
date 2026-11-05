@@ -6,3 +6,17 @@ __pycache__/
 *.sqlite-shm
 console-data/
 .pytest_cache/
+
+# privacy: never commit live data, certs, state or local deny-lists
+kamailio/db/*.sqlite
+kamailio/db/*.sqlite-wal
+kamailio/db/*.sqlite-shm
+*.key
+*.crt
+*.cer
+*.pem
+tls/
+acme/
+certs/
+backups/
+tools/private-deny.txt

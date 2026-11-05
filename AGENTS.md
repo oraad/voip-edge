@@ -152,3 +152,7 @@ descriptor/SQLite/reload rules.
   console` (offline smoke). Do not put `pytest` or test doubles in the image,
   and do not claim `docker build` succeeded unless it actually ran on a
   network-enabled host.
+
+## Privacy
+
+Never commit tenant data, live DBs, certs or DNS-01 secrets. Run `tools/check-privacy.sh --all` before publishing; the pre-commit hook enforces it (enable with `git config core.hooksPath .githooks`). Placeholder conventions are in docs/privacy.md.

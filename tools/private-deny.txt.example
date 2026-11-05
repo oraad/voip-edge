@@ -1,0 +1,14 @@
+# Private deny-list — NEVER COMMIT THIS FILE.
+#
+# Copy to tools/private-deny.txt (gitignored) and add one literal per line:
+# tenant domains, landline numbers, public/tunnel addresses, hostnames,
+# e-mail addresses, certificate names, anything deployment-specific.
+#
+# The pre-commit hook reads it and refuses to stage any file containing a
+# listed value. The deny-list stays local precisely because it holds the
+# sensitive values themselves.
+#
+# Example (placeholders only — replace locally):
+# sip.alpha.home.example.net
+# 01111111
+# 203.0.113.10

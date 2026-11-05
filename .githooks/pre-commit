@@ -1,0 +1,3 @@
+#!/bin/sh
+# pre-commit hook: blocks secrets and deployment-specific data.
+exec "$(git rev-parse --show-toplevel)/tools/check-privacy.sh"
