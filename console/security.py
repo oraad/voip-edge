@@ -142,13 +142,16 @@ def csrf_protected(request: Request) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def issue_session(response: Response, sub: str = "token") -> str:
+def issue_session(response: Response, sub: str = "token", email: str = "") -> str:
     """Attach session + CSRF cookies to *response*; return the CSRF value."""
     cfg = settings_module.settings
     csrf = new_csrf_token()
+    payload = {"sub": sub, "csrf": csrf}
+    if email:
+        payload["email"] = email
     response.set_cookie(
         SESSION_COOKIE,
-        sign_session({"sub": sub, "csrf": csrf}),
+        sign_session(payload),
         max_age=cfg.session_ttl_seconds,
         httponly=True,
         samesite="Strict",

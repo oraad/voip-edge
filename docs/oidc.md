@@ -1,8 +1,8 @@
 # OIDC authentication for the console (design, best practices, task plan)
 
-Status: **designed, not implemented**. Blocked on one dependency decision
-(see §7) — JWT/JWKS verification needs a crypto library that is not installed
-in the current offline environment.
+Status: **implemented** (v0.1.7) with Authlib + cryptography, including the
+negative-test matrix against an in-process fake provider (16 tests). See §7 for
+the dependency note and §9 for what remains optional.
 
 Audience: single operator, but the console mounts the routing DB and the
 Kamailio RPC socket, so authentication is the highest-value control on the
@@ -30,7 +30,7 @@ machinery. Token login stays as **break-glass** behind an env switch.
 | Claims | Account key is **`(iss, sub)`** — never email/username. `email`/`name` are display only. |
 | UserInfo | Optional; if used, its `sub` MUST equal the ID-token `sub`. |
 | Local authorization | Env allowlist: `OIDC_ALLOWED_GROUPS` (any-of) and/or `OIDC_ALLOWED_EMAIL_DOMAINS`. Denied → 403 page naming the missing requirement (not "access denied" alone). |
-| Sessions | Issue a **fresh** session on login (fixation defence); store only `sub`, `iss`, `email`, `csrf`, `exp` — **never** tokens. Keep 12 h absolute; add idle expiry (30 min) for an admin tool. |
+| Sessions | Issue a **fresh** session on login (fixation defence); store only `sub`, `iss`, `email`, `csrf`, `exp` — **never** tokens. 12 h absolute expiry (implemented). Idle expiry (30 min) is an optional follow-up: it requires rotating the cookie on activity, which is deferred to keep the first version's session semantics simple. |
 | Logout | Local session clear **first**, then RP-initiated logout (`end_session_endpoint`, `id_token_hint`, registered `post_logout_redirect_uri`, `state`). No GET logout (CSRF); POST with existing CSRF check. Back-channel logout: out of scope for a single-instance console — documented as a known gap. |
 | Errors | Typed states: `idp_unreachable`, `invalid_state`, `token_rejected`, `claims_denied`, `clock_skew`, `callback_mismatch` — each renders a distinct operator-facing message with the correlation id, never a stack trace. |
 | Transport | Discovery/JWKS fetched with `httpx` (timeouts, TLS verified), cached (discovery 1 h, JWKS until `kid` miss + 5 min floor); **never** fetch a URL supplied by a token. |
@@ -118,7 +118,23 @@ POST /auth/logout                   -> clear session, then 303 to IdP end-sessio
     (cookie rotated).
 12. Audit: login/denied/logout recorded without tokens.
 
-## 7. Dependency decision (why not implemented yet)
+## 9. Implementation notes
+
+- `console/oidc.py`: discovery/JWKS caches (issuer-bound), signed 5-minute flow
+  cookie (state/nonce/PKCE verifier/next), algorithm allowlist (rejects
+  `alg=none` and algorithm confusion), ID-token claims validation, `at_hash`,
+  group/email-domain allowlist, session rotation, RP-initiated logout.
+- `console/app.py`: login page renders the SSO button + collapsible token
+  fallback per `CONSOLE_AUTH_MODE`; account chip + POST sign-out in the status
+  strip; `/auth/*` 404 in token-only mode; token POST 403 in SSO-only mode.
+- Tests: `tests/api/test_oidc.py` — happy path, wrong aud/iss, expired (outside
+  skew), nonce, bad signature, `alg=none`, state mismatch, group/domain denial,
+  open-redirect neutralisation, discovery outage, auth modes, logout CSRF.
+- Dependencies: Authlib + cryptography (Debian packages `python3-authlib`,
+  `python3-cryptography`; or the `oidc` extra). Both are optional at runtime:
+  without `OIDC_ISSUER` the console behaves exactly as before.
+
+## 7. Dependency decision (history)
 
 ID-token verification requires JWT signature checking. This environment has
 **no `cryptography`, `authlib`, `joserfc`, `pyjwt`** and no network, so any

@@ -16,3 +16,6 @@ markers = [
 
 [tool.ruff]
 line-length = 100
+
+[project.optional-dependencies]
+oidc = ["authlib>=1.6", "cryptography>=43"]

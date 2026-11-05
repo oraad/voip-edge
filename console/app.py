@@ -56,7 +56,16 @@ def _wants_fragment(request: Request) -> bool:
 
 def _base_context(request: Request) -> dict[str, object]:
     """Template globals shared by every page (T3/T4 routes get these free)."""
-    context: dict[str, object] = {"csrf": request.cookies.get(CSRF_COOKIE)}
+    session = read_session(request)
+    from .oidc import oidc_enabled
+
+    context: dict[str, object] = {
+        "csrf": request.cookies.get(CSRF_COOKIE),
+        "account_email": (session or {}).get("email", ""),
+        "account_sub": (session or {}).get("sub", ""),
+        "signed_in": bool(session),
+        "oidc_enabled": oidc_enabled(),
+    }
     context.update(system_ui.status_context(request))
     return context
 
@@ -154,15 +163,31 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     @app.get("/login", response_class=HTMLResponse)
     def login_page(request: Request):
+        from . import oidc
+
+        error_code = request.query_params.get("error", "")
+        next_path = oidc.safe_return_to(request.query_params.get("next"))
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"show_chrome": False, "error": None},
+            {
+                "show_chrome": False,
+                "error": oidc.ERROR_TEXT.get(error_code) if error_code else None,
+                "oidc_enabled": oidc.oidc_enabled(),
+                "token_enabled": oidc.token_enabled(),
+                "provider_name": settings_module.settings.oidc_provider_name,
+                "next_path": next_path,
+            },
+            status_code=403 if error_code == "claims_denied" else 200,
             headers=NO_STORE,
         )
 
     @app.post("/login")
     async def login_submit(request: Request):
+        if not settings_module.settings.auth_mode in ("both", "token"):
+            return PlainTextResponse(
+                "Token sign-in is disabled (SSO only).", status_code=403, headers=NO_STORE
+            )
         client_ip = request.client.host if request.client else "unknown"
         if login_rate_exceeded(client_ip):
             observability.log_auth_failure(
@@ -308,6 +333,11 @@ def create_app() -> FastAPI:
     from . import wizard_ui
 
     app.include_router(wizard_ui.router)
+
+    # OIDC: /auth/login, /auth/callback, /auth/logout (docs/oidc.md)
+    from .oidc import router as oidc_router
+
+    app.include_router(oidc_router)
 
     return app
 

@@ -39,6 +39,22 @@ class Settings:
     tls_live: bool = _bool("CONSOLE_TLS_LIVE", True)
     session_ttl_seconds: int = int(os.environ.get("CONSOLE_SESSION_TTL", "43200"))
     login_rate_per_min: int = int(os.environ.get("CONSOLE_LOGIN_RATE", "5"))
+    # --- OIDC (docs/oidc.md) ---
+    # both = OIDC + break-glass token; oidc = SSO only; token = legacy only
+    auth_mode: str = os.environ.get("CONSOLE_AUTH_MODE", "both")
+    oidc_issuer: str = os.environ.get("OIDC_ISSUER", "")
+    oidc_client_id: str = os.environ.get("OIDC_CLIENT_ID", "")
+    oidc_client_secret: str = os.environ.get("OIDC_CLIENT_SECRET", "")
+    oidc_scopes: str = os.environ.get("OIDC_SCOPES", "openid profile email groups")
+    oidc_redirect_uri: str = os.environ.get("OIDC_REDIRECT_URI", "")
+    oidc_post_logout_uri: str = os.environ.get("OIDC_POST_LOGOUT_URI", "")
+    oidc_allowed_groups: tuple[str, ...] = tuple(
+        g for g in os.environ.get("OIDC_ALLOWED_GROUPS", "").split(",") if g
+    )
+    oidc_allowed_email_domains: tuple[str, ...] = tuple(
+        d for d in os.environ.get("OIDC_ALLOWED_EMAIL_DOMAINS", "").split(",") if d
+    )
+    oidc_provider_name: str = os.environ.get("OIDC_PROVIDER_NAME", "SSO")
 
 
 settings = Settings()

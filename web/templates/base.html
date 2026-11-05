@@ -99,7 +99,16 @@
     <span class="chip err">sidecar unavailable</span>
     {% endif %}
     <span class="chip muted">read-only: <strong>{% if st.readonly|default(false) %}on{% else %}off{% endif %}</strong></span>
+    {% if signed_in %}
+    <form method="post" action="{% if oidc_enabled %}/auth/logout{% else %}/logout{% endif %}"
+          class="spacer" style="display:inline">
+      {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+      <span class="chip">{{ account_email or account_sub }}
+        · <button type="submit" style="background:none;border:0;padding:0;color:inherit;font:inherit;text-decoration:underline;cursor:pointer">Sign out</button></span>
+    </form>
+    {% else %}
     <span class="spacer meta mono">console v1</span>
+    {% endif %}
   </header>
   {% if st.readonly|default(false) %}
   <div class="banner banner-global warn" role="status">

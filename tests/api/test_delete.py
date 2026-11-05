@@ -106,7 +106,7 @@ def test_in_use_set_is_blocked_on_get_and_post_and_names_the_tenant(
     page = _squash(get_blocked.text)
     assert "sip.alpha.home.example.net" in page
     assert "in use" in page
-    assert 'method="post"' not in get_blocked.text
+    assert "/delete" not in get_blocked.text  # only the global sign-out form
 
     # POST re-checks inside the write transaction; it must not delete anything.
     post_blocked = auth_client.post("/tables/dispatcher/1/delete")
