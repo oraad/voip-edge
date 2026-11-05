@@ -7,7 +7,12 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-q"
+# `live` starts the real Kamailio binary; the default run must stay portable.
+# run-live.sh overrides addopts (`-o addopts=""`) and selects `-m live`.
+addopts = "-q -m 'not live'"
+markers = [
+    "live: requires a local kamailio binary",
+]
 
 [tool.ruff]
 line-length = 100

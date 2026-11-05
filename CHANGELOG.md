@@ -7,6 +7,25 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While the project is pre-1.0, MINOR bumps carry feature sets and PATCH bumps
 carry packaging/docs fixes.
 
+## [0.1.0] - 2026-11-05
+
+### Added
+
+- Descriptor-driven console (T0–T10 from docs/plan.md): pack/unpack engine, tables.yaml grammar,
+  sqlite WAL layer, JSON-RPC unix-datagram client, coalescing reload worker with pending-intent
+  persistence, auth/CSRF (header + hidden-field double submit), generic read/edit/delete UI,
+  validation families (tenant/landline/dispatcher/dialplan/trusted), stale-edit 409, landline
+  prefix interruption, onboarding wizard (4 steps, 5/4 rows, backup-first), tenant lifecycle
+  park/restore/destroy with durable resume and bounded regcache purge, live dashboard,
+  capabilities probe, read-only mode, audit/backups pages, Docker/compose packaging, ops docs.
+- Live Kamailio integration gate (`tests/live/run-live.sh`): park → REGISTER 403 → restore → 200.
+
+### Notes
+
+- `WITH_CONSOLE` ifdef added to the edge repo's kamailio.cfg (jsonrpcs dgram socket).
+- Static assets (htmx 2.0.4, PicoCSS 2.0.6) are not vendored yet — see web/static/README.md.
+- Docker build/compose unverified in this environment (no Docker/network); runbook in docs/ops/deploy.md.
+
 ## [Unreleased]
 
 ### Added

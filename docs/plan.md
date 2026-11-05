@@ -35,12 +35,12 @@ modparam("jsonrpcs", "dgram_socket", "/run/kamailio/kamailio_rpc.sock")
 modparam("jsonrpcs", "transport", 4)          # datagram only
 modparam("jsonrpcs", "dgram_mode", 0660)
 modparam("jsonrpcs", "dgram_group", "console")  # shared group with console container
-modparam("jsonrpcs", "dgram_max_size", 262144)
+# (dgram_max_size does not exist in the 6.1.5 packaged module — omitted)
 modparam("db_sqlite", "db_set_journal_mode", "DBFILE=WAL")     # exact path via -A
 modparam("db_sqlite", "db_set_busy_timeout", "DBFILE=300")
 #!endif
 ```
-(`dgram_max_size` > kernel wmem default must be verified in the T1 lab; `store_path` JSON-RPC extension is the documented escape hatch for oversize dumps.)
+(`dgram_max_size` is NOT available in the packaged 6.1.5 `jsonrpcs.so` — verified in T8.7 and omitted; the `store_path` JSON-RPC extension remains the documented escape hatch for oversize dumps.)
 
 ## 3. Kamailio control-plane constraints (6.1.5, master-checked 2026-11-05)
 
