@@ -1,0 +1,401 @@
+# tables.yaml — closed descriptor grammar v1 (plan §5.1)
+#
+# Validators are NAMES only; T4 provides the implementation for each name.
+# Field order defaults to list/form order, form_order overrides it.
+# Severities: error blocks save, warn saves with a badge.
+version: 1
+
+tables:
+  # -------------------------------------------------------------------------
+  # mtree "tenantdom": SIP domain -> packed tenant record
+  # tvalue = tenantid,ds_onnet,ds_pstn,cli,label,dpid,flags
+  # -------------------------------------------------------------------------
+  tenant_registry:
+    table: tenant_registry
+    storage: packed
+    key: tprefix
+    delete_policy: lifecycle
+    reload:
+      rpc: mtree.reload
+      params: [tenantdom]
+      throttle_seconds: 5
+    cross_refs:
+      - field: ds_onnet
+        ref: dispatcher.setid
+        on_missing: error
+      - field: ds_pstn
+        ref: dispatcher.setid
+        on_missing: error
+      - field: dpid
+        ref: dialplan.dpid
+        on_missing: error
+    fields:
+      - name: tprefix
+        column: tprefix
+        type: domain
+        validator: tenant_domain
+        severity: error
+        help: Home SIP domain — letters, digits, dots and dashes under an allowed suffix; create-only.
+        widget: text
+        show_in_list: true
+        form_order: 0
+      - name: tenantid
+        pack_position: 0
+        type: str
+        validator: tenantid_unique
+        severity: error
+        help: Opaque short id such as T1 — uppercase letters and digits, unique across homes.
+        widget: text
+        show_in_list: true
+        form_order: 1
+      - name: ds_onnet
+        pack_position: 1
+        type: int
+        validator: set_exists_onnet
+        severity: error
+        help: Dispatcher set id of this home's voip-stack (10+N by convention; a different id is a warning, not a block).
+        widget: number
+        show_in_list: true
+        form_order: 2
+      - name: ds_pstn
+        pack_position: 2
+        type: int
+        validator: pstn_set_exists_or_zero
+        severity: error
+        help: Dispatcher set id of this home's PSTN gateway; 0 means the home has no trunk.
+        widget: number
+        show_in_list: true
+        form_order: 3
+      - name: cli
+        pack_position: 3
+        type: digits
+        validator: cli_unique
+        severity: error
+        help: Landline as dialed locally — digits only, no separators; must not collide with another home.
+        widget: text
+        show_in_list: true
+        form_order: 4
+      - name: label
+        pack_position: 4
+        type: label
+        validator: label_pack_safe
+        severity: error
+        help: Caller-id label shown to the other home; no commas or plus signs.
+        widget: text
+        show_in_list: true
+        form_order: 5
+      - name: dpid
+        pack_position: 5
+        type: int
+        validator: dpid_exists
+        severity: error
+        help: Dialplan partition holding this home's emergency patterns (10 by convention).
+        widget: number
+        show_in_list: false
+        form_order: 6
+      - name: flags
+        pack_position: 6
+        type: str
+        validator: flags_valid
+        severity: error
+        help: Inter-home on/off, PSTN failover on/off, blocked-destination partition (0 or blank = none), stored as 1+1+90.
+        widget: text
+        show_in_list: false
+        form_order: 7
+
+  # -------------------------------------------------------------------------
+  # mtree "landline": dialed digits -> packed target record
+  # tvalue = tenantid,target,ds_onnet,ih_on
+  # -------------------------------------------------------------------------
+  tenant_landline:
+    table: tenant_landline
+    storage: packed
+    key: tprefix
+    delete_policy: lifecycle
+    reload:
+      rpc: mtree.reload
+      params: [landline]
+      throttle_seconds: 5
+    cross_refs:
+      - field: tenantid
+        ref: tenant_registry.tenantid
+        on_missing: error
+      - field: ds_onnet
+        ref: dispatcher.setid
+        on_missing: error
+    fields:
+      - name: tprefix
+        column: tprefix
+        type: digits
+        validator: landline_digits
+        severity: error
+        help: Dialed digits in local format, at least 3; longer prefixes win.
+        widget: text
+        show_in_list: true
+        form_order: 0
+      - name: tenantid
+        pack_position: 0
+        type: str
+        validator: tenant_exists
+        severity: error
+        help: Owning home id — must exist in the home registry.
+        widget: text
+        show_in_list: true
+        form_order: 1
+      - name: target
+        pack_position: 1
+        type: label
+        validator: target_identifier
+        severity: error
+        help: Ring group or extension the call is rewritten to.
+        widget: text
+        show_in_list: true
+        form_order: 2
+      - name: ds_onnet
+        pack_position: 2
+        type: int
+        validator: null
+        severity: error
+        help: Taken from the owning home's voip-stack set — read-only.
+        widget: number
+        readonly: true
+        derived: tenant_ds_onnet
+        show_in_list: true
+        form_order: 3
+      - name: ih_on
+        pack_position: 3
+        type: enum01
+        validator: enum01
+        severity: error
+        help: 1 = this landline accepts inter-home calls.
+        widget: select
+        show_in_list: true
+        form_order: 4
+
+  # -------------------------------------------------------------------------
+  # Standard Kamailio dispatcher table (real columns, auto id PK)
+  # -------------------------------------------------------------------------
+  dispatcher:
+    table: dispatcher
+    storage: columns
+    delete_policy: blocked_if_refs
+    reload:
+      rpc: dispatcher.reload
+      params: []
+      throttle_seconds: 5
+    fields:
+      - name: setid
+        column: setid
+        type: int
+        validator: setid_int
+        severity: error
+        help: Dispatcher set id — 10+N on-net and 30+N PSTN by convention.
+        widget: number
+        show_in_list: true
+        form_order: 0
+      - name: destination
+        column: destination
+        type: sip_uri
+        validator: destination_ipv4_required
+        severity: error
+        help: sip:<literal IPv4>:<port>;transport=tcp — FQDN hosts are rejected; UDP shows the MTU warning.
+        widget: text
+        show_in_list: true
+        form_order: 1
+      - name: flags
+        column: flags
+        type: int
+        validator: dispatcher_flags
+        severity: error
+        help: Dispatcher state flags — first letter A/I/T/D, second P (probed) or X (not probed).
+        widget: number
+        show_in_list: false
+        form_order: 2
+      - name: priority
+        column: priority
+        type: int
+        validator: priority_int
+        severity: error
+        help: Lower value is tried first within a set.
+        widget: number
+        show_in_list: false
+        form_order: 3
+      - name: attrs
+        column: attrs
+        type: str
+        validator: attrs_udp_warning
+        severity: warn
+        help: Optional attributes; transport=udp on the tunnel means OPTIONS pings stay green while INVITEs fragment and die.
+        widget: text
+        show_in_list: false
+        form_order: 4
+      - name: description
+        column: description
+        type: label
+        validator: null
+        severity: error
+        help: Operator-facing label for this destination.
+        widget: text
+        show_in_list: true
+        form_order: 5
+
+  # -------------------------------------------------------------------------
+  # Standard Kamailio dialplan table (match-only identity rewrite)
+  # -------------------------------------------------------------------------
+  dialplan:
+    table: dialplan
+    storage: columns
+    delete_policy: blocked_if_refs
+    reload:
+      rpc: dialplan.reload
+      params: []
+      throttle_seconds: 5
+    fields:
+      - name: dpid
+        column: dpid
+        type: int
+        validator: dpid_int
+        severity: error
+        help: Partition id — 10 is the country emergency profile, 90 the blocked-destination partition by convention.
+        widget: number
+        show_in_list: true
+        form_order: 0
+      - name: pr
+        column: pr
+        type: int
+        validator: pr_int
+        severity: error
+        help: Rule priority within the partition.
+        widget: number
+        show_in_list: false
+        form_order: 1
+      - name: match_op
+        column: match_op
+        type: int
+        validator: match_op_locked
+        severity: error
+        help: Always 1 (regex match) — locked.
+        widget: number
+        locked: true
+        show_in_list: false
+        form_order: 2
+      - name: match_exp
+        column: match_exp
+        type: regex
+        validator: regex_compiles
+        severity: error
+        help: Pattern that selects the destination; it must compile in Python (PCRE-only constructs only warn).
+        widget: text
+        show_in_list: true
+        form_order: 3
+      - name: match_len
+        column: match_len
+        type: int
+        validator: match_len_zero
+        severity: error
+        help: 0 — match on the expression only.
+        widget: number
+        show_in_list: false
+        form_order: 4
+      - name: subst_exp
+        column: subst_exp
+        type: regex
+        validator: identity_locked
+        severity: error
+        help: Identity rewrite by design — locked to ^(.*)$.
+        widget: text
+        locked: true
+        show_in_list: false
+        form_order: 5
+      - name: repl_exp
+        column: repl_exp
+        type: regex
+        validator: identity_locked
+        severity: error
+        help: Identity rewrite by design — locked to \1.
+        widget: text
+        locked: true
+        show_in_list: false
+        form_order: 6
+      - name: attrs
+        column: attrs
+        type: str
+        validator: attrs_free_text
+        severity: warn
+        help: Free-text note for operators (for example "emergency Example").
+        widget: text
+        show_in_list: true
+        form_order: 7
+
+  # -------------------------------------------------------------------------
+  # Standard Kamailio permissions "trusted" table
+  # -------------------------------------------------------------------------
+  trusted:
+    table: trusted
+    storage: columns
+    delete_policy: blocked_if_refs
+    reload:
+      rpc: permissions.trustedReload
+      params: []
+      throttle_seconds: 5
+    cross_refs:
+      - field: tag
+        ref: tenant_registry.tprefix
+        on_missing: error
+    fields:
+      - name: src_ip
+        column: src_ip
+        type: ipv4
+        validator: trusted_src_ip
+        severity: error
+        help: Wire-observed native tunnel IP of the home; non-private addresses need an explicit override.
+        widget: text
+        show_in_list: true
+        form_order: 0
+      - name: proto
+        column: proto
+        type: str
+        validator: proto_any_locked
+        severity: error
+        help: Always "any" — locked.
+        widget: text
+        locked: true
+        show_in_list: false
+        form_order: 1
+      - name: from_pattern
+        column: from_pattern
+        type: str
+        validator: null
+        severity: error
+        help: Optional From-pattern restriction (normally empty).
+        widget: text
+        show_in_list: false
+        form_order: 2
+      - name: ruri_pattern
+        column: ruri_pattern
+        type: str
+        validator: null
+        severity: error
+        help: Optional R-URI-pattern restriction (normally empty).
+        widget: text
+        show_in_list: false
+        form_order: 3
+      - name: tag
+        column: tag
+        type: domain
+        validator: tag_options
+        severity: error
+        help: Home domain this source belongs to — choose an existing home.
+        widget: select
+        options_query: tenant_registry.tprefix
+        show_in_list: true
+        form_order: 4
+      - name: priority
+        column: priority
+        type: int
+        validator: priority_int
+        severity: error
+        help: Lower value is evaluated first.
+        widget: number
+        show_in_list: false
+        form_order: 5

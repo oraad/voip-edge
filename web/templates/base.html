@@ -1,0 +1,104 @@
+{% if not fragment|default(false) %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}VoIP Edge Console{% endblock %}</title>
+  {# Vendored in T3; these 404 while the repo has no assets and the page
+     still works fully server-rendered. #}
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <style>
+    :root { --border:#d7dbe3; --muted:#f3f5f8; --muted-foreground:#5b6472;
+            --primary:#2f5fd0; --primary-foreground:#fff; --destructive:#b3261e;
+            --warning:#8a6100; --success:#1f7a45; --info:#1f6aa5;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    * { box-sizing: border-box; }
+    body { margin:0; font: 15px/1.45 system-ui,-apple-system,sans-serif; color:#1b1f27; }
+    .app { display:grid; grid-template-columns: 200px 1fr; min-height:100vh; }
+    .statusbar { grid-column:1 / -1; display:flex; gap:14px; align-items:center;
+                 flex-wrap:wrap; padding:8px 16px; background:var(--muted);
+                 border-bottom:1px solid var(--border); font-size:.86em; }
+    .chip { display:inline-flex; gap:6px; align-items:center; }
+    .chip.warn { color:var(--warning); } .chip.ok { color:var(--success); }
+    .chip.muted { color:var(--muted-foreground); }
+    .statusbar .spacer { margin-left:auto; }
+    .nav { border-right:1px solid var(--border); padding:14px 10px; }
+    .nav .brand { font-weight:700; margin:0 6px 14px; }
+    .nav .brand small { display:block; font-weight:400; color:var(--muted-foreground);
+                        font-size:.72em; }
+    .nav a { display:block; padding:7px 10px; border-radius:6px; margin-bottom:2px;
+             color:#394150; text-decoration:none; }
+    .nav a:hover { background:var(--muted); }
+    .nav a[aria-current="page"] { background:var(--muted); color:#10141a; font-weight:600; }
+    .nav .grp { margin:14px 6px 5px; font-size:.72em; letter-spacing:.06em;
+                text-transform:uppercase; color:var(--muted-foreground); }
+    .main { padding:18px 22px 28px; max-width:1100px; width:100%; }
+    .login-main { max-width:440px; margin:8vh auto; padding:0 20px; }
+    .pagehead { display:flex; justify-content:space-between; align-items:center;
+                gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+    h1 { font-size:1.45em; margin:0 0 2px; } h2 { font-size:1.1em; margin:22px 0 8px; }
+    .sub { color:var(--muted-foreground); font-size:.9em; margin-bottom:12px; }
+    .meta { color:var(--muted-foreground); font-size:.82em; }
+    .mono { font-family:var(--font-mono); font-size:.92em; }
+    .panel { border:1px solid var(--border); border-radius:10px; padding:16px 18px;
+             margin-bottom:16px; }
+    .empty { border-style:dashed; text-align:center; }
+    .empty h2 { margin-top:0; }
+    .btn { display:inline-block; border:1px solid var(--border); border-radius:6px;
+           background:var(--muted); color:#1b1f27; padding:8px 14px; min-height:32px;
+           font:inherit; font-size:.9em; cursor:pointer; }
+    .btn.pri { background:var(--primary); border-color:var(--primary);
+               color:var(--primary-foreground); font-weight:600; }
+    .btn[disabled] { opacity:.55; cursor:not-allowed; }
+    table { width:100%; border-collapse:collapse; font-size:.95em; }
+    thead th { text-align:left; font-weight:600; color:var(--muted-foreground);
+               padding:8px 10px; border-bottom:1px solid var(--border); }
+    tbody td { padding:9px 10px; border-bottom:1px solid var(--border); }
+    .errsummary { border:1px solid var(--destructive); border-left-width:4px;
+                  border-radius:8px; padding:12px 16px; font-size:.9em;
+                  margin-bottom:16px; }
+    .errsummary:focus { outline:3px solid color-mix(in srgb, var(--primary) 45%, transparent); }
+    label { display:block; font-size:.88em; font-weight:600; margin:12px 0 4px; }
+    input[type=password], input[type=text] { width:100%; padding:9px 10px;
+      border:1px solid var(--border); border-radius:6px; font:inherit; min-height:32px; }
+    input[aria-invalid="true"] { border-color:var(--destructive); }
+    .formbar { margin-top:18px; display:flex; gap:10px; align-items:center; }
+    .skip-link { position:absolute; left:-9999px; }
+    .skip-link:focus { left:8px; top:8px; background:#fff; padding:6px; z-index:10; }
+  </style>
+</head>
+<body{% if csrf %} hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'{% endif %}>
+<a class="skip-link" href="#main">Skip to content</a>
+{% if show_chrome|default(true) %}
+<div class="app">
+  <header class="statusbar" role="status" aria-live="off" aria-label="Console status">
+    <span class="chip ok">edge health: <strong>not wired yet</strong></span>
+    <span class="chip warn">pending reloads: <strong>0</strong></span>
+    <span class="chip muted">read-only: <strong>off</strong></span>
+    <span class="spacer meta mono">console v1</span>
+  </header>
+  <nav class="nav" aria-label="Main navigation">
+    <div class="brand">VoIP Edge <small>console</small></div>
+    <a href="/homes"{% if nav == "homes" %} aria-current="page"{% endif %}>Homes</a>
+    <a href="/live"{% if nav == "live" %} aria-current="page"{% endif %}>Live</a>
+    <div class="grp">Routing data</div>
+    <a href="/landlines"{% if nav == "landlines" %} aria-current="page"{% endif %}>Landlines</a>
+    <a href="/route-sets"{% if nav == "route-sets" %} aria-current="page"{% endif %}>Route sets</a>
+    <a href="/number-rules"{% if nav == "number-rules" %} aria-current="page"{% endif %}>Number rules</a>
+    <a href="/trusted-sources"{% if nav == "trusted-sources" %} aria-current="page"{% endif %}>Trusted sources</a>
+    <div class="grp">System</div>
+    <a href="/audit"{% if nav == "audit" %} aria-current="page"{% endif %}>Audit &amp; backups</a>
+  </nav>
+  <main class="main" id="main">
+{% else %}
+<main class="main login-main" id="main">
+{% endif %}
+{% endif %}
+{% block content %}{% endblock %}
+{% if not fragment|default(false) %}
+  </main>
+{% if show_chrome|default(true) %}</div>{% endif %}
+</body>
+</html>
+{% endif %}
