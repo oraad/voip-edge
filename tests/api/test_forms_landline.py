@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from tests.fixtures import seeddb
 
 BASE = {
-    "tprefix": "26419999",
+    "tprefix": "09999999",
     "tenantid": "T1",
     "target": "700",
     "ds_onnet": "11",
@@ -84,7 +84,7 @@ def test_cross_tenant_shadow_returns_interruption_page_naming_both_rows(
 ):
     worker = RecordingWorker()
     app.state.worker = worker
-    payload = dict(BASE, tprefix="2641", tenantid="T2", ds_onnet="12")
+    payload = dict(BASE, tprefix="0111", tenantid="T2", ds_onnet="12")
 
     response = auth_client.post("/tables/tenant_landline/new", data=payload)
 
@@ -92,7 +92,7 @@ def test_cross_tenant_shadow_returns_interruption_page_naming_both_rows(
     page = _squash(response.text)
     assert 'id="interruption"' in response.text
     assert EXISTING_FULL in page
-    assert "2641" in page
+    assert "0111" in page
     assert EXISTING_TENANT in page
     assert "T2" in page
     assert "longest matching prefix wins" in page.lower()
@@ -110,7 +110,7 @@ def test_same_tenant_shadow_is_blocked_without_the_checkbox(
 ):
     worker = RecordingWorker()
     app.state.worker = worker
-    payload = dict(BASE, tprefix="2641")
+    payload = dict(BASE, tprefix="0111")
 
     response = auth_client.post("/tables/tenant_landline/new", data=payload)
 
@@ -127,7 +127,7 @@ def test_same_tenant_shadow_is_blocked_without_the_checkbox(
 def test_same_tenant_shadow_saves_with_the_checkbox(seeded_db, auth_client, app):
     worker = RecordingWorker()
     app.state.worker = worker
-    payload = dict(BASE, tprefix="2641", allow_same_tenant_shadow="1")
+    payload = dict(BASE, tprefix="0111", allow_same_tenant_shadow="1")
 
     response = auth_client.post("/tables/tenant_landline/new", data=payload)
 

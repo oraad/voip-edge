@@ -112,7 +112,7 @@
                {% if field_meta.domain.aria_invalid %}aria-invalid="true"{% endif %}
                aria-describedby="{{ field_meta.domain.describedby }}">
         <div class="hint" id="help-domain">The exact SIP domain phones at this
-          home use, for example <span class="mono">sip.b-example.home.example.net</span>.
+          home use, for example <span class="mono">sip.beta.home.example.net</span>.
           It must end in an allowed suffix and is create-only.</div>
         {% for message in field_meta.domain.errors %}
         <div class="errtxt" id="err-domain-{{ loop.index }}">{{ message }}</div>

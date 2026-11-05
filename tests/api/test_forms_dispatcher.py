@@ -18,7 +18,7 @@ BASE = {
     "flags": "0",
     "priority": "0",
     "attrs": "",
-    "description": "b-example voip-stack",
+    "description": "beta voip-stack",
 }
 
 

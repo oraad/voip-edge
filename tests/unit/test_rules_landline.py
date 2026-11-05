@@ -19,7 +19,7 @@ from tests.fixtures import seeddb
 TABLESET = descriptors.load()
 LANDLINE = TABLESET.tables["tenant_landline"]
 
-EXISTING_SHORT = "2641"
+EXISTING_SHORT = "0111"
 EXISTING_FULL = "01111111"
 OTHER_FULL = "02222222"
 
@@ -82,7 +82,7 @@ def test_landline_digits_rejects_shorter_than_three(value, conn):
     assert warnings == []
 
 
-@pytest.mark.parametrize("value", ["26a", "26 41", "+2641", "26.41", "26-41"])
+@pytest.mark.parametrize("value", ["26a", "26 41", "+0111", "26.41", "26-41"])
 def test_landline_digits_rejects_non_digits(value, conn):
     errors, warnings = run("landline_digits", value, context(conn))
     assert errors and "digits only" in errors[0]

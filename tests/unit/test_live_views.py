@@ -50,7 +50,7 @@ REGCACHE_DUMP = [
         "size": 1,
         "slot": {
             "item": {
-                "name": "desk@sip.b-example.home.example.net",
+                "name": "desk@sip.beta.home.example.net",
                 "value": "sip:10.0.6.20:5060",
             }
         },
@@ -70,7 +70,7 @@ def test_regcache_flattens_single_item_slot_and_parses_transports():
     assert rows["garden@sip.beta.home.example.net"]["transport"] == "tcp"
     assert rows["mobile1@sip.alpha.home.example.net"]["transport"] == "tls"
     # No ;transport= on this flow: the documented default is UDP.
-    assert rows["desk@sip.b-example.home.example.net"]["transport"] == "udp"
+    assert rows["desk@sip.beta.home.example.net"]["transport"] == "udp"
 
 
 def test_regcache_keeps_flow_and_raw_expires_but_adds_no_countdown():

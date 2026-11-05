@@ -18,10 +18,10 @@ from console import settings as settings_module
 from console import wizard_ui
 
 IDENTITY = {
-    "domain": "sip.b-example.home.example.net",
+    "domain": "sip.delta.home.example.net",
     "landline": "04444444",
     "ring_group": "home",
-    "label": "B Example",
+    "label": "Home example",
 }
 
 NETWORK = {
@@ -140,12 +140,12 @@ def test_wizard_happy_path_writes_five_rows_backs_up_and_reloads(
     assert "About to be applied" in page
     assert "5 rows" in page
     assert IDENTITY["domain"] in page
-    assert "sip.b-example.home.example.net" in review.text
+    assert "sip.delta.home.example.net" in review.text
 
     applied = auth_client.post("/wizard/apply", data=payload)
     assert applied.status_code == 303, applied.text
     assert applied.headers["location"] == (
-        "/wizard/verify/sip.b-example.home.example.net"
+        "/wizard/verify/sip.delta.home.example.net"
     )
 
     registry = _fetch(
@@ -154,7 +154,7 @@ def test_wizard_happy_path_writes_five_rows_backs_up_and_reloads(
         (IDENTITY["domain"],),
     )
     assert len(registry) == 1
-    assert registry[0]["tvalue"] == "T4,14,34,04444444,B Example,10,1+1+90"
+    assert registry[0]["tvalue"] == "T4,14,34,04444444,Home example,10,1+1+90"
 
     landline = _fetch(
         seeded_db,
@@ -238,7 +238,7 @@ def test_wizard_no_trunk_writes_four_rows_and_skips_pstn_set(
         "SELECT tvalue FROM tenant_registry WHERE tprefix = ?",
         (IDENTITY["domain"],),
     )
-    assert registry[0]["tvalue"] == "T4,14,0,04444444,B Example,10,1+0+90"
+    assert registry[0]["tvalue"] == "T4,14,0,04444444,Home example,10,1+0+90"
 
     assert _fetch(
         seeded_db, "SELECT 1 FROM dispatcher WHERE setid = 34"
@@ -379,7 +379,7 @@ def test_wizard_step1_validation_error_renders_summary_and_preserves_values(
     worker = RecordingWorker()
     app.state.worker = worker
 
-    bad = dict(IDENTITY, domain="sip.b-example.example.com")
+    bad = dict(IDENTITY, domain="sip.beta.example.com")
     response = auth_client.post("/wizard/step1", data=bad)
 
     assert response.status_code == 422

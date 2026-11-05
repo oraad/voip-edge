@@ -17,10 +17,10 @@ from tests.fixtures import seeddb
 TABLESET = descriptors.load()
 
 DRAFT_WITH_TRUNK = WizardDraft(
-    domain="sip.b-example.home.example.net",
+    domain="sip.delta.home.example.net",
     landline="04444444",
     ring_group="home",
-    label="B Example",
+    label="Home example",
     lan_ip="10.0.6.20",
     wire_ip="100.64.10.20",
     has_pstn=True,
@@ -45,8 +45,8 @@ def test_plan_writes_with_trunk_returns_five_rows_in_wire_order():
     ]
 
     registry = writes[0][1]
-    assert registry["tprefix"] == "sip.b-example.home.example.net"
-    assert registry["tvalue"] == "T4,14,34,04444444,B Example,10,1+1+90"
+    assert registry["tprefix"] == "sip.delta.home.example.net"
+    assert registry["tvalue"] == "T4,14,34,04444444,Home example,10,1+1+90"
 
     landline = writes[1][1]
     assert landline["tprefix"] == "04444444"
@@ -66,7 +66,7 @@ def test_plan_writes_with_trunk_returns_five_rows_in_wire_order():
         "proto": "any",
         "from_pattern": "",
         "ruri_pattern": "",
-        "tag": "sip.b-example.home.example.net",
+        "tag": "sip.delta.home.example.net",
         "priority": 0,
     }
 
@@ -87,17 +87,17 @@ def test_plan_writes_without_trunk_returns_four_rows_and_skips_pstn_set():
         "dispatcher",
         "trusted",
     ]
-    assert writes[0][1]["tvalue"] == "T4,14,0,04444444,B Example,10,1+0+90"
+    assert writes[0][1]["tvalue"] == "T4,14,0,04444444,Home example,10,1+0+90"
     assert writes[2][1]["setid"] == 14
     assert all(row["setid"] != 34 for table, row in writes if table == "dispatcher")
 
 
 def test_plan_writes_requires_derived_ids():
     incomplete = WizardDraft(
-        domain="sip.b-example.home.example.net",
+        domain="sip.delta.home.example.net",
         landline="04444444",
         ring_group="home",
-        label="B Example",
+        label="Home example",
     )
     try:
         plan_writes(incomplete, TABLESET)
@@ -121,7 +121,7 @@ def test_validate_step1_aggregates_errors_per_wizard_field(tmp_path):
     conn = _seeded_connection(tmp_path)
     try:
         bad = WizardDraft(
-            domain="sip.b-example.example.com",  # not an allowed suffix
+            domain="sip.beta.example.com",  # not an allowed suffix
             landline="07x",  # not digits
             ring_group="home,1",  # packing separator
             label="B,Example",  # packing separator
@@ -158,7 +158,7 @@ def test_validate_step2_rejects_a_missing_or_bad_network(tmp_path):
         bad = WizardDraft(
             **{
                 **DRAFT_WITH_TRUNK.__dict__,
-                "lan_ip": "voip.b-example.internal",  # FQDN, not a literal IPv4
+                "lan_ip": "voip.beta.internal",  # FQDN, not a literal IPv4
                 "wire_ip": "8.8.8.8",  # public, no override ticked
             }
         )

@@ -100,7 +100,7 @@ def test_detail_lists_descriptor_fields_and_help(seeded_db, auth_client):
 # ?q= filter
 # ---------------------------------------------------------------------------
 def test_query_filter_is_case_insensitive(seeded_db, auth_client):
-    response = auth_client.get("/tables/tenant_registry", params={"q": "O-EXAMPLE"})
+    response = auth_client.get("/tables/tenant_registry", params={"q": "ALPHA"})
     assert response.status_code == 200
     page = html.unescape(response.text)
     assert "sip.alpha.home.example.net" in page

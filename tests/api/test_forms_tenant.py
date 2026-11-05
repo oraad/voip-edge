@@ -17,7 +17,7 @@ from console import forms_ui
 from tests.fixtures import seeddb
 
 VALID_TENANT = {
-    "tprefix": "sip.b-example.home.example.net",
+    "tprefix": "sip.delta.home.example.net",
     "tenantid": "T4",
     "ds_onnet": "11",
     "ds_pstn": "31",
@@ -33,7 +33,7 @@ VALID_DISPATCHER = {
     "flags": "0",
     "priority": "0",
     "attrs": "transport=udp",
-    "description": "b-example voip-stack",
+    "description": "beta voip-stack",
 }
 
 TENANT_FIELDS = [
@@ -178,7 +178,7 @@ def test_invalid_label_comma_rerenders_422_with_summary_and_values(
 ):
     worker = RecordingWorker()
     app.state.worker = worker
-    payload = dict(VALID_TENANT, label="A-Example, Example City")
+    payload = dict(VALID_TENANT, label="Delta, Example City")
 
     response = auth_client.post("/tables/tenant_registry/new", data=payload)
 
@@ -199,8 +199,8 @@ def test_invalid_label_comma_rerenders_422_with_summary_and_values(
     assert "Remove the comma" in page
 
     # Values preserved on the whole row, not just the bad field.
-    assert 'value="A-Example, Example City"' in response.text
-    assert 'value="sip.b-example.home.example.net"' in response.text
+    assert 'value="Delta, Example City"' in response.text
+    assert 'value="sip.delta.home.example.net"' in response.text
     assert 'value="05555555"' in response.text
 
     # Nothing was written and no reload was scheduled.

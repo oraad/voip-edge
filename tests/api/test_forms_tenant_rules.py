@@ -23,7 +23,7 @@ FIELDS = [
 ]
 
 BASE = {
-    "tprefix": "sip.d-example.home.example.net",
+    "tprefix": "sip.delta.home.example.net",
     "tenantid": "T5",
     "ds_onnet": "13",
     "ds_pstn": "33",
@@ -186,7 +186,7 @@ def test_convention_warning_saves_and_shows_in_the_toast(seeded_db, auth_client,
     # PSTN set 31 means N=1, so on-net 12 is outside 10+N (expected 11).
     payload = dict(
         BASE,
-        tprefix="sip.e-example.home.example.net",
+        tprefix="sip.delta.home.example.net",
         tenantid="T8",
         ds_onnet="12",
         ds_pstn="31",
@@ -214,7 +214,7 @@ def test_missing_set_blocks_and_shows_no_toast_warning(seeded_db, auth_client, a
     app.state.worker = worker
     payload = dict(
         BASE,
-        tprefix="sip.f-example.home.example.net",
+        tprefix="sip.delta.home.example.net",
         tenantid="T9",
         ds_onnet="999",
         cli="07750000",

@@ -130,14 +130,14 @@ def test_required_accepts_non_empty(value):
 
 @pytest.mark.parametrize(
     "value",
-    ["A-Example, Example City", "A+R", " padded ", "x,", "x+"],
+    ["Delta, Example City", "A+R", " padded ", "x,", "x+"],
 )
 def test_pack_separator_safe_rejects_separators_and_padding(value):
     errors, _ = run("pack_separator_safe", value)
     assert errors
 
 
-@pytest.mark.parametrize("value", ["", "A-Example", "01111111", "home"])
+@pytest.mark.parametrize("value", ["", "Delta", "01111111", "home"])
 def test_pack_separator_safe_accepts_plain_text(value):
     assert run("pack_separator_safe", value) == ([], [])
 
@@ -146,12 +146,12 @@ def test_label_pack_safe_requires_a_label_and_names_the_separator():
     errors, _ = run("label_pack_safe", "")
     assert errors and "display label" in errors[0].lower()
 
-    errors, _ = run("label_pack_safe", "A-Example, Example City")
+    errors, _ = run("label_pack_safe", "Delta, Example City")
     assert errors
     assert "comma" in errors[0].lower()
     assert "packing separator" in errors[0]
 
-    assert run("label_pack_safe", "A-Example") == ([], [])
+    assert run("label_pack_safe", "Delta") == ([], [])
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ def test_ipv4_rejects_everything_else(value):
     "value",
     [
         "sip.alpha.home.example.net",
-        "sip.b-example.home.example.net",
+        "sip.beta.home.example.net",
         "SIP.UPPER.Home.Example.Net",
     ],
 )
@@ -206,7 +206,7 @@ def test_tenant_domain_accepts_allowed_suffixes(value):
 
 
 def test_tenant_domain_rejects_a_suffix_outside_the_allow_list():
-    errors, _ = run("tenant_domain", "sip.b-example.example.com")
+    errors, _ = run("tenant_domain", "sip.beta.example.com")
     assert errors
     assert "must end with" in errors[0]
     assert "home.example.net" in errors[0]

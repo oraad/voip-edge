@@ -181,7 +181,7 @@
         <div class="errtxt" id="e-pstn">Choose an existing PSTN route set, or create set 99 in Route sets first.</div>
       </fieldset>
       <fieldset><legend>Call policy</legend>
-        <label for="f-label">Display label for inter-home calls</label><input id="f-label" type="text" class="err" value="A-Example, Example City" aria-invalid="true" aria-describedby="e-label">
+        <label for="f-label">Display label for inter-home calls</label><input id="f-label" type="text" class="err" value="Delta, Example City" aria-invalid="true" aria-describedby="e-label">
         <div class="errtxt" id="e-label">Remove the comma — “,” and “+” are packing separators.</div>
         <label for="f-em">Emergency number profile</label>
         <select id="f-em"><option>Example (112 · 125 · 140 · 175)</option></select>
@@ -201,7 +201,7 @@
         <div class="errsummary" tabindex="-1"><b>1 thing needs fixing</b>
           <ul style="margin:6px 0 0 16px;padding:0"><li><a href="#w-ll">Landline — 0771 is already delegated to home “legacy-x” (longest-prefix rules)</a></li></ul>
         </div>
-        <label for="w-dom">Domain</label><input id="w-dom" type="text" class="mono" value="sip.b-example.home.example.net">
+        <label for="w-dom">Domain</label><input id="w-dom" type="text" class="mono" value="sip.beta.home.example.net">
         <div class="hint">Phones at this home will use this exact domain; it must end in <span class="mono">home.example.net</span>.</div>
         <label for="w-ll">Landline (as dialed locally)</label><input id="w-ll" type="text" class="mono err" value="0771" aria-invalid="true">
         <div class="errtxt">0771 is already delegated to home “legacy-x”. Use the household’s own number, or pick a range that doesn’t overlap.</div>
@@ -212,12 +212,12 @@
         <div class="steps"><span class="done">1 · Identity</span><span class="done">2 · Network</span><span class="c">3 · Review &amp; apply</span><span>4 · Verify</span></div>
         <b>About to be applied</b>
         <table style="margin-top:8px"><tbody>
-          <tr><td>Home</td><td class="mono">sip.b-example.home.example.net · landline 04444444 · rings “home”</td></tr>
+          <tr><td>Home</td><td class="mono">sip.beta.home.example.net · landline 04444444 · rings “home”</td></tr>
           <tr><td>Route sets</td><td class="mono">on-net → 10.0.6.20:5060 (tcp) · PSTN → same host</td></tr>
           <tr><td>Trusted source</td><td class="mono">100.64.10.14 → this home (wire-observed IP you pasted)</td></tr>
           <tr><td>Call policy</td><td>emergency profile “Example” · premium numbers blocked · inter-home on · PSTN fallback on</td></tr>
           <tr><td>Consequences</td><td>Phones at this home can register as soon as the trusted-source reload lands. A database backup is taken first; one transaction with full rollback on any failure.</td></tr>
-          <tr><td style="color:var(--warning)">Manual step</td><td>TLS is live: append <span class="mono">sip.b-example.home.example.net</span> to the cert’s domain list and reissue once (README, onboarding step 4) — until then TLS phones of this home won’t verify.</td></tr>
+          <tr><td style="color:var(--warning)">Manual step</td><td>TLS is live: append <span class="mono">sip.beta.home.example.net</span> to the cert’s domain list and reissue once (README, onboarding step 4) — until then TLS phones of this home won’t verify.</td></tr>
         </tbody></table>
         <div class="formbar" style="border:none"><button class="btn pri">Apply and reload routing</button> <button class="btn">Back</button></div>
       </div>

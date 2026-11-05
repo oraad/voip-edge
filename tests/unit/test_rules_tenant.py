@@ -176,7 +176,7 @@ def test_cli_exact_collision_with_another_landline_is_an_error(conn):
 
 def test_cli_prefix_overlap_shorter_is_a_warning(conn):
     ctx = context(conn, {"tenantid": "T4"})
-    errors, warnings = run("cli_unique", "0661400", ctx)
+    errors, warnings = run("cli_unique", "0222222", ctx)
     assert errors == []
     assert warnings and "prefix-overlaps" in warnings[0]
 
