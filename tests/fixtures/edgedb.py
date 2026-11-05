@@ -108,7 +108,7 @@ _DISPATCHER = (
     (SETID_B_PSTN, "sip:100.64.0.31:5061;transport=tcp", "B PSTN"),
 )
 _DIALPLAN = (
-    (DPID_COUNTRY, "^112$", "country profile"),
+    (DPID_COUNTRY, "^999$", "country profile"),
     (DPID_BLOCK, "^1900", "block partition"),
 )
 

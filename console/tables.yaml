@@ -322,7 +322,7 @@ tables:
         type: str
         validator: attrs_free_text
         severity: warn
-        help: Free-text note for operators (for example "emergency Example").
+        help: Free-text note for operators (for example "emergency example").
         widget: text
         show_in_list: true
         form_order: 7

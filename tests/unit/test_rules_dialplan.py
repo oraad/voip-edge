@@ -87,9 +87,9 @@ def test_translate_proof_is_not_a_field_validator():
 @pytest.mark.parametrize(
     "pattern",
     [
-        r"(?<area>112)",  # PCRE named group (Python wants (?P<area>…))
-        r"(?>112|125)",  # atomic group
-        r"^112\K$",  # PCRE \K
+        r"(?<area>999)",  # PCRE named group (Python wants (?P<area>…))
+        r"(?>999|998)",  # atomic group
+        r"^999\K$",  # PCRE \K
     ],
 )
 def test_pcre_only_match_exp_warns_instead_of_erroring(pattern):
@@ -100,7 +100,7 @@ def test_pcre_only_match_exp_warns_instead_of_erroring(pattern):
 
 
 def test_python_regex_match_exp_is_clean():
-    assert run("regex_compiles", r"^(112|911|999)$") == ([], [])
+    assert run("regex_compiles", r"^(999|998)$") == ([], [])
 
 
 # ---------------------------------------------------------------------------
@@ -248,9 +248,9 @@ def test_identity_locked_is_field_precise_when_the_context_names_the_field():
     "value",
     [
         "",
-        "emergency Example",
+        "emergency example",
         "a,b;transport=udp",
-        "0900 audiotex\tblocked",
+        "9000 premium range\tblocked",
         "T1+1+90",
     ],
 )
@@ -307,7 +307,7 @@ def test_translate_proof_reports_no_match(rpc_fake, result):
 def test_translate_proof_surfaces_a_fault_verbatim(rpc_fake):
     rpc_fake.fault("dialplan.translate", code=500, message="scripted fault")
 
-    matched, message = dialplan.translate_proof(_rpc(rpc_fake), 10, "112")
+    matched, message = dialplan.translate_proof(_rpc(rpc_fake), 10, "999")
 
     assert matched is False
     assert "scripted fault" in message

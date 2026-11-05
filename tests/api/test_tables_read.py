@@ -24,7 +24,7 @@ TABLE_SAMPLES = {
         "sip:10.0.99.12:5060;transport=tcp",
         "alpha voip-stack",
     ],
-    "dialplan": ["^(112|911|999)$", "^0900[0-9]{6}$", "emergency Example"],
+    "dialplan": ["^(999|998)$", "^9000[0-9]{4}$", "example emergency profile"],
     "trusted": [
         "100.64.10.10",
         "100.64.10.12",

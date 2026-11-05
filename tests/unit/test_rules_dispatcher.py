@@ -253,7 +253,7 @@ def test_priority_rejects_bad_integers(value):
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "value",
-    ["", "emergency Example", "transport=udp;note=keep", "a,b", "x\ty"],
+    ["", "emergency example", "transport=udp;note=keep", "a,b", "x\ty"],
 )
 def test_attrs_free_text_is_permissive(value):
     assert dispatcher.attrs_free_text(value, ValidationContext()) == ([], [])

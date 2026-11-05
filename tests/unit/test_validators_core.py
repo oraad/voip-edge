@@ -289,7 +289,7 @@ def test_sip_uri_rejects_malformed_values(value):
 # regex pre-check + PCRE warning
 # ---------------------------------------------------------------------------
 def test_regex_compiles_accepts_a_python_regex():
-    assert run("regex_compiles", "^(112|911|999)$") == ([], [])
+    assert run("regex_compiles", "^(999|998)$") == ([], [])
 
 
 def test_regex_compiles_reports_a_syntax_error():

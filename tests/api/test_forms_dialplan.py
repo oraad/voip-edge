@@ -18,7 +18,7 @@ BASE = {
     "dpid": "10",
     "pr": "2",
     "match_op": "1",
-    "match_exp": "^112$",
+    "match_exp": "^999$",
     "match_len": "0",
     "subst_exp": "^(.*)$",
     "repl_exp": "\\1",
@@ -73,7 +73,7 @@ def test_valid_match_only_row_saves_and_enqueues_one_reload(
     assert "reload scheduled shortly" in flash
     assert "Warning" not in flash
 
-    row = _row(seeded_db, "^112$")
+    row = _row(seeded_db, "^999$")
     assert row is not None
     assert row["dpid"] == 10
     assert row["pr"] == 2
@@ -103,7 +103,7 @@ def test_bad_regex_is_422_with_the_compile_message(seeded_db, auth_client, app):
     assert 'href="#field-match_exp"' in response.text
     assert 'aria-invalid="true"' in response.text
     # Values are preserved on the re-render.
-    assert 'value="^112$"' not in response.text
+    assert 'value="^999$"' not in response.text
     assert 'value="("' in response.text
 
     assert _row(seeded_db, "(") is None
@@ -117,7 +117,7 @@ def test_pcre_only_pattern_saves_with_the_approximate_check_warning(
 
     # (?<name>…) is PCRE named-group syntax; Python's re rejects it, but the
     # existing regex_compiles rule downgrades PCRE-only syntax to a warning.
-    pattern = "(?<area>112)"
+    pattern = "(?<area>999)"
     response = auth_client.post(
         "/tables/dialplan/new", data=dict(BASE, match_exp=pattern)
     )
@@ -150,7 +150,7 @@ def test_tampered_identity_rewrite_is_422_naming_the_invariant(
     assert "identity rewrite by design" in page.lower()
     assert "matching only" in page.lower()
     assert 'href="#field-subst_exp"' in response.text
-    assert _row(seeded_db, "^112$") is None
+    assert _row(seeded_db, "^999$") is None
     assert worker.calls == []
 
 
@@ -164,7 +164,7 @@ def test_non_regex_match_op_is_422(seeded_db, auth_client, app):
     assert response.status_code == 422
     page = _squash(response.text)
     assert "regex matching only in this console" in page
-    assert _row(seeded_db, "^112$") is None
+    assert _row(seeded_db, "^999$") is None
 
 
 def test_non_zero_match_len_is_422(seeded_db, auth_client, app):
@@ -177,7 +177,7 @@ def test_non_zero_match_len_is_422(seeded_db, auth_client, app):
     assert response.status_code == 422
     page = _squash(response.text)
     assert "0" in page
-    assert _row(seeded_db, "^112$") is None
+    assert _row(seeded_db, "^999$") is None
 
 
 # ---------------------------------------------------------------------------
