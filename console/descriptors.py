@@ -51,6 +51,7 @@ _FIELD_KEYS = frozenset(
         "readonly",
         "locked",
         "derived",
+        "default",
         "options_query",
         "show_in_list",
         "form_order",
@@ -73,6 +74,9 @@ class Field:
     readonly: bool = False
     locked: bool = False
     derived: str | None = None
+    #: Fixed create-form value for a field the operator normally does not edit
+    #: (e.g. dialplan's locked identity rewrite).  Applied only on create.
+    default: Any = None
     options_query: str | None = None
     show_in_list: bool = False
     form_order: int = 0
@@ -253,6 +257,7 @@ def _parse_field(raw_field: Any, where: str) -> Field:
         raise ValueError(f"{where}: options_query must be 'table.field'")
 
     derived = _optional_text(raw_field, "derived", where)
+    default = raw_field.get("default")
 
     return Field(
         name=name,
@@ -266,6 +271,7 @@ def _parse_field(raw_field: Any, where: str) -> Field:
         readonly=_boolean(raw_field, "readonly", where),
         locked=_boolean(raw_field, "locked", where),
         derived=derived,
+        default=default,
         options_query=options_query,
         show_in_list=_boolean(raw_field, "show_in_list", where),
         form_order=_integer(raw_field, "form_order", where, 0),

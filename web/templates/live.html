@@ -49,7 +49,7 @@
     <div style="overflow-x:auto">
       <table>
         <thead>
-          <tr><th scope="col">AOR</th><th scope="col">Transport</th><th scope="col">Flow</th><th scope="col">Expires</th></tr>
+          <tr><th scope="col">AOR</th><th scope="col">Transport</th><th scope="col">Flow</th></tr>
         </thead>
         <tbody>
           {% for reg in registrations %}
@@ -57,7 +57,6 @@
             <td class="mono">{{ reg.aor }}</td>
             <td>{{ reg.transport|upper }}</td>
             <td class="mono">{{ reg.flow }}</td>
-            <td>{% if reg.expires is not none %}{{ reg.expires }} s{% else %}—{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -69,8 +68,8 @@
     {% endif %}
     <div class="meta">regcache entries expire at the registration TTL (plus the
       configured grace, capped by the 7200 s autoexpire), on unregister, or when
-      the home is parked. The raw expiry is shown for diagnostics; no countdown
-      is rendered.</div>
+      the home is parked. Stock Kamailio dumps do not expose the remaining
+      time, so no countdown is rendered.</div>
   </section>
 
   <section class="panel" aria-labelledby="live-dispatchers-title">

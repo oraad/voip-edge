@@ -77,3 +77,23 @@ def test_destroy_requires_the_typed_domain(lifecycle_env):
     response = client.post(f"/homes/{DOMAIN}/destroy", data={"confirm": "wrong"})
     assert response.status_code == 422
     assert client.get("/homes").status_code == 200
+
+
+def test_restore_collision_returns_html_409_without_a_blocking_intent(lifecycle_env):
+    import sqlite3
+
+    app, client, fake = lifecycle_env
+    assert client.post(f"/homes/{DOMAIN}/park").status_code == 303
+
+    edge = Path(settings_module.settings.db_path)
+    with sqlite3.connect(edge) as conn:
+        conn.execute(
+            "INSERT INTO tenant_registry (tprefix, tvalue) VALUES (?, ?)",
+            ("sip.collision.home.example.net", "T1,10,30,09999999,X,10,1+1"),
+        )
+        conn.commit()
+
+    response = client.post(f"/homes/{DOMAIN}/restore")
+    assert response.status_code == 409
+    assert "Restore blocked" in response.text
+    assert "tenantid" in response.text.lower()

@@ -51,7 +51,7 @@ modparam("db_sqlite", "db_set_busy_timeout", "DBFILE=300")
 5. `dispatcher.list` flags: first letter A/I/T/D, second P (probed) / X (not probed). `list full`/latency stats = unverified nicety — **out of v1 scope**.
 6. No dry-run RPC exists → validate pre-write in Python (regex compile — PCRE-parity caveat warning), behavioral proof post-reload.
 7. sqlite: WAL (file header persists; console re-asserts `journal_mode=WAL` at every startup — `create-db.sh` rebuilds revert the file to DELETE mode), in-place edits only, `BEGIN IMMEDIATE` short transactions, single-writer.
-8. **regcache expiry (fixed):** `regcache=>size=12;autoexpire=7200;` and `$shtex(regcache=>$avp(reg_aor)) = $avp(reg_exp) + CACHEGRACE` in the REGISTER 200 path. Entries expire at the registration TTL, on unregister, or on park purge; the live panel shows the raw expiry without a countdown.
+8. **regcache expiry (fixed):** `regcache=>size=12;autoexpire=7200;` and `$shtex(regcache=>$avp(reg_aor)) = $avp(reg_exp) + CACHEGRACE` in the REGISTER 200 path. Entries expire at the registration TTL, on unregister, or on park purge; the 6.1.5 dump does not expose remaining time, so the live panel shows no countdown.
 
 ## 4. Architecture
 
@@ -152,10 +152,10 @@ Steps: 1 Identity (domain, landline, ring group, label) → 2 Network (voip-stac
 6. CLI edits the DB meanwhile: list views re-read every load; audit page states "console-recorded writes only; external edits possible".
 7. Regex syntax ⇒ pre-write error; PCRE-only ⇒ warning badge.
 8. In-use delete ⇒ named-by consequence dialog, blocked.
-9. regcache live panel: AOR/flow/transport with the raw expiry (no countdown); display capped, htable.stats count badge.
+9. regcache live panel: AOR/flow/transport (no countdown; the dump has no expiry field); display capped, htable.stats count badge.
 10. Registered-phones panel on tenant detail (fragment) — covered.
 11. Park mid-call: **lab-verified manually** (not console-tested).
-12. Park: purge gate = dump-verify zero keys; then once more 60 s later (residual in-flight REGISTER).
+12. Park: purge gate = dump-verify zero keys (bounded retries); a residual in-flight REGISTER is accepted (no delayed re-sweep is scheduled).
 13. Restore collision: 5 classes tested.
 14. Sidecar unreadable: destructive ops refused; browsing unaffected.
 15. Crash between park steps: sweeper resume; fault-injected between every state pair.
@@ -197,7 +197,7 @@ Steps: 1 Identity (domain, landline, ring group, label) → 2 Network (voip-stac
 **T8 sub-cards:**
 1. Snapshot completeness (4 tables, JSON fixture both directions)
 2. Transactional removal + backup-before + rotation
-3. Park reload order (reload-first invariant) + purge + dump-verify zero gate (+60 s re-sweep)
+3. Park reload order (reload-first invariant) + purge + dump-verify zero gate (bounded retries)
 4. Durable-intent resume — fault injection between every state pair
 5. Restore + 5 collision classes
 6. Destroy gates (typed confirm for active; normal confirm when parked) + shared-dpid survival

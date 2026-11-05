@@ -207,6 +207,7 @@ tables:
         type: int
         validator: dispatcher_flags
         severity: error
+        default: 0
         help: Dispatcher state flags — first letter A/I/T/D, second P (probed) or X (not probed).
         widget: number
         show_in_list: false
@@ -216,6 +217,7 @@ tables:
         type: int
         validator: priority_int
         severity: error
+        default: 0
         help: Lower value is tried first within a set.
         widget: number
         show_in_list: false
@@ -265,6 +267,7 @@ tables:
         type: int
         validator: pr_int
         severity: error
+        default: 1
         help: Rule priority within the partition.
         widget: number
         show_in_list: false
@@ -274,6 +277,7 @@ tables:
         type: int
         validator: match_op_locked
         severity: error
+        default: 1
         help: Always 1 (regex match) — locked.
         widget: number
         locked: true
@@ -293,6 +297,7 @@ tables:
         type: int
         validator: match_len_zero
         severity: error
+        default: 0
         help: 0 — match on the expression only.
         widget: number
         show_in_list: false
@@ -302,6 +307,7 @@ tables:
         type: regex
         validator: identity_locked
         severity: error
+        default: '^(.*)$'
         help: Identity rewrite by design — locked to ^(.*)$.
         widget: text
         locked: true
@@ -312,6 +318,7 @@ tables:
         type: regex
         validator: identity_locked
         severity: error
+        default: '\1'
         help: Identity rewrite by design — locked to \1.
         widget: text
         locked: true
@@ -357,6 +364,7 @@ tables:
         type: str
         validator: proto_any_locked
         severity: error
+        default: any
         help: Always "any" — locked.
         widget: text
         locked: true
@@ -395,6 +403,7 @@ tables:
         type: int
         validator: priority_int
         severity: error
+        default: 0
         help: Lower value is evaluated first.
         widget: number
         show_in_list: false

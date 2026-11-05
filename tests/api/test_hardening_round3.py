@@ -241,3 +241,54 @@ def test_table_list_with_missing_edge_db_is_first_use(client, monkeypatch, tmp_p
     response = client.get("/tables/dispatcher")
     assert response.status_code == 200
     assert "No rows in" in response.text
+
+
+def _rendered_inputs(text: str) -> dict[str, str]:
+    import html
+    import re
+
+    values: dict[str, str] = {}
+    for tag in re.findall(r"<input\b[^>]*>", text):
+        name = re.search(r'name="([^"]*)"', tag)
+        value = re.search(r'value="([^"]*)"', tag)
+        if name is not None:
+            values[html.unescape(name.group(1))] = html.unescape(
+                value.group(1) if value is not None else ""
+            )
+    return values
+
+
+def test_dialplan_create_form_round_trips_locked_defaults(seeded_db, auth_client):
+    page = auth_client.get("/tables/dialplan/new")
+    assert page.status_code == 200
+    data = _rendered_inputs(page.text)
+    assert data["match_op"] == "1"
+    assert data["match_len"] == "0"
+    data.update(dpid="10", match_exp="^999123$", attrs="from the rendered form")
+    response = auth_client.post("/tables/dialplan/new", data=data)
+    assert response.status_code == 303, response.text
+
+
+def test_trusted_create_form_round_trips_locked_defaults(seeded_db, auth_client):
+    page = auth_client.get("/tables/trusted/new")
+    assert page.status_code == 200
+    data = _rendered_inputs(page.text)
+    assert data["proto"] == "any"
+    data.update(src_ip="100.64.10.99", tag="sip.alpha.home.example.net")
+    response = auth_client.post("/tables/trusted/new", data=data)
+    assert response.status_code == 303, response.text
+
+
+def test_dispatcher_create_form_round_trips_numeric_defaults(seeded_db, auth_client):
+    page = auth_client.get("/tables/dispatcher/new")
+    assert page.status_code == 200
+    data = _rendered_inputs(page.text)
+    assert data["flags"] == "0"
+    assert data["priority"] == "0"
+    data.update(
+        setid="77",
+        destination="sip:10.9.9.9:5060;transport=tcp",
+        description="from the rendered form",
+    )
+    response = auth_client.post("/tables/dispatcher/new", data=data)
+    assert response.status_code == 303, response.text

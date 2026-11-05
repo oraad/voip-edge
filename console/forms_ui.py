@@ -658,14 +658,15 @@ def _collect_values(
             values[field.name] = _posted(form, field)
 
     if mode == "create":
-        # A create form has no stored row; give later families a place to
-        # supply fixed values for locked controls without touching templates.
+        # A create form has no stored row; fill descriptor/family defaults for
+        # blank fields (locked create-form invariants included).
         for field in descriptor.fields:
-            if field.locked or field.readonly or field.derived:
-                if str(values.get(field.name, "")).strip() == "":
-                    default = _default_for(descriptor, field, values)
-                    if default is not None:
-                        values[field.name] = default
+            if str(values.get(field.name, "")).strip() == "":
+                default = _default_for(descriptor, field, values)
+                if default is None:
+                    default = field.default
+                if default is not None:
+                    values[field.name] = default
 
     # Non-descriptor form keys are carried through so a family validator can
     # see an explicit acknowledgement that is not a table column (for example
@@ -1321,10 +1322,11 @@ def _reload_intent(descriptor: descriptors.Descriptor):
 def _blank_values(descriptor: descriptors.Descriptor) -> dict[str, Any]:
     values = {field.name: "" for field in descriptor.fields}
     for field in descriptor.fields:
-        if field.locked or field.readonly or field.derived:
-            default = _default_for(descriptor, field, values)
-            if default is not None:
-                values[field.name] = default
+        default = _default_for(descriptor, field, values)
+        if default is None:
+            default = field.default
+        if default is not None:
+            values[field.name] = default
     return values
 
 

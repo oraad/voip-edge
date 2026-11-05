@@ -4,8 +4,8 @@ The dashboard is deliberately thin:
 
 * :func:`build_regcache_view` turns a raw ``htable.dump`` result into rows for
   the registered-phones panel.  Entries carry the registration TTL (plus
-  grace, capped by ``autoexpire=7200``), but the view keeps only the raw
-  ``expires`` value and never renders a countdown.
+  grace, capped by ``autoexpire=7200``), but stock 6.1.5 dumps do not expose
+  the remaining time, so the view never renders a countdown.
 * :func:`build_dispatcher_view` normalises ``dispatcher.list`` (structured
   JSON or the plain-text form) into rows with the plan §3.5 flag tokens:
   ``A`` active, ``T`` trying, ``I`` inactive, ``D`` disabled, plus ``P``
@@ -98,9 +98,9 @@ def build_regcache_view(dump: Any) -> list[dict[str, Any]]:
     """Build registered-phone rows from a raw ``htable.dump`` result.
 
     Each row has ``aor``, ``user``, ``domain``, ``domain_prefix``, ``suffix``,
-    ``flow``, ``transport`` and the raw ``expires`` (or ``None``).  There is
-    intentionally no ``expires_in``/countdown; regcache expiry is enforced by
-    ``$shtex`` + ``autoexpire``, not displayed as a timer.
+    ``flow``, ``transport`` and an optional raw ``expires`` (usually ``None``
+    on 6.1.5).  There is intentionally no ``expires_in``/countdown; expiry is
+    enforced by ``$shtex`` + ``autoexpire``, not displayed as a timer.
     """
     flat = flatten_htable_dump(dump)
     rows: list[dict[str, Any]] = []

@@ -538,9 +538,9 @@ def test_restore_collision_classes_block_and_name_the_row(env, kind, needle):
     assert needle in message
     assert excinfo.value.collisions
 
-    intent = env.sidecar.latest_intent("restore", DOMAIN_A)
-    assert intent["state"] == "BACKED_UP"
-    assert needle in intent["last_error"]
+    # The read-only collision pre-check runs before create_intent, so a
+    # blocked restore leaves no non-DONE intent behind.
+    assert env.sidecar.latest_intent("restore", DOMAIN_A) is None
 
     # Nothing was restored for A (the injected row is the only A-domain row
     # in the one class that inserts one).
@@ -873,3 +873,64 @@ def test_capability_gate_does_not_trust_a_stale_cached_success(env, monkeypatch)
     with pytest.raises(KamailioUnavailable):
         park(env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups)
     assert edge_signature(env.edge) == before
+
+
+def test_park_resume_preserves_an_edit_made_after_snapshot(env):
+    with pytest.raises(InjectedCrash):
+        park(
+            env.sidecar,
+            env.edge,
+            env.worker,
+            DOMAIN_A,
+            backup_dir=env.backups,
+            fail_after="SNAPSHOTTED",
+        )
+    assert env.sidecar.latest_intent("park", DOMAIN_A)["state"] == "SNAPSHOTTED"
+
+    with sqlite3.connect(env.edge) as conn:
+        tvalue = conn.execute(
+            "SELECT tvalue FROM tenant_registry WHERE tprefix = ?", (DOMAIN_A,)
+        ).fetchone()[0]
+        fields = tvalue.split(",")
+        fields[4] = "A Edited"
+        conn.execute(
+            "UPDATE tenant_registry SET tvalue = ? WHERE tprefix = ?",
+            (",".join(fields), DOMAIN_A),
+        )
+        conn.commit()
+
+    assert resume_pending(
+        env.sidecar, env.edge, env.worker, backup_dir=env.backups
+    )["completed"] == 1
+    assert restore(
+        env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+    ).done is True
+
+    with sqlite3.connect(env.edge) as conn:
+        restored = conn.execute(
+            "SELECT tvalue FROM tenant_registry WHERE tprefix = ?", (DOMAIN_A,)
+        ).fetchone()[0]
+    assert "A Edited" in restored
+
+
+def test_restore_collision_creates_no_blocking_intent(env):
+    assert park(
+        env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+    ).done is True
+
+    with sqlite3.connect(env.edge) as conn:
+        conn.execute(
+            "INSERT INTO tenant_registry (tprefix, tvalue) VALUES (?, ?)",
+            ("sip.collision.home.example.net", f"{TENANT_A},10,30,09999999,X,10,1+1"),
+        )
+        conn.commit()
+
+    with pytest.raises(CollisionError):
+        restore(
+            env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+        )
+
+    intents = [
+        row for row in env.sidecar.audit_rows(domain=DOMAIN_A)
+    ]
+    assert all(row["op"] != "restore" for row in intents)

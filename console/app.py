@@ -198,10 +198,12 @@ def create_app() -> FastAPI:
         SidecarUnavailable,
         ValidationError,
     )
+    from .lifecycle import CollisionError
 
     _ERROR_STATUS = {
         ValidationError: 422,
         ConflictError: 409,
+        CollisionError: 409,
         DBBusy: 503,
         KamailioUnavailable: 503,
         SidecarUnavailable: 503,
@@ -452,10 +454,14 @@ def create_app() -> FastAPI:
 
     def _default_worker() -> ReloadWorker:
         tableset = descriptors_module.load()
-        throttles = {
-            descriptor.table: descriptor.reload.throttle_seconds
-            for descriptor in tableset.tables.values()
-        }
+        throttles: dict[str, int] = {}
+        for descriptor in tableset.tables.values():
+            throttle = descriptor.reload.throttle_seconds
+            throttles[descriptor.table] = throttle
+            # Lifecycle/wizard enqueue packed tables under their mtree tree
+            # name; forms use the table name.  Both share the same window.
+            if descriptor.storage == "packed" and descriptor.reload.params:
+                throttles[str(descriptor.reload.params[0])] = throttle
 
         def _store(status: str, table: str, rpc_name: str, params: list) -> None:
             # Persist pending reloads so a console restart never loses them

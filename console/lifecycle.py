@@ -631,9 +631,13 @@ def _reload_tables(
     for key in keys:
         exc = errors.get(key)
         if exc is None:
-            sidecar.clear_pending_reload(
-                key, expected_enqueued_at=stamps[key]
-            )
+            stamp = stamps.get(key)
+            if stamp is not None:
+                # A missing stamp means the worker's own store already
+                # cleared it; never fall back to an unconditional delete.
+                sidecar.clear_pending_reload(
+                    key, expected_enqueued_at=stamp
+                )
             continue
         failures.append(f"{key}: {exc}")
         if isinstance(exc, KamailioUnavailable):
@@ -780,9 +784,28 @@ class _Run:
             )
 
     def _step_rows_deleted(self) -> None:
+        from . import db as db_module
+
         snapshot = self._load_snapshot()
-        with _edge_transaction(self.edge) as conn:
-            counts = _delete_edge_rows(conn, snapshot)
+        # A crash after SNAPSHOTTED leaves the home active and editable.  Do
+        # not delete the old snapshot's idea of the rows: re-collect under the
+        # console write lock so an edit made after the crash is preserved in a
+        # refreshed snapshot (restore must not silently lose it).
+        with db_module.write_lock:
+            current = _collect_snapshot(self.edge, self.domain, self.tableset)
+            if current != snapshot:
+                with self.sidecar.transaction() as conn:
+                    self.sidecar.save_snapshot(
+                        self.domain,
+                        current,
+                        tenantid=str(current.get("tenantid") or ""),
+                        intent_id=self.intent_id,
+                        conn=conn,
+                    )
+                snapshot = current
+                self.snapshot = current
+            with _edge_transaction(self.edge) as conn:
+                counts = _delete_edge_rows(conn, snapshot)
         self._transition(
             "ROWS_DELETED",
             "deleted: "
@@ -1027,8 +1050,14 @@ def _restore(
     tables = tableset or descriptors.load()
 
     _ensure_no_pending(sc, "restore", domain)
-    if sc.load_snapshot(domain) is None:
+    snapshot = sc.load_snapshot(domain)
+    if snapshot is None:
         raise LifecycleError(f"no parked snapshot for {domain!r}")
+
+    # Pre-flight the read-only collision classes before creating an intent:
+    # a blocked restore must not leave a non-DONE intent that refuses later
+    # lifecycle operations.  The state machine re-checks before writing.
+    _check_collisions(edge_path, snapshot, tables)
 
     intent_id = sc.create_intent("restore", domain, detail=f"restore {domain}")
     run = _Run(

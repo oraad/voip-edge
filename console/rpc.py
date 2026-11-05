@@ -168,7 +168,7 @@ def flatten_htable_dump(dump: Any) -> dict[str, dict[str, Any]]:
     ``slot`` is a plain dict rather than a list when ``size == 1``; both forms
     are handled.  ``value`` may arrive as a string or a number and is always
     stringified.  ``expires`` is normalised to an int, or ``None`` when absent
-    (regcache uses ``$shtex`` plus ``autoexpire``; the raw value is diagnostic).
+    (stock 6.1.5 dumps omit it; regcache expiry uses ``$shtex``/``autoexpire``).
     """
     if dump is None:
         return {}

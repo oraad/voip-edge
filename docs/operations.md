@@ -102,7 +102,7 @@ Sequence: backup → snapshot into `console_parked` → delete that home's regis
 landline, dispatcher and trusted rows → reload all four tables → purge every
 regcache key ending `@<domain>` → dump-verify zero → done. Reload runs **before**
 purge so new registrations are rejected at the mtree level before cleanup. A
-residual in-flight REGISTER is swept once more after 60 s.
+residual in-flight REGISTER is accepted; the next park/reload or an explicit purge catches it (no delayed re-sweep is scheduled).
 
 Operator expectation, verified manually in the lab: calls already in progress
 finish; new requests receive 403/404. Do not promise this from console tests.

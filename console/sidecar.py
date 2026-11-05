@@ -639,11 +639,10 @@ def reissue_pending_reloads(
     if not issued:
         return []
 
-    # Only clear the generations that were pending at the start of this
-    # reissue; a newer save may refresh the row while the worker drains.
+    # Capture the generation actually persisted by enqueue (on_enqueue may
+    # refresh the row); only clear that generation after a successful drain.
     stamps = {
-        row["table"]: row.get("enqueued_at") for row in pending
-        if str(row["table"]) in issued
+        table: sc.pending_reload_enqueued_at(table) for table in issued
     }
 
     if not worker.flush(timeout):
@@ -655,9 +654,11 @@ def reissue_pending_reloads(
     for table in issued:
         exc = errors.get(table)
         if exc is None:
-            sc.clear_pending_reload(
-                table, expected_enqueued_at=stamps.get(table)
-            )
+            stamp = stamps.get(table)
+            if stamp is not None:
+                sc.clear_pending_reload(
+                    table, expected_enqueued_at=stamp
+                )
         else:
             sc.record_pending_reload(table, last_error=str(exc))
     return issued

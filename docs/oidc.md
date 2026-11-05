@@ -93,13 +93,13 @@ POST /auth/logout                   -> clear session, then 303 to IdP end-sessio
 ## 5. Threat model notes
 
 - Console compromise = edge compromise (DB + RPC socket): hence PKCE,
-  issuer pinning, strict redirect, session rotation, short idle timeout,
-  and audit lines.
+  issuer pinning, strict redirect, session rotation, and audit lines.
 - CSRF: unchanged double-submit for POSTs; OIDC `state` covers the callback.
 - Session fixation: fresh session id/cookie on login.
 - Open redirect: `next` restricted to same-origin relative paths.
 - Token leakage: no tokens in cookies, logs, or `localStorage` (no JS state).
-- Clock skew: 60 s tolerance, explicit `clock_skew` error state.
+- Clock skew: 60 s validation leeway; skew/expiry failures surface as
+  `token_rejected`.
 - Replay: `state` single-use, `nonce` checked, code exchanged once.
 - Provider mix-up: single-issuer config; discovery URL pinned by env.
 

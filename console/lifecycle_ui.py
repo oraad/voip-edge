@@ -79,10 +79,24 @@ async def restore_submit(request: Request, domain: str):
     if denied:
         return denied
     sidecar_path, edge_path, backup_dir = _paths()
-    await run_in_threadpool(
-        lifecycle.restore, sidecar_path, edge_path, _worker(request), domain,
-        backup_dir=backup_dir,
-    )
+    try:
+        await run_in_threadpool(
+            lifecycle.restore, sidecar_path, edge_path, _worker(request), domain,
+            backup_dir=backup_dir,
+        )
+    except lifecycle.CollisionError as exc:
+        from markupsafe import escape
+
+        items = "".join(f"<li>{escape(item)}</li>" for item in exc.collisions)
+        return HTMLResponse(
+            '<div class="banner err" role="alert">'
+            "<strong>Restore blocked by a collision</strong>"
+            f"<ul>{items}</ul>"
+            "<p>No edge rows were changed. Fix the collision and retry.</p>"
+            "</div>",
+            status_code=409,
+            headers=NO_STORE,
+        )
     return RedirectResponse(_flash(domain, "Restored"), status_code=303, headers=NO_STORE)
 
 
