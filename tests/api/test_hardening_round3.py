@@ -167,19 +167,61 @@ def test_sweeper_calls_resume_and_reissue_once_wired(monkeypatch, tmp_path):
     assert any(call[0] == "reissue" for call in calls)
     resume = next(call for call in calls if call[0] == "resume")
     assert "backup_dir" in resume[2]
+    import threading
+
+    assert not any(
+        thread.name == "console-sweeper" and thread.is_alive()
+        for thread in threading.enumerate()
+    )
 
 
 def test_wizard_warning_ignores_unrelated_worker_errors():
     class Worker:
         errors = {"tenant_registry": RuntimeError("old failure")}
+        flush_timeout = None
 
         def enqueue(self, *args, **kwargs):
             pass
 
         def flush(self, timeout=2.0):
+            self.flush_timeout = timeout
             return True
 
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(worker=Worker())))
     keys, warnings = wizard_ui._enqueue_reloads(request, descriptors.load())
     assert keys
     assert warnings == []
+    assert request.app.state.worker.flush_timeout == 30.0
+
+
+def test_oidc_session_is_rejected_in_token_mode(client, monkeypatch):
+    from console import security
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, auth_mode="token", sweeper_interval=0),
+    )
+    token = security.sign_session(
+        {"sub": "idp#operator", "csrf": "csrf-value", "amr": "oidc"}
+    )
+    client.cookies.set(security.SESSION_COOKIE, token)
+    client.cookies.set(security.CSRF_COOKIE, "csrf-value")
+    response = client.get("/homes")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_readonly_empty_homes_hides_onboarding_cta(
+    empty_db, client, monkeypatch
+):
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, readonly=True, sweeper_interval=0),
+    )
+    login(client)
+    response = client.get("/homes")
+    assert response.status_code == 200
+    assert 'href="/wizard"' not in response.text
+    assert "read-only mode" in response.text.lower()

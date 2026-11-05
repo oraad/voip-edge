@@ -7,7 +7,6 @@ with T3; ``web/`` must contain zero table logic (plan §4).
 from __future__ import annotations
 
 import hmac
-import time
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -133,6 +132,8 @@ def create_app() -> FastAPI:
             target=_startup_probe, name="console-capability-probe", daemon=True
         ).start()
 
+        sweeper_stop = threading.Event()
+
         def _sweeper() -> None:
             from .lifecycle import resume_pending
             from .sidecar import Sidecar, reissue_pending_reloads
@@ -141,7 +142,7 @@ def create_app() -> FastAPI:
             if interval <= 0:
                 return
             cfg = settings_module.settings
-            while True:
+            while not sweeper_stop.is_set():
                 try:
                     sc = Sidecar(Path(cfg.sidecar_dir) / "console.sqlite")
                     worker = _get_worker()
@@ -154,12 +155,18 @@ def create_app() -> FastAPI:
                         app.state.capabilities = capabilities.probe(_get_rpc())
                 except BaseException as exc:
                     observability.log_event("sweeper.error", error=str(exc)[:200])
-                time.sleep(interval)
+                if sweeper_stop.wait(max(0.0, float(interval))):
+                    return
 
-        threading.Thread(target=_sweeper, name="console-sweeper", daemon=True).start()
+        sweeper_thread = threading.Thread(
+            target=_sweeper, name="console-sweeper", daemon=True
+        )
+        sweeper_thread.start()
         try:
             yield
         finally:
+            sweeper_stop.set()
+            sweeper_thread.join(timeout=5.0)
             worker = getattr(app.state, "worker", None)
             if worker is not None and hasattr(worker, "shutdown"):
                 try:
@@ -469,7 +476,22 @@ def create_app() -> FastAPI:
                 table=table, status=outcome, rpc=rpc_name
             )
 
-        return ReloadWorker(_get_rpc(), throttles, store=_store)
+        def _on_enqueue(table: str, rpc_name: str, params: list) -> None:
+            # Persist synchronously, before the throttle window: a crash
+            # between the write and the RPC must be recoverable by the sweeper.
+            try:
+                from .sidecar import Sidecar
+
+                sc = Sidecar(
+                    Path(settings_module.settings.sidecar_dir) / "console.sqlite"
+                )
+                sc.record_pending_reload(table, last_error=None)
+            except BaseException:
+                pass
+
+        return ReloadWorker(
+            _get_rpc(), throttles, store=_store, on_enqueue=_on_enqueue
+        )
 
     app.state.worker = None
     app.state.worker_factory = _default_worker

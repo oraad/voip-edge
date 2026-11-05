@@ -22,7 +22,11 @@
 <section class="panel empty" aria-labelledby="empty-homes-title">
   <h2 id="empty-homes-title">No homes yet</h2>
   <p>Onboard the first home to create its routing rows and trusted source.</p>
+  {% if not status.readonly %}
   <a class="btn pri" href="/wizard">+ Onboard a home</a>
+  {% else %}
+  <p class="meta">The console is in read-only mode; writes are disabled.</p>
+  {% endif %}
 </section>
 {% endif %}
 

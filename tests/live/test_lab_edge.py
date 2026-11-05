@@ -206,10 +206,11 @@ def test_live_park_restore_journey():
         assert (
             lab.scalar(
                 database,
-                "SELECT count(*) FROM tenant_landline WHERE tvalue LIKE ?",
-                (f"{TENANT_ID},%",),
+                "SELECT count(*) FROM tenant_landline WHERE tprefix = ? "
+                "AND tvalue LIKE ?",
+                ("01111111", f"{TENANT_ID},%"),
             )
-            == 0
+            == 1
         )
         assert (
             lab.scalar(

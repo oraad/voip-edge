@@ -411,6 +411,43 @@ def _guarded_insert(
     return conn.execute(sql, tuple(params)).rowcount
 
 
+def _row_present(
+    conn: sqlite3.Connection,
+    table: str,
+    columns: tuple[str, ...],
+    row: Mapping[str, Any],
+) -> bool:
+    """True when *row* (by all *columns*) is already in *table*."""
+    where = " AND ".join(f'"{name}" IS ?' for name in columns)
+    params = tuple(row.get(name) for name in columns)
+    found = conn.execute(
+        f'SELECT 1 FROM "{table}" WHERE {where} LIMIT 1', params
+    ).fetchone()
+    return found is not None
+
+
+def _missing_rows(
+    conn: sqlite3.Connection, snapshot: dict[str, Any]
+) -> dict[str, int]:
+    """Rows from *snapshot* that are absent or differ from the live table."""
+    groups: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("tenant_registry", ("tprefix", "tvalue")),
+        ("tenant_landline", ("tprefix", "tvalue")),
+        ("dispatcher", _DISPATCHER_COLUMNS),
+        ("trusted", _TRUSTED_COLUMNS),
+    )
+    missing: dict[str, int] = {}
+    for table, columns in groups:
+        count = sum(
+            1
+            for row in snapshot.get(table) or []
+            if not _row_present(conn, table, columns, row)
+        )
+        if count:
+            missing[table] = count
+    return missing
+
+
 def _insert_edge_rows(
     conn: sqlite3.Connection, snapshot: dict[str, Any]
 ) -> dict[str, int]:
@@ -769,22 +806,22 @@ class _Run:
 
     def _step_rows_inserted(self) -> None:
         snapshot = self._load_snapshot()
-        expected = {
-            table: len(snapshot.get(table) or [])
-            for table in ("tenant_registry", "tenant_landline", "dispatcher", "trusted")
-        }
         with _edge_transaction(self.edge) as conn:
             counts = _insert_edge_rows(conn, snapshot)
-            short = {t: (expected[t], counts[t]) for t in expected if counts[t] < expected[t]}
-            if short:
+            # Verify presence, not "newly inserted": a crash after the edge
+            # COMMIT but before the sidecar ROWS_INSERTED transition resumes
+            # here with every row already present and must still succeed.
+            missing = _missing_rows(conn, snapshot)
+            if missing:
                 raise LifecycleError(
-                    "restore inserted fewer rows than the snapshot (concurrent write?): "
-                    + ", ".join(f"{t}={got}/{want}" for t, (want, got) in short.items())
+                    "restore rows are missing or differ from the snapshot "
+                    "(concurrent write?): "
+                    + ", ".join(f"{table}={count}" for table, count in missing.items())
                 )
         self._transition(
             "ROWS_INSERTED",
-            "inserted: "
-            + ", ".join(f"{table}={count}" for table, count in counts.items()),
+            "verified: "
+            + ", ".join(f"{table}+{count}" for table, count in counts.items()),
         )
 
     def _step_snapshot_discarded(self) -> None:
@@ -860,26 +897,32 @@ def _ensure_no_pending(sc: Sidecar, op: str, domain: str) -> None:
 
 
 def _require_purge_capability(worker: Any) -> None:
-    """Park/destroy purge regcache; refuse when htable.delete is proven missing."""
+    """Park/destroy purge regcache; refuse unless htable.delete is proven.
+
+    ``CONSOLE_ENFORCE_CAPABILITIES=1`` is fail-closed: an unreachable edge, a
+    failed probe, or a missing RPC client all refuse the operation *before*
+    any backup, snapshot or row deletion.
+    """
     from . import settings as settings_module
 
     if not settings_module.settings.enforce_capabilities:
         return
+    from . import capabilities
+    from .errors import KamailioUnavailable
+
     rpc = getattr(worker, "rpc", None)
     if rpc is None or not hasattr(rpc, "call"):
-        return
-    try:
-        from . import capabilities
-
-        caps = capabilities.probe(rpc)
-    except BaseException:
-        return
-    if caps.get("reachable") and not caps.get("htable.delete"):
-        from .errors import KamailioUnavailable
-
         raise KamailioUnavailable(
-            "htable.delete unavailable on the edge — park/destroy refused"
+            "cannot prove htable.delete (no RPC client) — park/destroy refused"
         )
+    try:
+        caps = capabilities.probe(rpc)
+    except BaseException as exc:
+        raise KamailioUnavailable(
+            f"cannot prove htable.delete (probe failed: {exc}) — park/destroy refused"
+        ) from exc
+    # Raises when the capability is False, unknown, unreachable or absent.
+    capabilities.require_capability("htable.delete", caps)
 
 
 def _sequence_for(op: str, mode: str) -> tuple[str, ...]:

@@ -34,7 +34,7 @@ from plan §2.
 | `CONSOLE_TLS_LIVE` | `1` | Enables the wizard's mandatory TLS-SAN notice (`ACME_DOMAINS` + force-reissue). |
 | `CONSOLE_SECURE_COOKIE` | `0` | Set `1` when Pangolin terminates HTTPS; adds `Secure` to the session cookie. |
 | `CONSOLE_SESSION_TTL` | `43200` | Absolute session lifetime in seconds (12 h); there is no sliding refresh. |
-| `CONSOLE_LOGIN_RATE` | `5` | Failed auth attempts and SSO login starts per minute per IP before a 429. |
+| `CONSOLE_LOGIN_RATE` | `5` | Failed auth attempts per minute per IP before a 429. |
 | `CONSOLE_SWEEPER_INTERVAL` | `30` | Seconds between lifecycle-intent/reload sweeps; `0` disables (tests use 0). |
 | `CONSOLE_ENFORCE_CAPABILITIES` | `0` | `1` refuses park/destroy up front when `htable.delete` is proven unavailable. Set `1` in production. |
 | `OIDC_ALLOW_ANY` | `0` | Explicitly allow any authenticated subject when no group/email-domain allowlist is configured. SSO fails closed without it. |

@@ -26,6 +26,7 @@ import uuid
 from typing import Any
 
 from console.errors import ConsoleError, KamailioUnavailable
+from console.rpc_lock import RPC_LOCK
 
 __all__ = ["RPCFault", "UnixDatagramRPC", "flatten_htable_dump"]
 
@@ -96,12 +97,14 @@ class UnixDatagramRPC:
         reply_path: str | None = None
         sock: socket.socket | None = None
         try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-            sock.settimeout(self.timeout_ms / 1000.0)
-            reply_path = _bind_client_socket(sock)
-            sock.connect(self.sock_path)
-            sock.send(payload)
-            raw = sock.recv(_MAX_REPLY)
+            # Serialize with the reload worker and capability probe.
+            with RPC_LOCK:
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+                sock.settimeout(self.timeout_ms / 1000.0)
+                reply_path = _bind_client_socket(sock)
+                sock.connect(self.sock_path)
+                sock.send(payload)
+                raw = sock.recv(_MAX_REPLY)
         except OSError as exc:
             raise KamailioUnavailable(
                 f"kamailio RPC unavailable at {self.sock_path}: {exc}"

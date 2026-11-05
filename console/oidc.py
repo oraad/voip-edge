@@ -21,6 +21,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from urllib.parse import urlencode
@@ -38,6 +39,9 @@ router = APIRouter()
 
 FLOW_PREFIX = "oidc_flow_"
 FLOW_TTL_SECONDS = 300
+# The state is used as a cookie-name suffix, so validate it before any cookie
+# operation (a crafted value must not reach Set-Cookie parsing).
+_STATE_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _DISCOVERY_TTL = 3600.0
 _JWKS_FLOOR = 300.0
 _CLOCK_SKEW = 60
@@ -114,13 +118,16 @@ def verify_flow(token: str | None) -> dict | None:
     if not token or "." not in token:
         return None
     enc, sig = token.rsplit(".", 1)
-    if not hmac.compare_digest(sig, _sign(enc)):
-        return None
     try:
+        if not hmac.compare_digest(sig, _sign(enc)):
+            return None
         payload = json.loads(_unb64(enc))
-    except (ValueError, json.JSONDecodeError):
+        if not isinstance(payload, dict):
+            return None
+        expires = int(payload.get("exp", 0))
+    except (TypeError, ValueError, UnicodeError):
         return None
-    if int(payload.get("exp", 0)) < int(time.time()):
+    if expires < int(time.time()):
         return None
     if payload.get("typ") != "flow":
         return None
@@ -344,11 +351,9 @@ async def auth_login(request: Request, next: str = "/homes"):
     client_ip = request.client.host if request.client else "unknown"
     if login_rate_exceeded(client_ip):
         return PlainTextResponse("Too many sign-in attempts.", status_code=429)
-    # Count login starts too: unlimited flow creation is an amplification
-    # vector when the provider is slow or failing.
-    from .security import record_login_failure
-
-    record_login_failure(client_ip)
+    # Do not record a start in the failure bucket: a burst of tabs/prefetches
+    # would otherwise lock out the legitimate token/callback paths.  Provider
+    # load is bounded by the discovery failure cooldown.
     try:
         meta = await load_discovery()
     except Exception:
@@ -394,7 +399,9 @@ async def auth_callback(request: Request, code: str = "", state: str = ""):
     client_ip = request.client.host if request.client else "unknown"
     if login_rate_exceeded(client_ip):
         return PlainTextResponse("Too many sign-in attempts.", status_code=429)
-    flow_cookie = f"{FLOW_PREFIX}{state}" if state else ""
+    flow_cookie = (
+        f"{FLOW_PREFIX}{state}" if state and _STATE_RE.fullmatch(state) else ""
+    )
     flow = verify_flow(request.cookies.get(flow_cookie) if flow_cookie else None)
 
     from .security import record_login_failure
@@ -449,7 +456,11 @@ async def auth_logout(request: Request):
     clear_session(response)
     for name in list(request.cookies):
         if name.startswith(FLOW_PREFIX):
-            response.delete_cookie(name, path="/auth")
+            try:
+                response.delete_cookie(name, path="/auth")
+            except Exception:
+                # A malformed cookie name must not break logout.
+                pass
     observability.log_event("oidc_logout", outcome="ok")
     if not session or not oidc_enabled():
         return response

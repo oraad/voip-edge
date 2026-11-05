@@ -147,9 +147,12 @@ def _run_probe(rpc: Any) -> dict[str, bool]:
         _last_probe_at_value = time.time()
         return result
 
+    from .rpc_lock import RPC_LOCK
+
     for index, (method, params) in enumerate(checks):
         try:
-            reply = rpc.call(method, params)
+            with RPC_LOCK:
+                reply = rpc.call(method, params)
         except RPCFault:
             # The channel answered; the individual capability did not pass.
             reachable = True

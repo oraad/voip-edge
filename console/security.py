@@ -122,6 +122,10 @@ def is_authenticated(request: Request) -> bool:
     cfg = settings_module.settings
     if cfg.auth_mode == "oidc" and session.get("amr") != "oidc":
         return False
+    # ... and the reverse: a session minted by SSO must not survive a switch
+    # to break-glass-token-only mode.
+    if cfg.auth_mode == "token" and session.get("amr") != "token":
+        return False
     return True
 
 

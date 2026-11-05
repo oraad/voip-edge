@@ -40,6 +40,7 @@ from tests.fixtures.edgedb import (
     DOMAIN_B,
     LANDLINE_A,
     LANDLINE_B,
+    TENANT_A,
     SRC_IP_A,
     SRC_IP_B,
 )
@@ -777,3 +778,74 @@ def test_active_destroy_is_refused_when_purge_capability_is_missing(env, monkeyp
     assert edge_signature(env.edge) == before
     assert env.sidecar.latest_intent_any(DOMAIN_A) is None
     assert list_backups(env.backups) == []
+
+
+def test_park_refused_when_capability_probe_is_unreachable(env, monkeypatch):
+    from dataclasses import replace
+
+    from console import capabilities
+    from console import settings as settings_module
+    from console.errors import KamailioUnavailable
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, enforce_capabilities=True),
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "probe",
+        lambda rpc: {"reachable": False, "unknown": True, "htable.delete": False},
+    )
+    before = edge_signature(env.edge)
+
+    with pytest.raises(KamailioUnavailable):
+        park(env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups)
+
+    assert edge_signature(env.edge) == before
+    assert env.sidecar.latest_intent_any(DOMAIN_A) is None
+
+
+def test_restore_resumes_after_committed_rows_lost_their_transition(env, monkeypatch):
+    parked = park(
+        env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+    )
+    assert parked.done is True
+
+    original = env.sidecar.record_transition
+
+    def lose_rows_inserted(intent_id, state, **kwargs):
+        if state == "ROWS_INSERTED":
+            raise InjectedCrash("lost transition after edge commit")
+        return original(intent_id, state, **kwargs)
+
+    monkeypatch.setattr(env.sidecar, "record_transition", lose_rows_inserted)
+    with pytest.raises(InjectedCrash):
+        restore(
+            env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+        )
+
+    # The edge transaction committed; only the sidecar transition was lost.
+    assert (
+        count(
+            env.edge,
+            "SELECT count(*) FROM tenant_registry WHERE tprefix = ?",
+            (DOMAIN_A,),
+        )
+        == 1
+    )
+    assert (
+        count(
+            env.edge,
+            "SELECT count(*) FROM tenant_landline WHERE tvalue LIKE ?",
+            (f"{TENANT_A},%",),
+        )
+        == 1
+    )
+
+    monkeypatch.setattr(env.sidecar, "record_transition", original)
+    summary = resume_pending(
+        env.sidecar, env.edge, env.worker, backup_dir=env.backups
+    )
+    assert summary["completed"] == 1
+    assert env.sidecar.latest_intent("restore", DOMAIN_A)["state"] == "DONE"

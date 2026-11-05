@@ -131,7 +131,7 @@ the Arcane stack editor). At minimum change:
 | `EDGE_HOME` | `/opt/voip-edge` (same as the edge stack) |
 | `EDGE_RUN` | `/run/kamailio-edge` (same as the edge stack) |
 | `CONSOLE_TOKEN` | long random value, distinct from `CONSOLE_SECRET` |
-| `CONSOLE_SECRET` | long random value; never leave the dev fallback |
+| `CONSOLE_SECRET` | long random value; set explicitly (blank becomes a random per-process secret, invalidating sessions on restart) |
 | `CONSOLE_BIND` | `100.64.0.9` |
 | `CONSOLE_PORT` | `8080` |
 | `CONSOLE_SECURE_COOKIE` | `1` when Pangolin terminates HTTPS |

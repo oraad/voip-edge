@@ -11,7 +11,7 @@ whole edge.
 ## 1. Current state
 
 - Token login: `POST /login` with `CONSOLE_TOKEN`, signed session cookie
-  `{sub, csrf, exp}` (HMAC, `HttpOnly`, `SameSite=Strict`, optional `Secure`),
+  `{sub, csrf, amr, exp}` (HMAC, `HttpOnly`, `SameSite=Lax`, optional `Secure`),
   12 h absolute expiry, login rate limit 5/min/IP.
 - CSRF: double-submit via header (htmx) or hidden field (plain forms).
 - No external identity provider, no per-user identity (single `sub="token"`).
@@ -130,16 +130,18 @@ POST /auth/logout                   -> clear session, then 303 to IdP end-sessio
 - Tests: `tests/api/test_oidc.py` — happy path, wrong aud/iss, expired (outside
   skew), nonce, bad signature, `alg=none`, state mismatch, group/domain denial,
   open-redirect neutralisation, discovery outage, auth modes, logout CSRF.
-- Dependencies: Authlib + cryptography (Debian packages `python3-authlib`,
-  `python3-cryptography`; or the `oidc` extra). Both are optional at runtime:
-  without `OIDC_ISSUER` the console behaves exactly as before.
+- Dependencies: Authlib + cryptography. They are **required runtime imports**
+  (`console/oidc.py` is imported by `create_app()` even when OIDC is not
+  configured) and are pinned in `pyproject.toml`/the image. With no
+  `OIDC_ISSUER`/`OIDC_CLIENT_ID`, the SSO routes report unavailable and the
+  configured token mode still works.
 
 ## 7. Dependency decision (history)
 
-ID-token verification requires JWT signature checking. This environment has
-**no `cryptography`, `authlib`, `joserfc`, `pyjwt`** and no network, so any
-code written here would be untestable and unverifiable — unacceptable for the
-component that guards the edge.
+ID-token verification requires JWT signature checking. At design time this
+environment had **no `cryptography`, `authlib`, `joserfc`, `pyjwt`** and no
+network; the packages are now installed and pinned as runtime dependencies.
+The historical options below explain the original choice.
 
 Options, in preference order:
 

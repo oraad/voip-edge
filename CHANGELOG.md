@@ -16,7 +16,11 @@ finishes the operations/docs alignment.
 
 - No default or derivable credentials: unset `CONSOLE_TOKEN`/`CONSOLE_SECRET`
   become per-process random values (never `dev-token` and never derived from
-  each other); an empty token can never match at login.
+  each other); an empty token can never match at login. `.env.example` ships
+  blank values; an SSO session cannot survive a switch to token-only mode.
+- OIDC callback/logout validate the `state` cookie-name suffix and tolerate
+  malformed flow signatures; `/auth/login` no longer counts starts in the
+  failure bucket (a tab burst cannot lock out /login or the callback).
 - Request bodies are counted as they are streamed (1 MiB cap) for every unsafe
   method, including chunked/HTTP-2 bodies with no trustworthy
   `Content-Length`; the capped bytes are replayed for form parsing.
@@ -41,8 +45,16 @@ finishes the operations/docs alignment.
   runbook documents the sidecar path and schema-version refusal.
 - Lifecycle: the startup/sweeper calls use the real signatures, `resume_pending`
   takes the global operation lock, active destroy checks `htable.delete` before
-  touching data, and restore verifies the inserted row count inside its
-  transaction.
+  touching data, and restore verifies row *presence* inside its transaction so
+  a crash after the edge COMMIT but before the sidecar transition resumes
+  cleanly. `CONSOLE_ENFORCE_CAPABILITIES=1` is fail-closed on an unreachable
+  probe, and capability probes share the reload RPC lock.
+- Reloads: enqueue persists the pending row synchronously (before the throttle
+  window), in-flight intents persist on shutdown, and worker state is cleared
+  in `finally` even when a store callback raises `BaseException`.
+- Wizard: runs the cross-home landline prefix guard (no tenant-isolation
+  bypass) and waits up to 30 s for reloads instead of falsely reporting
+  "Kamailio unreachable" after 2 s.
 - Forms: `row_hash` is mandatory on edit (missing = stale), the in-transaction
   conflict page carries the fresh row, both edit paths reject corrupt packed
   rows with 404, and landline `ds_onnet` is always derived from the home.
@@ -53,8 +65,9 @@ finishes the operations/docs alignment.
   worker shutdown/restart, and pending-reload persistence are wired.
 - UI: parked table moved out of `<title>`, active homes have a Destroy link,
   lifecycle rows hide Delete, landlines get a New-row action, stale
-  "unimplemented" copy is gone, and read-only mode disables submit buttons and
-  write links while keeping login/sign-out reachable.
+  "unimplemented" copy is gone, and read-only mode disables submit buttons,
+  hides every write link (including the empty-state onboarding CTA) and keeps
+  login/sign-out reachable.
 - Static assets htmx 2.0.4, PicoCSS 2.0.6 and project `app.js` are vendored;
   `hx-on` handlers moved to external event listeners so the CSP can stay
   strict.
@@ -64,6 +77,11 @@ finishes the operations/docs alignment.
 - `.dockerignore`, pinned dependency list, compose "own stack" guidance,
   environment-variable table, OIDC dependency note, release examples and
   version metadata aligned to 0.1.10.
+- Privacy: guard rejects `.env.*` variants (except the reviewed `.env.example`);
+  test/live fixtures and docs use the documented alpha/beta/gamma placeholders;
+  repository history rewritten to remove the earlier deployment identifiers.
+- Backups: the sidecar restore runbook quarantines WAL/SHM with the old file,
+  and the live gate restores a T1 landline row instead of asserting a tautology.
 
 ## [0.1.9] - 2026-11-05
 

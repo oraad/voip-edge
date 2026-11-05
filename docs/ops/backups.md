@@ -169,10 +169,13 @@ If `console.sqlite` is corrupt or missing:
 2. Preserve the broken file aside.
 3. Restore the sibling sidecar copy from the chosen backup
    (`edge-<UTC>-<tag>.sqlite.console.sqlite.bak`) or a copy taken by host-level
-   backup:
+   backup. The sidecar runs in WAL mode, so quarantine **all three** files
+   together — never pair a restored `console.sqlite` with the old `-wal`/`-shm`:
    ```bash
-   cp "${EDGE_HOME}/console/backups/edge-<UTC>-<tag>.sqlite.console.sqlite.bak" \
-      "${EDGE_HOME}/console/console.sqlite"
+   cd "${EDGE_HOME}/console"
+   mkdir -p console.sqlite.broken
+   mv console.sqlite console.sqlite-wal console.sqlite-shm console.sqlite.broken/ 2>/dev/null || true
+   cp "backups/edge-<UTC>-<tag>.sqlite.console.sqlite.bak" console.sqlite
    ```
    The console applies forward migrations on startup. It **refuses** a sidecar
    whose `PRAGMA user_version` is newer than the image supports, so deploy the

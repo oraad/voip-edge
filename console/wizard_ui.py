@@ -583,6 +583,30 @@ def validate_step(
         _add(errors, "ring_group", target_errors)
         _add(warnings, "ring_group", target_warnings)
 
+        # The wizard writes tenant_landline directly, so it must run the same
+        # cross-home longest-prefix guard as the generic form router.  A
+        # cross-home clash is always blocking; the wizard has no "keep both"
+        # acknowledgement.
+        if conn is not None:
+            from .rules.landline import check_prefix_conflict
+
+            conflict = check_prefix_conflict(
+                landline,
+                landline_values,
+                conn=proxy,
+                mode="create",
+                existing={},
+                key=None,
+            )
+            if conflict is not None:
+                _add(
+                    errors,
+                    "landline",
+                    conflict.get("errors", {}).get(
+                        "tprefix", ["This landline overlaps another home."]
+                    ),
+                )
+
         # Packed keys cannot contain commas/pluses; landline digits are part
         # of the landline family, but the generic rules keep the wizard honest
         # while that family is still landing.
@@ -753,7 +777,9 @@ def _enqueue_reloads(
     drained = True
     if callable(flush):
         try:
-            drained = bool(flush())
+            # Must exceed the largest per-table throttle (5 s) plus the RPC
+            # timeout, otherwise every apply reports a false failure.
+            drained = bool(flush(timeout=30.0))
         except BaseException as exc:
             drained = False
             warnings.append(f"Reload queue did not drain: {exc}")

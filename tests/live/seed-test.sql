@@ -48,7 +48,8 @@ INSERT OR REPLACE INTO tenant_registry (tprefix, tvalue) VALUES
 	('sip.gamma.home.example.net', 'T3,13,0,03333333,Gamma,10,1+1'); -- no PSTN
 
 INSERT OR REPLACE INTO tenant_landline (tprefix, tvalue)
-VALUES ('02222222', 'T2,home,12,1');
+VALUES ('01111111', 'T1,home,11,1'),
+       ('02222222', 'T2,home,12,1');
 
 INSERT INTO dispatcher (setid, destination, description) VALUES
 	(11, 'sip:127.0.0.1:5190;transport=udp', 'lab home1 voip-stack'),

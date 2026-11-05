@@ -274,3 +274,77 @@ def test_pending_persistence_tuples_for_mixed_outcomes(fake):
         ["dispatcher"],
     ) in recorded
     assert set(worker.errors) == {"dispatcher"}
+
+
+def test_on_enqueue_persists_before_the_worker_runs(fake):
+    fake.script("mtree.reload", 1)
+    events: list[tuple] = []
+    worker = ReloadWorker(
+        fake,
+        {"homes": 0},
+        on_enqueue=lambda *args: events.append(args),
+    )
+    try:
+        worker.enqueue("homes", "mtree.reload", ["tenantdom"])
+        assert events == [("homes", "mtree.reload", ["tenantdom"])]
+        assert worker.flush(2.0) is True
+    finally:
+        worker.shutdown(0.2)
+
+
+def test_store_baseexception_does_not_wedge_the_worker(fake):
+    class Boom(BaseException):
+        pass
+
+    fake.script("mtree.reload", 1)
+
+    def store(status, *args):
+        if status == "done":
+            raise Boom("store exploded")
+
+    worker = ReloadWorker(fake, {"homes": 0}, store=store)
+    try:
+        worker.enqueue("homes", "mtree.reload", ["tenantdom"])
+        assert worker.flush(2.0) is True
+        worker.enqueue("homes", "mtree.reload", ["tenantdom"])
+        assert worker.flush(2.0) is True
+    finally:
+        worker.shutdown(0.2)
+
+
+def test_probe_and_worker_do_not_run_reloads_concurrently():
+    from console import capabilities
+
+    class SlowRPC:
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+            self._active = 0
+            self.max_concurrency = 0
+            self.started = threading.Event()
+
+        def call(self, method, params=None):
+            with self._lock:
+                self._active += 1
+                self.max_concurrency = max(self.max_concurrency, self._active)
+            try:
+                if method == "mtree.reload":
+                    self.started.set()
+                    time.sleep(0.2)
+                if method == "htable.dump":
+                    return []
+                return 1
+            finally:
+                with self._lock:
+                    self._active -= 1
+
+    rpc = SlowRPC()
+    capabilities.clear_cache()
+    worker = ReloadWorker(rpc, {"homes": 0})
+    try:
+        worker.enqueue("homes", "mtree.reload", ["tenantdom"])
+        assert rpc.started.wait(2.0)
+        capabilities.probe(rpc, ttl=0)
+        assert worker.flush(5.0) is True
+        assert rpc.max_concurrency == 1
+    finally:
+        worker.shutdown(0.2)

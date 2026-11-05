@@ -45,6 +45,14 @@ promote:
 4. set `ACME_FORCE_ISSUE=0` again (otherwise every recreate re-issues and can
    hit Let's Encrypt duplicate-certificate limits).
 
+## Key ownership (non-root Kamailio)
+
+`deploy-certs.sh` writes `sip.key` as `0600`. If Kamailio/the cert reloader does
+not run as root, set `KAM_UID`/`KAM_GID` in the acme container so the release
+is chowned to that account, or use a shared group with `0640` and add the
+Kamailio user to it. Otherwise `tls.reload` fails with a permission error after
+a successful renewal. See `docs/ops/deploy.md` §8.6.
+
 ## Renewal visibility
 
 Renewal failures are logged by the acme container but not alerted. Add an

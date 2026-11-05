@@ -468,3 +468,10 @@ def test_wizard_post_without_csrf_header_is_403(seeded_db, auth_client):
         "SELECT 1 FROM tenant_registry WHERE tprefix = ?",
         (IDENTITY["domain"],),
     ) == []
+
+
+def test_wizard_rejects_cross_home_landline_prefix(seeded_db, auth_client):
+    payload = dict(IDENTITY, landline="0111")
+    response = auth_client.post("/wizard/step1", data=payload)
+    assert response.status_code == 422
+    assert "shadow" in response.text.lower()

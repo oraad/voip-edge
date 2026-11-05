@@ -431,3 +431,18 @@ def test_flow_cookie_cannot_be_used_as_a_session(seeded_db, client, oidc_setting
     client.cookies.set("session", flow_cookie, path="/")
     assert client.get("/homes").status_code in (302, 303)
     assert client.get("/homes").headers.get("location") == "/login"
+
+
+def test_crafted_state_is_rejected_without_a_cookie_name_error(
+    client, oidc_settings, provider
+):
+    oidc_settings()
+    response = client.get(
+        "/auth/callback", params={"code": "abc", "state": "bad state{}"}
+    )
+    assert response.status_code == 303
+    assert "error=invalid_state" in response.headers["location"]
+
+
+def test_flow_token_with_non_ascii_signature_is_rejected():
+    assert oidc.verify_flow("abc.\u00e9") is None

@@ -42,7 +42,9 @@ while IFS= read -r f; do
             echo "privacy: refusing key/cert material: $f" >&2; fail=1 ;;
         *technitium_tsig*|*/tls/*|/acme/*|*/acme/data/*|*console-data/*|*/backups/*)
             echo "privacy: refusing secret/state path: $f" >&2; fail=1 ;;
-        .env|*.env|*/.env)
+        .env.example|*/.env.example)
+            : ;;  # committed template: reviewed by the content gate below
+        .env|.env.*|*/.env|*/.env.*)
             echo "privacy: refusing env file: $f" >&2; fail=1 ;;
     esac
 done < "$TMPLIST"

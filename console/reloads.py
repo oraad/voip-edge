@@ -48,12 +48,14 @@ class ReloadWorker:
         rpc: Any,
         throttle_seconds: dict[str, int],
         store: Callable[..., Any] | None = None,
+        on_enqueue: Callable[[str, str, list[Any]], Any] | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.rpc = rpc
         self.throttle_seconds = dict(throttle_seconds or {})
         self.store = store
+        self.on_enqueue = on_enqueue
         self.clock = clock
         self.sleep = sleep
 
@@ -87,6 +89,13 @@ class ReloadWorker:
             else:
                 pending.rpc_name = rpc_name
                 pending.params = params
+            # Persist before the worker can consume the intent.  A crash in
+            # the throttle window must not lose the reload (plan §5.6).
+            if self.on_enqueue is not None:
+                try:
+                    self.on_enqueue(table, rpc_name, params)
+                except BaseException:
+                    pass
             self._ensure_thread_locked()
             self._cond.notify_all()
 
@@ -154,6 +163,8 @@ class ReloadWorker:
             # A crashed worker (e.g. a BaseException in a store callback) is
             # replaced on the next enqueue rather than leaving intents stuck.
             self._thread = None
+            self._current = None
+            self._in_flight = False
         self._thread = threading.Thread(
             target=self._run, name="console-reload-worker", daemon=True
         )
@@ -208,21 +219,27 @@ class ReloadWorker:
                     self._cond.notify_all()
 
     def _execute(self, table: str, entry: _Pending) -> None:
+        from .rpc_lock import RPC_LOCK
+
         status = "done"
         try:
-            self.rpc.call(entry.rpc_name, entry.params)
-        except BaseException as exc:  # RPCFault, KamailioUnavailable, or a stub failure
-            self.errors[table] = exc
-            status = "pending"
-        else:
-            self.errors.pop(table, None)
+            try:
+                # The probe and the live dashboard use the same lock; reload
+                # handlers must never run concurrently for one table.
+                with RPC_LOCK:
+                    self.rpc.call(entry.rpc_name, entry.params)
+            except BaseException as exc:  # RPCFault, KamailioUnavailable, a stub failure
+                self.errors[table] = exc
+                status = "pending"
+            else:
+                self.errors.pop(table, None)
 
-        self._notify_store(status, table, entry.rpc_name, entry.params)
-
-        with self._cond:
-            self._current = None
-            self._in_flight = False
-            self._cond.notify_all()
+            self._notify_store(status, table, entry.rpc_name, entry.params)
+        finally:
+            with self._cond:
+                self._current = None
+                self._in_flight = False
+                self._cond.notify_all()
 
     def _notify_store(
         self, status: str, table: str, rpc_name: str, params: list[Any]
@@ -234,7 +251,7 @@ class ReloadWorker:
                 self.store((status, table, rpc_name, params))
             else:
                 self.store(status, table, rpc_name, params)
-        except Exception:
+        except BaseException:
             # Persistence failures must never kill the reload worker; the
             # caller surfaces sidecar problems through its own path.
             pass
