@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 {% block title %}{{ table_label }} — VoIP Edge Console{% endblock %}
 {% block content %}
+{% set flash_message = request.query_params.get('flash', '') if request else '' %}
+{% set flash_tone = request.query_params.get('tone', 'scheduled') if request else 'scheduled' %}
+{% if flash_tone not in ('scheduled', 'applied', 'verified', 'failed') %}
+{% set flash_tone = 'scheduled' %}
+{% endif %}
+{% if flash_message %}
+{# Post/redirect/get flash from the form writes: scheduled / applied /
+   verified / failed. Rendered as a status toast, never a naked "Success". #}
+{% with message=flash_message, tone=flash_tone, warnings=[], table=none %}
+{% include "partials/toast.html" %}
+{% endwith %}
+{% endif %}
 <div class="pagehead">
   <div>
     <h1>{{ table_label }}</h1>

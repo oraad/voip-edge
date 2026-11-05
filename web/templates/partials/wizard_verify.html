@@ -1,0 +1,56 @@
+{% if reload_warnings %}
+<div class="warnsummary" role="status" aria-live="polite">
+  <span class="badge b-warn">Warning</span>
+  The home was written, but the reloads need attention.
+  <ul style="margin:7px 0 0 17px; padding:0">
+    {% for message in reload_warnings %}<li>{{ message }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Verify home “{{ draft.domain }}”</h2>
+  <p class="sub" style="margin-bottom:8px">
+    Database-only coherence check. It proves the rows exist and agree; the live
+    registration pane below is the optional behavioural confirmation.
+  </p>
+
+  {% if checklist %}
+    {% for item in checklist["items"] %}
+    <div class="checkline">
+      <span class="dot {{ 'ok' if item.ok else '' }}" aria-hidden="true"></span>
+      <b>{{ "OK" if item.ok else "Missing" }}</b> — {{ item.label }}
+      <span class="meta">{{ item.detail }}</span>
+    </div>
+    {% endfor %}
+
+    {% if checklist["all_green"] %}
+    <div class="checkline" role="status">
+      <span class="dot ok" aria-hidden="true"></span>
+      <b>OK</b> — all four coherence checks are green.
+    </div>
+    {% else %}
+    <div class="checkline" role="alert">
+      <span class="dot" aria-hidden="true"></span>
+      <b>Not green yet</b> — fix the named row before announcing the home.
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="panel" style="margin:16px 0 0; border-style:dashed">
+    <b>Waiting for the first registration</b>
+    <p class="sub" style="margin:6px 0 0">
+      This pane is a static placeholder in v1: the wizard does not poll the
+      live registration cache. Once the home is applied, watch
+      <a href="/live">Live</a> for its first cached AOR and its transport/flow.
+      No registration is required for the DB checklist above to be green.
+    </p>
+  </div>
+
+  <div class="formbar">
+    <a class="btn pri" href="/homes">Back to homes</a>
+    <a class="btn" href="/wizard">Onboard another home</a>
+    <a class="btn" href="/tables/tenant_registry/{{ draft.domain|urlencode }}">View the registry row</a>
+    <span class="meta">Step 4 of 4 · apply committed and reloads enqueued.</span>
+  </div>
+</div>

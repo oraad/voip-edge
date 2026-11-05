@@ -54,9 +54,10 @@
   <form method="post" action="{{ action }}" hx-post="{{ action }}"
         hx-target="#form-shell" hx-swap="outerHTML"
         hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
-        hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+        hx-on::before-swap="if (event.detail.xhr.status === 422 || event.detail.xhr.status === 409) { event.detail.shouldSwap = true; event.detail.isError = false; }"
         novalidate>
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    {% if mode == 'edit' and row_hash %}<input type="hidden" name="row_hash" value="{{ row_hash }}">{% endif %}
     <fieldset class="fieldset">
       <legend>Details</legend>
       {% for f in fields %}

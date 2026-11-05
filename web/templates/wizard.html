@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Onboard a home — VoIP Edge Console{% endblock %}
+{% block content %}
+<style>
+  /* Wizard vocabulary (wireframe v2 / plan §6): a stepper that keeps its
+     position, a focused summary linking to the offending field, one-line
+     help under every control, and a consequences panel before the apply. */
+  #wizard-shell { max-width: 860px; }
+  .steps { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 16px; }
+  .steps span { border:1px solid var(--border); border-radius:999px;
+                padding:5px 12px; font-size:.82em; color:var(--muted-foreground); }
+  .steps span.done { border-color:var(--success); color:var(--success); }
+  .steps span.c { border-color:var(--primary); background:var(--primary);
+                  color:var(--primary-foreground); font-weight:600; }
+  .wizfield { margin:0 0 10px; }
+  .hint { font-size:.8em; color:var(--muted-foreground); margin-top:4px; }
+  .errtxt { font-size:.82em; color:var(--destructive); margin-top:4px;
+            font-weight:600; }
+  .warntxt { font-size:.82em; color:var(--warning); margin-top:4px; }
+  .warnsummary { border:1px solid var(--warning); border-left-width:4px;
+                 border-radius:8px; padding:10px 14px; font-size:.88em;
+                 margin-bottom:14px; }
+  .tlsnotice { border:1px solid var(--warning); border-left-width:4px;
+               border-radius:8px; padding:12px 16px; font-size:.9em;
+               margin:10px 0 16px; color:#3b2c00;
+               background:color-mix(in srgb, var(--warning) 10%, transparent); }
+  .checkline { display:flex; gap:8px; align-items:baseline; padding:7px 0;
+               border-bottom:1px solid var(--border); font-size:.92em; }
+  .checkline:last-child { border-bottom:none; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--warning);
+         flex:none; display:inline-block; }
+  .dot.ok { background:var(--success); }
+  .reviewtable td:first-child { width:170px; color:var(--muted-foreground);
+                                font-size:.9em; }
+  .reviewtable td { vertical-align:top; }
+  form .wizfield input[type=text] { width:100%; padding:9px 10px;
+      border:1px solid var(--border); border-radius:6px; font:inherit;
+      min-height:32px; background:#fff; color:#1b1f27; }
+  .checkboxline { display:flex; gap:8px; align-items:center; }
+  .checkboxline label { margin:0; }
+</style>
+
+<section id="wizard-shell">
+  <div class="pagehead">
+    <div>
+      <h1>Onboard a home</h1>
+      <div class="sub">Four steps. The apply writes the home, its landline,
+        route sets and trusted source in one transaction — with a tagged
+        backup first and a full rollback on any failure.</div>
+    </div>
+    <a class="meta" href="/homes">Back to homes</a>
+  </div>
+
+  <div class="steps" role="list" aria-label="Wizard steps">
+    {% for number, label in steps %}
+    <span role="listitem"
+          class="{% if number < step %}done{% elif number == step %}c{% endif %}"
+          {% if number == step %}aria-current="step"{% endif %}>
+      {{ number }} · {{ label }}
+    </span>
+    {% endfor %}
+  </div>
+
+  {% if error_count %}
+  <div class="errsummary" tabindex="-1" role="alert" aria-labelledby="wiz-summary-title">
+    <b id="wiz-summary-title">{{ error_count }} thing{{ "" if error_count == 1 else "s" }}
+      need{{ "s" if error_count == 1 else "" }} fixing before this step can continue</b>
+    <ul style="margin:7px 0 0 17px; padding:0">
+      {% for item in summary %}
+      <li><a href="#field-{{ item.field }}">Step {{ item.step }} · {{ item.label }} — {{ item.message }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if apply_error %}
+  <div class="errsummary" role="alert" aria-labelledby="wiz-apply-error">
+    <b id="wiz-apply-error">Apply failed</b>
+    <p style="margin:7px 0 0">{{ apply_error }}</p>
+  </div>
+  {% endif %}
+
+  {% if warnings %}
+  <div class="warnsummary" role="status" aria-live="polite">
+    <span class="badge b-warn">Warning</span>
+    {{ warnings|length }} warning{{ "" if warnings|length == 1 else "s" }} — this
+    step can continue.
+    <ul style="margin:7px 0 0 17px; padding:0">
+      {% for item in warnings %}
+      <li>{{ item.label }} — {{ item.message }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if step == 1 %}
+  <div class="panel">
+    <form method="post" action="/wizard/step1" hx-post="/wizard/step1"
+          hx-target="#wizard-shell" hx-swap="outerHTML"
+          hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
+          hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+          novalidate>
+      {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+      {% for name, value in hidden %}
+      <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {% endfor %}
+
+      <div class="wizfield">
+        <label for="field-domain">Domain</label>
+        <input id="field-domain" name="domain" type="text" class="mono"
+               value="{{ draft.domain }}" autocomplete="off" spellcheck="false"
+               {% if field_meta.domain.aria_invalid %}aria-invalid="true"{% endif %}
+               aria-describedby="{{ field_meta.domain.describedby }}">
+        <div class="hint" id="help-domain">The exact SIP domain phones at this
+          home use, for example <span class="mono">sip.b-example.home.example.net</span>.
+          It must end in an allowed suffix and is create-only.</div>
+        {% for message in field_meta.domain.errors %}
+        <div class="errtxt" id="err-domain-{{ loop.index }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="wizfield">
+        <label for="field-landline">Landline (as dialed locally)</label>
+        <input id="field-landline" name="landline" type="text" class="mono"
+               value="{{ draft.landline }}" inputmode="numeric"
+               autocomplete="off" spellcheck="false"
+               {% if field_meta.landline.aria_invalid %}aria-invalid="true"{% endif %}
+               aria-describedby="{{ field_meta.landline.describedby }}">
+        <div class="hint" id="help-landline">Digits only, at least three. Longer
+          prefixes win; a number already delegated to another home is blocked.</div>
+        {% for message in field_meta.landline.errors %}
+        <div class="errtxt" id="err-landline-{{ loop.index }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="wizfield">
+        <label for="field-ring_group">Ring group / extension to ring</label>
+        <input id="field-ring_group" name="ring_group" type="text" class="mono"
+               value="{{ draft.ring_group }}" autocomplete="off" spellcheck="false"
+               {% if field_meta.ring_group.aria_invalid %}aria-invalid="true"{% endif %}
+               aria-describedby="{{ field_meta.ring_group.describedby }}">
+        <div class="hint" id="help-ring_group">The PBX ring group or extension
+          the landline is rewritten to, for example <span class="mono">home</span>.</div>
+        {% for message in field_meta.ring_group.errors %}
+        <div class="errtxt" id="err-ring_group-{{ loop.index }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="wizfield">
+        <label for="field-label">Display label</label>
+        <input id="field-label" name="label" type="text"
+               value="{{ draft.label }}" autocomplete="off" spellcheck="false"
+               {% if field_meta.label.aria_invalid %}aria-invalid="true"{% endif %}
+               aria-describedby="{{ field_meta.label.describedby }}">
+        <div class="hint" id="help-label">Caller-id label shown to the other
+          home. No commas or plus signs.</div>
+        {% for message in field_meta.label.errors %}
+        <div class="errtxt" id="err-label-{{ loop.index }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="formbar">
+        <button class="btn pri" type="submit">Continue to network</button>
+        <a class="btn" href="/homes">Cancel</a>
+        <span class="meta">Step 1 of 4 · nothing is written yet.</span>
+      </div>
+    </form>
+  </div>
+
+  {% elif step == 2 %}
+  <div class="panel">
+    <form method="post" action="/wizard/step2" hx-post="/wizard/step2"
+          hx-target="#wizard-shell" hx-swap="outerHTML"
+          hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
+          hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+          novalidate>
+      {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+      {% for name, value in hidden %}
+      <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {% endfor %}
+
+      <div class="wizfield">
+        <label for="field-lan_ip">voip-stack host LAN IP</label>
+        <input id="field-lan_ip" name="lan_ip" type="text" class="mono"
+               value="{{ draft.lan_ip }}" autocomplete="off" spellcheck="false"
+               {% if field_meta.lan_ip.aria_invalid %}aria-invalid="true"{% endif %}
+               aria-describedby="{{ field_meta.lan_ip.describedby }}">
+        <div class="hint" id="help-lan_ip">The literal LAN address of the home's
+          voip-stack host, for example <span class="mono">10.0.6.20</span>.
+          Dispatcher destinations must be literal IPv4 hosts (TCP, port 5060),
+          never an FQDN.</div>
+        {% for message in field_meta.lan_ip.errors %}
+        <div class="errtxt" id="err-lan_ip-{{ loop.index }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="wizfield">
+        <label for="field-wire_ip">Wire-observed native tunnel IP</label>
+        <input id="field-wire_ip" name="wire_ip" type="text" class="mono"
+               value="{{ draft.wire_ip }}" autocomplete="off" spellcheck="false"
+               {% if field_meta.wire_ip.aria_invalid %}aria-invalid="true"{% endif %}
+               aria-describedby="{{ field_meta.wire_ip.describedby }}">
+        <div class="hint" id="help-wire_ip">{{ wire_hint }}</div>
+        {% for message in field_meta.wire_ip.errors %}
+        <div class="errtxt" id="err-wire_ip-{{ loop.index }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="wizfield">
+        <div class="checkboxline">
+          <input type="checkbox" id="field-has_pstn" name="has_pstn" value="1"
+                 {% if draft.has_pstn %}checked{% endif %}>
+          <label for="field-has_pstn">This home has a PSTN trunk</label>
+        </div>
+        <div class="hint">Leave unticked for a home without a trunk: then the
+          wizard writes 4 rows and the PSTN set is skipped (off-net calls get 404).</div>
+      </div>
+
+      <div class="wizfield">
+        <div class="checkboxline">
+          <input type="checkbox" id="field-override_public_ip"
+                 name="override_public_ip" value="1"
+                 {% if draft.override_public_ip %}checked{% endif %}>
+          <label for="field-override_public_ip">Override the private/CGNAT
+            check for the trusted source</label>
+        </div>
+        <div class="hint">Only for a home reached outside the Pangolin tunnel.
+          The documented generic path warns and continues; the console shows the
+          same warning.</div>
+      </div>
+
+      {% if tls_live %}
+      <div class="tlsnotice" role="note">
+        TLS is live. After this home is applied, the review lists the mandatory
+        certificate step — the shared wildcard does not cover this two-label
+        tenant domain.
+      </div>
+      {% endif %}
+
+      <div class="formbar">
+        <button class="btn pri" type="submit">Review the writes</button>
+        <button class="btn" type="submit" formaction="/wizard/step1"
+                formnovalidate>Back</button>
+        <span class="meta">Step 2 of 4 · nothing is written yet.</span>
+      </div>
+    </form>
+  </div>
+
+  {% elif step == 3 %}
+    {% include "partials/wizard_review.html" %}
+  {% else %}
+    {% include "partials/wizard_verify.html" %}
+  {% endif %}
+</section>
+{% endblock %}

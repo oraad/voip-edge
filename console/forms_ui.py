@@ -49,6 +49,19 @@ Extension points (for T4.2–T4.8)
     pending (skipped) or reported as a configuration error.
 ``DERIVATIONS`` / ``PENDING_DERIVATIONS``
     The live registry and the declarations that later families will fill.
+``FORM_CHECKS`` (per family module)
+    A family exports ``fn(descriptor, values, *, conn, mode, existing, key)``
+    checks for cross-row rules.  This router runs them after field validation;
+    a returned ``interruption`` payload renders ``interruption.html`` (422).
+    The landline longest-prefix rule is the first user (T4.4).
+
+Stale edits
+-----------
+An edit render carries a hidden ``row_hash`` — SHA-256 over the canonical
+descriptor values of the row as loaded.  A POST recomputes that hash from the
+row currently in the database; a mismatch returns ``conflict.html`` (409) with
+the submitted values preserved and a submitted-vs-current diff.  ``force=1``
+("Keep my changes") is the only way past the guard; no version columns exist.
 
 Full page and fragment
 ----------------------
@@ -63,6 +76,9 @@ from __future__ import annotations
 # each family owns console/rules/<family>.py).
 from . import rules as _rule_families  # noqa: F401
 
+import hashlib
+import importlib
+import json
 import re
 import sqlite3
 from typing import Any, Callable, Mapping
@@ -93,6 +109,8 @@ _INTEGER = re.compile(r"^-?\d+$")
 DefaultProvider = Callable[[Any, Any, Mapping[str, Any]], Any]
 #: ``fn(*, descriptor, field, values, conn, mode, existing) -> value``.
 Derivation = Callable[..., Any]
+#: ``fn(descriptor, values, *, conn, mode, existing, key) -> result | None``.
+FormCheck = Callable[..., dict[str, Any] | None]
 
 _DEFAULT_PROVIDERS: list[DefaultProvider] = []
 DERIVATIONS: dict[str, Derivation] = {}
@@ -120,6 +138,23 @@ def _default_for(descriptor, field, values: Mapping[str, Any]) -> Any:
     return None
 
 
+def _form_checks() -> list[FormCheck]:
+    """Collect ``FORM_CHECKS`` from every imported family module.
+
+    A family that needs a cross-row rule (landline longest-prefix) exports a
+    check instead of adding table-specific code to this router.  Missing
+    modules and modules without checks are simply skipped.
+    """
+    checks: list[FormCheck] = []
+    for name in getattr(_rule_families, "FAMILIES", ()):
+        try:
+            module = importlib.import_module(f"console.rules.{name}")
+        except ImportError:  # pragma: no cover - family landed incompletely
+            continue
+        checks.extend(getattr(module, "FORM_CHECKS", ()))
+    return checks
+
+
 # ---------------------------------------------------------------------------
 # small helpers
 # ---------------------------------------------------------------------------
@@ -143,6 +178,69 @@ def _descriptor(table: str) -> descriptors.Descriptor | None:
 
 def _humanize(name: str) -> str:
     return name.replace("_", " ").replace("-", " ").title()
+
+
+def _form_scalar(form: Mapping[str, list[str]], name: str) -> str:
+    values = form.get(name)
+    return values[0] if values else ""
+
+
+def _truthy(value: Any) -> bool:
+    return str(value).strip().lower() in {"1", "on", "true", "yes"}
+
+
+def _canonical_row(descriptor: descriptors.Descriptor, values: Mapping[str, Any]) -> str:
+    """Stable JSON of the descriptor fields, in table order.
+
+    Used only for the stale-edit content hash: both the edit GET and the POST
+    read the row through the same descriptor, so the same stored row always
+    serialises identically (column ints stay ints, packed values stay strings).
+    """
+    payload: list[list[Any]] = []
+    for field in descriptor.fields:
+        value = values.get(field.name)
+        payload.append([field.name, "" if value is None else value])
+    return json.dumps(
+        payload, ensure_ascii=False, separators=(",", ":"), default=str
+    )
+
+
+def _row_hash(descriptor: descriptors.Descriptor, values: Mapping[str, Any]) -> str:
+    return hashlib.sha256(_canonical_row(descriptor, values).encode("utf-8")).hexdigest()
+
+
+def _hidden_fields(
+    values: Mapping[str, Any], *, exclude: tuple[str, ...] = ()
+) -> list[dict[str, str]]:
+    """Preserve submitted values across a resubmit form on a banner page."""
+    return [
+        {"name": name, "value": "" if value is None else str(value)}
+        for name, value in values.items()
+        if name not in exclude
+    ]
+
+
+def _diff_rows(
+    descriptor: descriptors.Descriptor,
+    submitted: Mapping[str, Any],
+    current: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    diff: list[dict[str, str]] = []
+    for field in descriptor.fields:
+        before = submitted.get(field.name, "")
+        after = current.get(field.name, "")
+        before_text = "" if before is None else str(before)
+        after_text = "" if after is None else str(after)
+        if before_text != after_text:
+            diff.append(
+                {
+                    "field": field.name,
+                    "label": _humanize(field.name),
+                    "submitted": before_text,
+                    "current": after_text,
+                }
+            )
+    return diff
 
 
 def _checked_identifier(value: str) -> str:
@@ -445,6 +543,42 @@ def _validate(
     return errors, warnings
 
 
+def _run_form_checks(
+    descriptor: descriptors.Descriptor,
+    values: Mapping[str, Any],
+    *,
+    conn: sqlite3.Connection,
+    mode: str,
+    key: Any,
+    existing: Mapping[str, Any],
+) -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, Any] | None]:
+    """Run family cross-row checks, merging errors/warnings and finding a stop."""
+    errors: dict[str, list[str]] = {}
+    warnings: dict[str, list[str]] = {}
+    interruption: dict[str, Any] | None = None
+    for check in _form_checks():
+        try:
+            result = check(
+                descriptor,
+                values,
+                conn=conn,
+                mode=mode,
+                existing=existing,
+                key=key,
+            )
+        except Exception:  # a family check must never take the form down
+            continue
+        if not result:
+            continue
+        for name, messages in (result.get("errors") or {}).items():
+            errors.setdefault(name, []).extend(messages)
+        for name, messages in (result.get("warnings") or {}).items():
+            warnings.setdefault(name, []).extend(messages)
+        if result.get("interruption") is not None and interruption is None:
+            interruption = result["interruption"]
+    return errors, warnings, interruption
+
+
 # ---------------------------------------------------------------------------
 # field view models for the template
 # ---------------------------------------------------------------------------
@@ -611,6 +745,7 @@ def _render(
     errors: Mapping[str, list[str]] | None = None,
     warnings: Mapping[str, list[str]] | None = None,
     status_code: int = 200,
+    row_hash: str = "",
 ) -> HTMLResponse:
     errors = errors or {}
     warnings = warnings or {}
@@ -647,8 +782,79 @@ def _render(
             "error_count": len(summary),
             "warning_count": len(warning_list),
             "warnings": warning_list,
+            "row_hash": row_hash,
         },
         status_code=status_code,
+        headers=NO_STORE,
+    )
+
+
+def _render_interruption(
+    request: Request,
+    descriptor: descriptors.Descriptor,
+    *,
+    mode: str,
+    key: Any,
+    values: Mapping[str, Any],
+    interruption: Mapping[str, Any],
+) -> HTMLResponse:
+    """Dedicated 422 page for a longest-prefix conflict (plan §5.2/T4.4)."""
+    return _templates(request).TemplateResponse(
+        request,
+        "interruption.html",
+        {
+            "nav": "tables",
+            "fragment": _wants_fragment(request),
+            "table": descriptor.table,
+            "table_label": _humanize(descriptor.table),
+            "mode": mode,
+            "key": "" if key is None else str(key),
+            "action": _action(descriptor, mode, key),
+            "cancel_url": f"/tables/{descriptor.table}",
+            "existing": interruption.get("existing") or {},
+            "submitted": interruption.get("submitted") or {},
+            "same_tenant": bool(interruption.get("same_tenant")),
+            "message": interruption.get("message") or "",
+            "hidden_fields": _hidden_fields(
+                values,
+                exclude=("csrf_token", "force", "allow_same_tenant_shadow"),
+            ),
+        },
+        status_code=422,
+        headers=NO_STORE,
+    )
+
+
+def _render_conflict(
+    request: Request,
+    descriptor: descriptors.Descriptor,
+    *,
+    key: Any,
+    submitted: Mapping[str, Any],
+    current: Mapping[str, Any],
+) -> HTMLResponse:
+    """409 banner for a stale edit; no write happens on this path."""
+    diff = _diff_rows(descriptor, submitted, current)
+    return _templates(request).TemplateResponse(
+        request,
+        "conflict.html",
+        {
+            "nav": "tables",
+            "fragment": _wants_fragment(request),
+            "table": descriptor.table,
+            "table_label": _humanize(descriptor.table),
+            "key": "" if key is None else str(key),
+            "action": _action(descriptor, "edit", key),
+            "cancel_url": f"/tables/{descriptor.table}",
+            "load_latest_url": _action(descriptor, "edit", key),
+            "submitted": submitted,
+            "current": current,
+            "diff": diff,
+            "hidden_fields": _hidden_fields(
+                submitted, exclude=("csrf_token", "force")
+            ),
+        },
+        status_code=409,
         headers=NO_STORE,
     )
 
@@ -759,14 +965,16 @@ def edit_form(
     if raw is None:
         return _not_found(request, f"No row “{key}” in {_humanize(table)}.")
 
-    values = descriptors.unpack_row(descriptor, raw)
+    loaded = descriptors.unpack_row(descriptor, raw)
+    row_hash = _row_hash(descriptor, loaded)
+    values = dict(loaded)
     if conn is not None:
         _apply_derivations(
             descriptor,
             values,
             conn=conn,
             mode="edit",
-            existing=descriptors.unpack_row(descriptor, raw),
+            existing=loaded,
         )
     return _render(
         request,
@@ -775,6 +983,7 @@ def edit_form(
         key=key,
         values=values,
         conn=conn,
+        row_hash=row_hash,
     )
 
 
@@ -866,6 +1075,27 @@ async def _submit(
 
     form = await _form_data(request)
     values = _collect_values(descriptor, form, mode=mode, existing=existing)
+
+    # Stale-edit guard (plan §7.3 / T4.8): the edit form carries a content
+    # hash of the row as loaded.  Recompute it from the row currently in the
+    # database; a mismatch is a 409 banner, never an overwrite.  ``force=1``
+    # is the deliberate "Keep my changes" resubmit.
+    submitted_hash = _form_scalar(form, "row_hash")
+    if (
+        mode == "edit"
+        and existing
+        and submitted_hash
+        and not _truthy(_form_scalar(form, "force"))
+    ):
+        if submitted_hash != _row_hash(descriptor, existing):
+            return _render_conflict(
+                request,
+                descriptor,
+                key=key,
+                submitted=values,
+                current=existing,
+            )
+
     derivation_problems = _apply_derivations(
         descriptor, values, conn=conn, mode=mode, existing=existing
     )
@@ -876,6 +1106,29 @@ async def _submit(
     )
     for field, message in derivation_problems + type_problems:
         errors.setdefault(field.name, []).append(message)
+
+    check_errors, check_warnings, interruption = _run_form_checks(
+        descriptor,
+        values,
+        conn=conn,
+        mode=mode,
+        key=key,
+        existing=existing,
+    )
+    for name, messages in check_errors.items():
+        errors.setdefault(name, []).extend(messages)
+    for name, messages in check_warnings.items():
+        warnings.setdefault(name, []).extend(messages)
+
+    if interruption is not None:
+        return _render_interruption(
+            request,
+            descriptor,
+            mode=mode,
+            key=key,
+            values=values,
+            interruption=interruption,
+        )
 
     if errors:
         return _render(
@@ -888,6 +1141,7 @@ async def _submit(
             errors=errors,
             warnings=warnings,
             status_code=422,
+            row_hash=submitted_hash,
         )
 
     original_key = key
@@ -917,6 +1171,7 @@ async def _submit(
             errors=errors,
             warnings=warnings,
             status_code=422,
+            row_hash=submitted_hash,
         )
 
     row_key = original_key if mode == "edit" else inserted_key

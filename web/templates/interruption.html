@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Landline prefix conflict — VoIP Edge Console{% endblock %}
+{% block content %}
+<section id="interruption" aria-labelledby="interruption-title">
+  <div class="pagehead">
+    <div>
+      <h1 id="interruption-title">This landline would shadow another one</h1>
+      <div class="sub">Nothing was saved. Kamailio's longest matching prefix wins,
+        so these two landlines would overlap.</div>
+    </div>
+    <span class="meta">{{ table_label }}</span>
+  </div>
+
+  <div class="errsummary" role="alert">
+    <b>{{ message }}</b>
+  </div>
+
+  <div class="panel" style="padding:0; overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Row</th>
+          <th scope="col">Landline</th>
+          <th scope="col">Home</th>
+          <th scope="col">Target</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Existing row</td>
+          <td class="mono">{{ existing.number|mono }}</td>
+          <td>{{ existing.tenantid }}</td>
+          <td>{{ existing.target }}</td>
+        </tr>
+        <tr>
+          <td>Submitted row</td>
+          <td class="mono">{{ submitted.number|mono }}</td>
+          <td>{{ submitted.tenantid }}</td>
+          <td>{{ submitted.target }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    {% if same_tenant %}
+    Both rows belong to the same home. If you keep both, the longest matching
+    prefix wins for any dialled number they share.
+    {% else %}
+    The rows belong to different homes (tenants). Cross-tenant shadowing is
+    blocked; change the submitted prefix (or the existing row) before saving.
+    {% endif %}
+  </p>
+
+  <form method="post" action="{{ action }}"
+        hx-post="{{ action }}" hx-target="closest section" hx-swap="outerHTML"
+        hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
+        hx-on::after-request="if (event.detail.successful) { window.location='/tables/{{ table }}'; }"
+        novalidate>
+    {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    {% for hidden in hidden_fields %}
+    <input type="hidden" name="{{ hidden.name }}" value="{{ hidden.value }}">
+    {% endfor %}
+
+    {% if same_tenant %}
+    <div class="panel">
+      <label style="display:flex; gap:8px; align-items:flex-start; margin:0">
+        <input type="checkbox" id="allow_same_tenant_shadow"
+               name="allow_same_tenant_shadow" value="1" required>
+        <span>I understand both landlines belong to this home and the longest
+          matching prefix wins.</span>
+      </label>
+    </div>
+    <div class="formbar">
+      <button class="btn pri" type="submit">Save anyway (same home)</button>
+      <a class="btn" href="{{ action }}">Back to the form</a>
+      <a class="btn" href="{{ cancel_url }}">Discard</a>
+    </div>
+    {% else %}
+    <div class="formbar">
+      <a class="btn" href="{{ action }}">Back to the form</a>
+      <a class="btn" href="{{ cancel_url }}">Discard</a>
+    </div>
+    {% endif %}
+  </form>
+</section>
+{% endblock %}

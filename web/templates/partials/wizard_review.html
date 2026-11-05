@@ -1,0 +1,86 @@
+{% if apply_error %}
+<div class="errsummary" role="alert" aria-labelledby="review-apply-error">
+  <b id="review-apply-error">Apply failed — nothing was written</b>
+  <p style="margin:7px 0 0">{{ apply_error }}</p>
+</div>
+{% endif %}
+
+{% if tls_live %}
+<div class="tlsnotice" role="note" aria-labelledby="review-tls-title">
+  <b id="review-tls-title">Mandatory TLS step (TLS is live)</b>
+  <p style="margin:6px 0 0">
+    Append <span class="mono">{{ tls_domain }}</span> to <span class="mono">ACME_DOMAINS</span>
+    in the stack environment, set <span class="mono">ACME_FORCE_ISSUE=1</span>,
+    restart <span class="mono">voip-acme</span> once, then set it back to
+    <span class="mono">0</span> — README onboarding step 4. The shared wildcard
+    covers one label only, so TLS phones at this home do not verify until the
+    reissue lands.
+  </p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0">About to be applied</h2>
+  <table class="reviewtable">
+    <tbody>
+      <tr>
+        <td>Home</td>
+        <td class="mono">{{ draft.domain }} · landline {{ draft.landline }} ·
+          rings “{{ draft.ring_group }}” · label “{{ draft.label }}”</td>
+      </tr>
+      <tr>
+        <td>Route sets</td>
+        <td class="mono">
+          on-net → {{ draft.ds_onnet }} · {{ draft.lan_ip }}:5060 (tcp)<br>
+          {% if draft.has_pstn %}
+          PSTN → {{ draft.ds_pstn }} · {{ draft.lan_ip }}:5060 (tcp)
+          {% else %}
+          no PSTN trunk — the PSTN set is skipped
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Trusted source</td>
+        <td class="mono">{{ draft.wire_ip }} → {{ draft.domain }} (wire-observed)</td>
+      </tr>
+      <tr>
+        <td>Call policy</td>
+        <td>emergency profile {{ draft.dpid }} · blocked destinations in the
+          policy flags · inter-home on · PSTN fallback
+          {{ "on" if draft.has_pstn else "off" }}</td>
+      </tr>
+      <tr>
+        <td>Row count</td>
+        <td><b>{{ row_count }} rows</b> in one transaction —
+          registry, landline, {{ "2 dispatcher sets" if draft.has_pstn else "1 dispatcher set" }},
+          trusted source.</td>
+      </tr>
+      <tr>
+        <td>Consequences</td>
+        <td>A tagged online backup (<span class="mono">wizard-apply:{{ draft.domain }}</span>)
+          is taken first. The whole write is one transaction: any failure rolls
+          back and leaves zero rows. Phones can register once the trusted-source
+          reload lands.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <form method="post" action="/wizard/apply" hx-post="/wizard/apply"
+        hx-target="#wizard-shell" hx-swap="outerHTML"
+        hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
+        hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+        novalidate>
+    {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    {% for name, value in hidden %}
+    <input type="hidden" name="{{ name }}" value="{{ value }}">
+    {% endfor %}
+
+    <div class="formbar">
+      <button class="btn pri" type="submit">Apply and reload routing</button>
+      <button class="btn" type="submit" formaction="/wizard/step2"
+              formnovalidate>Back</button>
+      <a class="btn" href="/wizard">Start over</a>
+      <span class="meta">Step 3 of 4 · apply is one transaction.</span>
+    </div>
+  </form>
+</div>

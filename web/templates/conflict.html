@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Row changed — VoIP Edge Console{% endblock %}
+{% block content %}
+<section id="conflict" aria-labelledby="conflict-title">
+  <div class="pagehead">
+    <div>
+      <h1 id="conflict-title">This row changed while you were editing</h1>
+      <div class="sub">Your submission was not written. Compare the submitted
+        values with the row currently in the database, then keep your changes or
+        reload the latest row.</div>
+    </div>
+    <span class="meta">{{ table_label }} · {{ key }}</span>
+  </div>
+
+  <div class="errsummary" role="alert">
+    <b>Another writer changed this row after the edit form was loaded.</b>
+    Nothing was saved and no reload was scheduled.
+  </div>
+
+  {% if diff %}
+  <div class="panel" style="padding:0; overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Field</th>
+          <th scope="col">Submitted</th>
+          <th scope="col">Current</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in diff %}
+        <tr>
+          <td>{{ item.label }}</td>
+          <td class="mono">{{ item.submitted }}</td>
+          <td class="mono">{{ item.current }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="panel">
+    <p>The row's content hash changed even though no editable field differs.
+      Reload the latest row before saving.</p>
+  </div>
+  {% endif %}
+
+  <div class="formbar">
+    <form method="post" action="{{ action }}"
+          hx-post="{{ action }}" hx-target="closest section" hx-swap="outerHTML"
+          hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
+          hx-on::after-request="if (event.detail.successful) { window.location='/tables/{{ table }}'; }">
+      {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+      <input type="hidden" name="force" value="1">
+      {% for hidden in hidden_fields %}
+      <input type="hidden" name="{{ hidden.name }}" value="{{ hidden.value }}">
+      {% endfor %}
+      <button class="btn pri" type="submit">Keep my changes</button>
+    </form>
+    <a class="btn" href="{{ load_latest_url }}">Load latest</a>
+    <a class="btn" href="{{ cancel_url }}">Discard</a>
+  </div>
+</section>
+{% endblock %}

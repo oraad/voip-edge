@@ -12,14 +12,23 @@
                   padding:2px 8px; border-radius:999px; white-space:nowrap; }
   .toast .b-warn { background:color-mix(in srgb, var(--warning, #8a6100) 18%, transparent);
                    color:var(--warning, #8a6100); }
+  .toast .b-tone { background:color-mix(in srgb, var(--info, #1f6aa5) 14%, transparent);
+                   color:var(--info, #1f6aa5); }
+  .toast .b-tone.applied {
+    background:color-mix(in srgb, var(--success, #1f7a45) 16%, transparent);
+    color:var(--success, #1f7a45); }
+  .toast .b-tone.failed {
+    background:color-mix(in srgb, var(--destructive, #b3261e) 14%, transparent);
+    color:var(--destructive, #b3261e); }
   .toast ul { margin:6px 0 0 16px; padding:0; font-size:.94em; }
   .toast a { color:inherit; }
 </style>
-<div class="toast {{ 'ok' if tone == 'success' else ('error' if tone == 'error' else '') }}"
-     role="{{ 'alert' if tone == 'error' else 'status' }}"
-     aria-live="{{ 'assertive' if tone == 'error' else 'polite' }}">
+<div class="toast {{ 'ok' if tone in ('applied', 'verified', 'success') else ('error' if tone in ('failed', 'error') else '') }}"
+     data-tone="{{ tone }}"
+     role="status"
+     aria-live="polite">
   <div>
-    <div>{{ message }}</div>
+    <div><span class="badge b-tone {{ tone }}">{{ tone }}</span> {{ message }}</div>
     {% if warnings %}
     <ul>
       {% for warning in warnings %}

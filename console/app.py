@@ -197,6 +197,13 @@ def create_app() -> FastAPI:
 
     app.state.get_worker = _get_worker
 
+    # ------------------------------------------------------------------
+    # T7: onboarding wizard (stateless hidden-input draft, one write txn)
+    # ------------------------------------------------------------------
+    from . import wizard_ui
+
+    app.include_router(wizard_ui.router)
+
     return app
 
 
