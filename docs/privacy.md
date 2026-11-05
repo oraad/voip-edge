@@ -25,7 +25,7 @@ tenant data. The rules below keep the two separate.
    ```sh
    git log -p --all | grep -iE '<your tenant domain>|<your landline>|BEGIN .*PRIVATE KEY'
    ```
-   History is data too — this repository's history was rewritten once to
+   History is data too — this repository's history has been rewritten to
    purge deployment identifiers; treat any future leak the same way.
 
 ## Placeholder conventions used in the docs
