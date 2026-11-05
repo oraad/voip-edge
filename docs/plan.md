@@ -47,7 +47,7 @@ modparam("db_sqlite", "db_set_busy_timeout", "DBFILE=300")
 1. **Latest stable == deployed == 6.1.5** (2026-10-15; no 6.2). Master-branch docs reviewed for forward-compat.
 2. **Reload rate limits (corrected in review):** `reload_delta` default 5 s exists on **dialplan**, **permissions**, **and dispatcher**; mtree has **none**. Concurrent same-table reloads carry a documented crash hazard. → global serialized reload worker + per-table 5 s **coalescing throttle** (state machine §5.8). Constants measured on the lab build in T1, config-driven, never assumed.
 3. Reload failures = JSON-RPC fault (500+message), old data stays active — surface verbatim; verify-after-apply round trip (`mtree.match`, `dialplan.translate` with plain strings, `dispatcher.list`).
-4. `htable.dump`/`htable.delete` confirmed in docs (regcache purge primitive is real; string AOR keys, no `s:` prefix issue). Dump is bucket-shaped — flatten; display capped, counts from `htable.stats`.
+4. `htable.dump`/`htable.delete` confirmed in docs (regcache purge primitive is real; string AOR keys, no `s:` prefix issue). Dump is bucket-shaped — flatten and list the rows; no `htable.stats` count badge in v1 (the table is small).
 5. `dispatcher.list` flags: first letter A/I/T/D, second P (probed) / X (not probed). `list full`/latency stats = unverified nicety — **out of v1 scope**.
 6. No dry-run RPC exists → validate pre-write in Python (regex compile — PCRE-parity caveat warning), behavioral proof post-reload.
 7. sqlite: WAL (file header persists; console re-asserts `journal_mode=WAL` at every startup — `create-db.sh` rebuilds revert the file to DELETE mode), in-place edits only, `BEGIN IMMEDIATE` short transactions, single-writer.
@@ -152,7 +152,7 @@ Steps: 1 Identity (domain, landline, ring group, label) → 2 Network (voip-stac
 6. CLI edits the DB meanwhile: list views re-read every load; audit page states "console-recorded writes only; external edits possible".
 7. Regex syntax ⇒ pre-write error; PCRE-only ⇒ warning badge.
 8. In-use delete ⇒ named-by consequence dialog, blocked.
-9. regcache live panel: AOR/flow/transport (no countdown; the dump has no expiry field); display capped, htable.stats count badge.
+9. regcache live panel: AOR/flow/transport (no countdown; the dump has no expiry field); list the dumped rows, no stats badge in v1.
 10. Registered-phones panel on tenant detail (fragment) — covered.
 11. Park mid-call: **lab-verified manually** (not console-tested).
 12. Park: purge gate = dump-verify zero keys (bounded retries); a residual in-flight REGISTER is accepted (no delayed re-sweep is scheduled).
