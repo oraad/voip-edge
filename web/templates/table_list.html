@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ table_label }} — VoIP Edge Console{% endblock %}
 {% block content %}
+{% if corrupt_rows %}
+<div class="banner warn" role="status">
+  <strong>{{ corrupt_rows }} corrupt row(s) skipped</strong> — the packed value does
+  not match the descriptor. Fix them via the CLI (`tvalue` separator/structure).
+</div>
+{% endif %}
 {% if table not in ("tenant_registry", "tenant_landline") %}
 <div class="pagehead" style="margin-bottom:6px">
   <div></div>

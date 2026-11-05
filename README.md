@@ -90,7 +90,7 @@ Pangolin SSO resource and healthcheck semantics, is `docs/ops/deploy.md`.
 # Build once, pinned to the code version (no test deps in the image).
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
 docker build --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.8 .
+  -t voip-edge-console:0.1.9 .
 
 cp .env.example .env        # set token, secret, bind, read-only=1 first
 # Merge compose.yml's console service into the voip-edge stack, or deploy it

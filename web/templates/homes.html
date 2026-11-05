@@ -26,6 +26,12 @@
 {% endif %}
 {% endblock %}
 {% block content %}
+{% if corrupt_rows %}
+<div class="banner warn" role="status">
+  <strong>{{ corrupt_rows }} corrupt row(s) skipped</strong> — the packed value does
+  not match the descriptor. Fix them via the CLI (`tvalue` separator/structure).
+</div>
+{% endif %}
 <div class="pagehead">
   <div>
     <h1>Homes</h1>

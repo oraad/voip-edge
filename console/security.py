@@ -114,7 +114,15 @@ def read_session(request: Request) -> dict | None:
 
 
 def is_authenticated(request: Request) -> bool:
-    return read_session(request) is not None
+    session = read_session(request)
+    if session is None:
+        return False
+    # In SSO-only mode a break-glass token session must not survive a mode
+    # change (stateless cookies cannot be revoked individually).
+    cfg = settings_module.settings
+    if cfg.auth_mode == "oidc" and session.get("amr") != "oidc":
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -156,11 +164,13 @@ def csrf_protected(request: Request) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def issue_session(response: Response, sub: str = "token", email: str = "") -> str:
+def issue_session(
+    response: Response, sub: str = "token", email: str = "", amr: str = "token"
+) -> str:
     """Attach session + CSRF cookies to *response*; return the CSRF value."""
     cfg = settings_module.settings
     csrf = new_csrf_token()
-    payload = {"sub": sub, "csrf": csrf}
+    payload = {"sub": sub, "csrf": csrf, "amr": amr}
     if email:
         payload["email"] = email
     response.set_cookie(
@@ -205,18 +215,32 @@ def reset_login_rate_limit() -> None:
         _login_attempts.clear()
 
 
-def login_rate_exceeded(client_ip: str) -> bool:
-    """Record an attempt for *client_ip*; return True when it exceeds the limit.
-
-    A rejected attempt is not recorded, so a burst cannot extend the window.
-    """
-    now = time.monotonic()
+def _prune_locked(now: float) -> None:
     cutoff = now - _LOGIN_WINDOW_SECONDS
+    for key, queue in list(_login_attempts.items()):
+        while queue and queue[0] <= cutoff:
+            queue.popleft()
+        if not queue:
+            _login_attempts.pop(key, None)
+
+
+def record_login_failure(client_ip: str) -> None:
+    """Record one failed authentication attempt (successes do not count)."""
+    now = time.monotonic()
     with _login_lock:
-        attempts = _login_attempts.setdefault(client_ip or "unknown", deque())
-        while attempts and attempts[0] <= cutoff:
-            attempts.popleft()
-        if len(attempts) >= settings_module.settings.login_rate_per_min:
-            return True
-        attempts.append(now)
-        return False
+        _login_attempts.setdefault(client_ip or "unknown", deque()).append(now)
+        _prune_locked(now)
+        if len(_login_attempts) > 10000:  # bound memory across many peers
+            _login_attempts.clear()
+
+
+def login_rate_exceeded(client_ip: str) -> bool:
+    """True when *client_ip* has too many recent failures (does not record)."""
+    now = time.monotonic()
+    with _login_lock:
+        _prune_locked(now)
+        attempts = _login_attempts.get(client_ip or "unknown")
+        return bool(
+            attempts
+            and len(attempts) >= settings_module.settings.login_rate_per_min
+        )

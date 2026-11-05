@@ -356,3 +356,57 @@ RULES: dict[str, Validator] = {
 }
 
 PENDING: frozenset[str] = frozenset(RULES)
+
+
+def _dialplan_references(conn, key) -> list[dict]:
+    """Homes whose emergency or block partition still points at *key*.
+
+    ``block_dpid`` lives inside the packed registry ``flags`` field, so the
+    generic descriptor cross-ref scan cannot see it.
+    """
+    from .. import db as db_module, descriptors as descriptors_module
+    from ..pack import parse_flags
+
+    try:
+        row_id = int(str(key))
+    except (TypeError, ValueError):
+        return []
+    # The delete key is the dialplan row id; references point at its dpid.
+    try:
+        found_row = conn.execute(
+            "SELECT dpid FROM dialplan WHERE id = ?", (row_id,)
+        ).fetchone()
+        if found_row is None:
+            return []
+        number = int(found_row[0])
+    except Exception:
+        return []
+    try:
+        rows = db_module.read_rows(conn, "tenant_registry")
+        registry = descriptors_module.load().tables.get("tenant_registry")
+    except Exception:
+        return []
+    if registry is None:
+        return []
+    found: list[dict] = []
+    for raw in rows:
+        try:
+            values = descriptors_module.unpack_row(registry, raw)
+            _ih, _pstn, block = parse_flags(str(values.get("flags") or ""))
+            dpid = int(str(values.get("dpid") or "0"))
+        except (KeyError, ValueError):
+            continue
+        if dpid == number or block == number:
+            found.append(
+                {
+                    "table": "tenant_registry",
+                    "key": values.get("tprefix"),
+                    "label": str(values.get("tprefix")),
+                    "field": "flags" if block == number else "dpid",
+                    "value": str(number),
+                }
+            )
+    return found
+
+
+REFERENCES = {"dialplan": _dialplan_references}

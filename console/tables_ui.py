@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from markupsafe import escape
 
 from . import db, descriptors
-from .security import read_session
+from .security import read_session, is_authenticated
 
 router = APIRouter()
 
@@ -58,7 +58,7 @@ def _column_view(field: descriptors.Field) -> dict[str, object]:
 
 
 def _requires_login(request: Request) -> RedirectResponse | None:
-    if read_session(request) is None:
+    if not is_authenticated(request):
         return RedirectResponse("/login", status_code=303, headers=NO_STORE)
     return None
 
@@ -120,8 +120,13 @@ def table_list(
             raw_rows = []
             key_name = None
         has_rows = bool(raw_rows)
+        corrupt = 0
         for raw in raw_rows:
-            values = descriptors.unpack_row(descriptor, raw)
+            try:
+                values = descriptors.unpack_row(descriptor, raw)
+            except (KeyError, ValueError):
+                corrupt += 1
+                continue
             values["_key"] = raw.get(key_name) if key_name else None
             if needle and not any(
                 needle in str(values.get(column["name"], "")).casefold()
@@ -140,6 +145,7 @@ def table_list(
             "table_label": _humanize(descriptor.table),
             "columns": columns,
             "rows": rows,
+            "corrupt_rows": corrupt,
             "q": q,
             "query": query,
             # Empty DB = first use; filtered to zero with rows behind it = filter.
@@ -176,7 +182,12 @@ def table_detail(
     if raw is None:
         return _not_found(request, f"No row “{key}” in {_humanize(table)}.")
 
-    values = descriptors.unpack_row(descriptor, raw)
+    try:
+        values = descriptors.unpack_row(descriptor, raw)
+    except (KeyError, ValueError):
+        return _not_found(
+            request, f"Row “{key}” is corrupt (bad packed record) — fix it via the CLI."
+        )
     fields = [
         {
             "name": field.name,

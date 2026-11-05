@@ -148,6 +148,10 @@ class Sidecar:
         conn.row_factory = sqlite3.Row
         conn.isolation_level = None  # explicit BEGIN/COMMIT only
         conn.execute("PRAGMA busy_timeout = 2000")
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.Error:
+            pass
         return conn
 
     def _prepare(self) -> None:
@@ -223,7 +227,12 @@ class Sidecar:
         except (sqlite3.Error, OSError) as exc:
             raise SidecarUnavailable(str(exc)) from exc
         try:
-            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+            except sqlite3.Error as exc:
+                raise SidecarUnavailable(
+                    f"sidecar busy at {self.path}: {exc}"
+                ) from exc
             try:
                 yield conn
                 conn.execute("COMMIT")
@@ -347,6 +356,21 @@ class Sidecar:
                 "ORDER BY created_at, rowid"
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def latest_intent_any(
+        self, domain: str, *, include_done: bool = True
+    ) -> dict[str, Any] | None:
+        """The newest intent for *domain* regardless of operation."""
+        suffix = "" if include_done else " AND state != 'DONE'"
+        with self._cursor() as conn:
+            row = conn.execute(
+                "SELECT id, op, domain, mode, state, last_error, detail, "
+                "created_at, updated_at FROM console_intent "
+                "WHERE domain = ?" + suffix + " "
+                "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (domain,),
+            ).fetchone()
+        return dict(row) if row is not None else None
 
     def latest_intent(
         self, op: str, domain: str, *, include_done: bool = True
@@ -611,6 +635,11 @@ def reissue_pending_reloads(
 
 def _migrate(conn: sqlite3.Connection) -> None:
     current = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if current > SCHEMA_VERSION:
+        raise SidecarUnavailable(
+            f"sidecar schema {current} is newer than this console ({SCHEMA_VERSION}); "
+            "deploy the matching console image or restore a compatible backup"
+        )
     for version, statements in enumerate(_MIGRATIONS, start=1):
         if current >= version:
             continue

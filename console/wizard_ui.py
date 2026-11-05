@@ -52,7 +52,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import db, descriptors, validators
 from .backups import create_backup
-from .security import read_session
+from .security import read_session, is_authenticated
 
 router = APIRouter()
 
@@ -708,7 +708,7 @@ def _wants_fragment(request: Request) -> bool:
 
 
 def _requires_login(request: Request) -> RedirectResponse | None:
-    if read_session(request) is None:
+    if not is_authenticated(request):
         return RedirectResponse("/login", status_code=303, headers=NO_STORE)
     return None
 
@@ -736,10 +736,13 @@ def _worker(request: Request):
     return worker
 
 
-def _enqueue_reloads(request: Request, tableset: descriptors.TableSet) -> list[str]:
+def _enqueue_reloads(
+    request: Request, tableset: descriptors.TableSet
+) -> tuple[list[str], list[str]]:
     """Enqueue tenantdom/landline/dispatcher/trusted once each, then flush."""
     worker = _worker(request)
     keys: list[str] = []
+    warnings: list[str] = []
     for key, table in RELOAD_KEYS:
         descriptor = tableset.tables.get(table)
         if descriptor is None:
@@ -747,9 +750,25 @@ def _enqueue_reloads(request: Request, tableset: descriptors.TableSet) -> list[s
         worker.enqueue(key, descriptor.reload.rpc, list(descriptor.reload.params))
         keys.append(key)
     flush = getattr(worker, "flush", None)
+    drained = True
     if callable(flush):
-        flush()
-    return keys
+        try:
+            drained = bool(flush())
+        except BaseException as exc:
+            drained = False
+            warnings.append(f"Reload queue did not drain: {exc}")
+    errors = getattr(worker, "errors", {}) or {}
+    if errors:
+        detail = ", ".join(f"{table}: {err}" for table, err in errors.items())
+        warnings.append(
+            "The home was saved, but these reloads failed and remain pending: "
+            + detail
+        )
+    elif not drained:
+        warnings.append(
+            "The home was saved; reloads are still queued (Kamailio unreachable?)."
+        )
+    return keys, warnings
 
 
 def _backup_paths() -> tuple[Path, Path]:
@@ -1208,7 +1227,8 @@ async def _apply(request: Request, conn: sqlite3.Connection):
 
     reload_warnings: list[str] = []
     try:
-        _enqueue_reloads(request, tableset)
+        _keys, _warnings = _enqueue_reloads(request, tableset)
+        reload_warnings.extend(_warnings)
     except Exception as exc:  # noqa: BLE001 — the rows are already committed
         reload_warnings.append(
             f"The home was saved, but the four reloads could not be "
@@ -1223,11 +1243,12 @@ async def _apply(request: Request, conn: sqlite3.Connection):
             checklist=verify_checklist(conn, draft.domain),
             reload_warnings=reload_warnings,
         )
-    return RedirectResponse(
-        f"/wizard/verify/{quote(draft.domain, safe='')}",
-        status_code=303,
-        headers=NO_STORE,
-    )
+    target = f"/wizard/verify/{quote(draft.domain, safe='')}"
+    if reload_warnings:
+        from urllib.parse import quote as _quote
+
+        target += "?warn=" + _quote("; ".join(reload_warnings))
+    return RedirectResponse(target, status_code=303, headers=NO_STORE)
 
 
 @router.post("/wizard/apply", response_class=HTMLResponse)
@@ -1250,9 +1271,11 @@ def wizard_verify(
     redirect = _requires_login(request)
     if redirect is not None:
         return redirect
+    warn = request.query_params.get("warn", "")
     return _render(
         request,
         step=4,
         draft=WizardDraft(domain=domain),
         checklist=verify_checklist(conn, domain),
+        reload_warnings=[warn] if warn else [],
     )

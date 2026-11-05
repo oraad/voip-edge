@@ -16,6 +16,7 @@ No tokens are stored in cookies or logs.  Identity is ``(iss, sub)``.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -45,6 +46,19 @@ _discovery_cache: dict | None = None
 _discovery_at: float = 0.0
 _jwks_cache: JsonWebKey | None = None
 _jwks_at: float = 0.0
+_discovery_lock: asyncio.Lock | None = None
+_jwks_lock: asyncio.Lock | None = None
+
+
+def _lock(name: str) -> asyncio.Lock:
+    global _discovery_lock, _jwks_lock
+    if name == "discovery":
+        if _discovery_lock is None:
+            _discovery_lock = asyncio.Lock()
+        return _discovery_lock
+    if _jwks_lock is None:
+        _jwks_lock = asyncio.Lock()
+    return _jwks_lock
 
 # error codes surfaced on /login?error=<code>; mapped to operator text there
 ERROR_TEXT = {
@@ -145,6 +159,15 @@ async def load_discovery(force: bool = False) -> dict:
     now = time.monotonic()
     if not force and _discovery_cache and now - _discovery_at < _DISCOVERY_TTL:
         return _discovery_cache
+    async with _lock("discovery"):
+        if not force and _discovery_cache and time.monotonic() - _discovery_at < _DISCOVERY_TTL:
+            return _discovery_cache
+        return await _load_discovery_locked(force)
+
+
+async def _load_discovery_locked(force: bool) -> dict:
+    global _discovery_cache, _discovery_at
+    now = time.monotonic()
     cfg = _cfg()
     issuer = cfg.oidc_issuer.rstrip("/")
     if not cfg.oidc_insecure and not issuer.startswith("https://"):
@@ -169,6 +192,15 @@ async def load_jwks(force: bool = False) -> JsonWebKey:
     now = time.monotonic()
     if not force and _jwks_cache and now - _jwks_at < _JWKS_FLOOR:
         return _jwks_cache
+    async with _lock("jwks"):
+        if not force and _jwks_cache and time.monotonic() - _jwks_at < _JWKS_FLOOR:
+            return _jwks_cache
+        return await _load_jwks_locked()
+
+
+async def _load_jwks_locked() -> JsonWebKey:
+    global _jwks_cache, _jwks_at
+    now = time.monotonic()
     meta = await load_discovery()
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.get(meta["jwks_uri"])
@@ -352,7 +384,10 @@ async def auth_callback(request: Request, code: str = "", state: str = ""):
     flow_cookie = f"{FLOW_PREFIX}{state}" if state else ""
     flow = verify_flow(request.cookies.get(flow_cookie) if flow_cookie else None)
 
+    from .security import record_login_failure
+
     def fail(reason: str, status: int = 303) -> HTMLResponse | RedirectResponse:
+        record_login_failure(client_ip)
         observability.log_event("oidc_login", outcome=reason, client=client_ip)
         if reason == "claims_denied":
             response = HTMLResponse(
@@ -382,9 +417,10 @@ async def auth_callback(request: Request, code: str = "", state: str = ""):
         return fail("claims_denied")
 
     email = str(claims.get("email") or claims.get("preferred_username") or "")[:255]
-    subject = f"{claims.get('iss')}#{claims.get('sub')}"
+    subject = f"{claims.get('iss')}#{claims.get('sub')}"[:512]
+    subject = "".join(ch for ch in subject if ord(ch) >= 0x20)
     response = RedirectResponse(safe_return_to(flow.get("next")), status_code=303)
-    issue_session(response, sub=subject, email=email)
+    issue_session(response, sub=subject, email=email, amr="oidc")
     if flow_cookie:
         response.delete_cookie(flow_cookie, path="/auth")
     observability.log_event("oidc_login", outcome="success", client=client_ip)
@@ -411,7 +447,10 @@ async def auth_logout(request: Request):
         end = None
     if not end:
         return response
-    params = {"client_id": _cfg().oidc_client_id}
+    params = {
+        "client_id": _cfg().oidc_client_id,
+        "state": secrets.token_urlsafe(16),
+    }
     if _cfg().oidc_post_logout_uri:
         params["post_logout_redirect_uri"] = _cfg().oidc_post_logout_uri
     response.headers["Location"] = f"{end}?{urlencode(params)}"

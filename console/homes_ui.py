@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import db, descriptors
-from .security import read_session
+from .security import read_session, is_authenticated
 
 router = APIRouter()
 
@@ -30,7 +30,7 @@ def _wants_fragment(request: Request) -> bool:
 
 
 def _requires_login(request: Request) -> RedirectResponse | None:
-    if read_session(request) is None:
+    if not is_authenticated(request):
         return RedirectResponse("/login", status_code=303, headers=NO_STORE)
     return None
 
@@ -63,8 +63,13 @@ def homes(
         except sqlite3.Error:
             raw_rows = []
             key_name = None
+        corrupt = 0
         for raw in raw_rows:
-            values = descriptors.unpack_row(descriptor, raw)
+            try:
+                values = descriptors.unpack_row(descriptor, raw)
+            except (KeyError, ValueError):
+                corrupt += 1
+                continue
             homes.append(
                 {
                     "domain": values.get("tprefix", ""),
@@ -101,6 +106,7 @@ def homes(
             "fragment": _wants_fragment(request),
             "homes": homes,
             "parked": parked,
+            "corrupt_rows": locals().get("corrupt", 0),
         },
         headers=NO_STORE,
     )

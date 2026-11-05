@@ -31,7 +31,7 @@ from . import backups as backups_module
 from . import capabilities
 from . import settings as settings_module
 from .errors import SidecarUnavailable
-from .security import read_session
+from .security import read_session, is_authenticated
 from .sidecar import Sidecar
 
 __all__ = [
@@ -94,7 +94,7 @@ def backup_dir_path() -> Path:
 
 
 def _requires_login(request: Request) -> RedirectResponse | None:
-    if read_session(request) is None:
+    if not is_authenticated(request):
         return RedirectResponse("/login", status_code=303, headers=NO_STORE)
     return None
 

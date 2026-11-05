@@ -74,6 +74,18 @@ def _base_context(request: Request) -> dict[str, object]:
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def _lifespan(app_instance: FastAPI):
+        cfg = settings_module.settings
+        if cfg.auth_mode == "oidc":
+            if not cfg.oidc_issuer or not cfg.oidc_client_id:
+                raise RuntimeError(
+                    "CONSOLE_AUTH_MODE=oidc requires OIDC_ISSUER and OIDC_CLIENT_ID"
+                )
+            if not cfg.secure_cookie and not cfg.oidc_insecure:
+                raise RuntimeError(
+                    "SSO mode requires HTTPS cookies (CONSOLE_SECURE_COOKIE=1); "
+                    "set OIDC_INSECURE=1 only for loopback development"
+                )
+
         # Advisory capability probe: a daemon thread, never awaited.  Startup
         # must succeed even when Kamailio is down (docker healthcheck contract).
         threading.Thread(
@@ -150,8 +162,16 @@ def create_app() -> FastAPI:
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+    MAX_BODY = 1_048_576  # 1 MiB: form/login bodies are tiny
+
     @app.middleware("http")
     async def csrf_middleware(request: Request, call_next):
+        try:
+            declared = int(request.headers.get("content-length") or "0")
+        except ValueError:
+            declared = 0
+        if declared > MAX_BODY:
+            return PlainTextResponse("Request body too large", status_code=413)
         # READONLY is a cross-cutting gate, not a per-route check (plan §6/T9).
         # Unsafe methods are refused before any route or DB dependency runs;
         # GET/HEAD/OPTIONS are unaffected.  /login must stay reachable so an
@@ -199,12 +219,24 @@ def create_app() -> FastAPI:
                     "CSRF token missing or invalid", status_code=403, headers=NO_STORE
                 )
 
+            if len(body) > MAX_BODY:
+                return PlainTextResponse("Request body too large", status_code=413)
+
             # Replay the body for the route: reading it here consumed the stream.
             async def _replay():
                 return {"type": "http.request", "body": body, "more_body": False}
 
             request = Request(request.scope, _replay)
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+        )
+        return response
 
     # ------------------------------------------------------------------
     # health — never touches Kamailio; always 200 and unauthenticated
@@ -262,6 +294,9 @@ def create_app() -> FastAPI:
         supplied = token.encode("utf-8")
         expected = settings_module.settings.token.encode("utf-8")
         if not hmac.compare_digest(supplied, expected):
+            from .security import record_login_failure
+
+            record_login_failure(client_ip)
             observability.log_auth_failure(
                 reason="invalid_token", client=client_ip, path="/login"
             )
@@ -274,7 +309,7 @@ def create_app() -> FastAPI:
             )
 
         response = RedirectResponse("/", status_code=303, headers=NO_STORE)
-        issue_session(response)
+        issue_session(response, amr="token")
         return response
 
     @app.post("/logout")
@@ -323,9 +358,13 @@ def create_app() -> FastAPI:
     app.state.rpc = None  # set on first use; tests may pre-inject
     app.state.capabilities = None  # T9 startup probe result (advisory only)
 
+    _lazy_lock = threading.RLock()  # worker factory -> rpc factory nests
+
     def _get_rpc():
         if app.state.rpc is None:
-            app.state.rpc = app.state.rpc_factory()
+            with _lazy_lock:
+                if app.state.rpc is None:
+                    app.state.rpc = app.state.rpc_factory()
         return app.state.rpc
 
     def _startup_probe() -> None:
@@ -385,7 +424,9 @@ def create_app() -> FastAPI:
 
     def _get_worker():
         if app.state.worker is None:
-            app.state.worker = app.state.worker_factory()
+            with _lazy_lock:
+                if app.state.worker is None:
+                    app.state.worker = app.state.worker_factory()
         return app.state.worker
 
     app.state.get_worker = _get_worker

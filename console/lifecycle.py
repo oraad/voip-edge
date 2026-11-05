@@ -35,6 +35,8 @@ is untouched.
 """
 from __future__ import annotations
 
+import threading
+
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -767,8 +769,18 @@ class _Run:
 
     def _step_rows_inserted(self) -> None:
         snapshot = self._load_snapshot()
+        expected = {
+            table: len(snapshot.get(table) or [])
+            for table in ("tenant_registry", "tenant_landline", "dispatcher", "trusted")
+        }
         with _edge_transaction(self.edge) as conn:
             counts = _insert_edge_rows(conn, snapshot)
+            short = {t: (expected[t], counts[t]) for t in expected if counts[t] < expected[t]}
+            if short:
+                raise LifecycleError(
+                    "restore inserted fewer rows than the snapshot (concurrent write?): "
+                    + ", ".join(f"{t}={got}/{want}" for t, (want, got) in short.items())
+                )
         self._transition(
             "ROWS_INSERTED",
             "inserted: "
@@ -838,12 +850,35 @@ def _finish(run: _Run, fail_after: str | None) -> LifecycleResult:
 
 
 def _ensure_no_pending(sc: Sidecar, op: str, domain: str) -> None:
-    """Refuse to start a second intent while one is still non-DONE."""
-    pending = sc.latest_intent(op, domain, include_done=False)
+    """Refuse a second intent for the domain while any state machine runs."""
+    pending = sc.latest_intent_any(domain, include_done=False)
     if pending is not None:
         raise LifecycleError(
             f"{op} for {domain!r} already has intent {pending['id']} "
             f"at state {pending['state']}; resume it instead"
+        )
+
+
+def _require_purge_capability(worker: Any) -> None:
+    """Park/destroy purge regcache; refuse when htable.delete is proven missing."""
+    from . import settings as settings_module
+
+    if not settings_module.settings.enforce_capabilities:
+        return
+    rpc = getattr(worker, "rpc", None)
+    if rpc is None or not hasattr(rpc, "call"):
+        return
+    try:
+        from . import capabilities
+
+        caps = capabilities.probe(rpc)
+    except BaseException:
+        return
+    if caps.get("reachable") and not caps.get("htable.delete"):
+        from .errors import KamailioUnavailable
+
+        raise KamailioUnavailable(
+            "htable.delete unavailable on the edge — park/destroy refused"
         )
 
 
@@ -862,7 +897,17 @@ def _sequence_for(op: str, mode: str) -> tuple[str, ...]:
 # ---------------------------------------------------------------------------
 # public API
 # ---------------------------------------------------------------------------
+_OP_LOCK = threading.Lock()
+
+
 def park(
+    *args, **kwargs
+) -> LifecycleResult:
+    with _OP_LOCK:
+        return _park(*args, **kwargs)
+
+
+def _park(
     sidecar: Sidecar | str | Path,
     edge: str | Path,
     worker: Any,
@@ -876,6 +921,7 @@ def park(
 ) -> LifecycleResult:
     """Park an active home (snapshot, delete, reload, purge)."""
     sc = open_sidecar(sidecar)  # SidecarUnavailable before any edge mutation
+    _require_purge_capability(worker)
     edge_path = _edge_path(edge)
     tables = tableset or descriptors.load()
 
@@ -904,6 +950,13 @@ def park(
 
 
 def restore(
+    *args, **kwargs
+) -> LifecycleResult:
+    with _OP_LOCK:
+        return _restore(*args, **kwargs)
+
+
+def _restore(
     sidecar: Sidecar | str | Path,
     edge: str | Path,
     worker: Any,
@@ -940,6 +993,13 @@ def restore(
 
 
 def destroy(
+    *args, **kwargs
+) -> LifecycleResult:
+    with _OP_LOCK:
+        return _destroy(*args, **kwargs)
+
+
+def _destroy(
     sidecar: Sidecar | str | Path,
     edge: str | Path,
     worker: Any,

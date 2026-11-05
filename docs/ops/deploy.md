@@ -163,11 +163,11 @@ cd /root/voip-edge
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
 docker build \
   --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.8 .
+  -t voip-edge-console:0.1.9 .
 ```
 
 Arcane: build the same Dockerfile once via **Images → Build** and tag it
-`voip-edge-console:0.1.8`. The compose service references that image; it does
+`voip-edge-console:0.1.9`. The compose service references that image; it does
 not rebuild during a stack deploy.
 
 The build pins `fastapi`, `uvicorn`, `jinja2`, `MarkupSafe` and `PyYAML` to the
@@ -297,7 +297,7 @@ run it that way, all of these must be true:
    ```bash
    getent group console                      # e.g. 995
    docker build --build-arg CONSOLE_GID=995 \
-     -t voip-edge-console:0.1.8 .
+     -t voip-edge-console:0.1.9 .
    ```
    `dgram_group "console"` is resolved by name inside `voip-edge`. The stock
    image may not contain that name, and `group_add` does not create one. Build

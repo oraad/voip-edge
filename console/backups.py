@@ -186,6 +186,18 @@ def create_backup(
         parked = _parked_rows(sidecar_path)
         _write_json_atomic(parked_target, parked)
 
+        # The sidecar itself holds the restorable snapshots; keep a WAL-safe
+        # copy next to each edge backup (docs/ops/backups.md).
+        if sidecar_path.exists():
+            sc_src = sqlite3.connect(f"file:{sidecar_path}?mode=ro", uri=True)
+            sc_dst = sqlite3.connect(str(target) + ".console.sqlite.bak")
+            try:
+                sc_src.backup(sc_dst)
+                sc_dst.commit()
+            finally:
+                sc_dst.close()
+                sc_src.close()
+
         os.replace(tmp, target)
     except BackupError:
         _cleanup(tmp, parked_target)

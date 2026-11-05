@@ -77,6 +77,7 @@ from __future__ import annotations
 # T4.2–T4.7 rule families register themselves on import (parallel-safe:
 # each family owns console/rules/<family>.py).
 from . import rules as _rule_families  # noqa: F401
+from .derivations import DERIVATIONS as _BUILTIN_DERIVATIONS
 
 import hashlib
 import importlib
@@ -92,7 +93,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from markupsafe import escape
 
 from . import db, descriptors, validators
-from .security import read_session
+from .security import read_session, is_authenticated
 
 router = APIRouter()
 
@@ -116,11 +117,11 @@ Derivation = Callable[..., Any]
 FormCheck = Callable[..., dict[str, Any] | None]
 
 _DEFAULT_PROVIDERS: list[DefaultProvider] = []
-DERIVATIONS: dict[str, Derivation] = {}
+DERIVATIONS: dict[str, Derivation] = dict(_BUILTIN_DERIVATIONS)
 
 #: Derivation names declared in tables.yaml but owned by a later family.  They
 #: are skipped (the stored/posted value is kept) until registered.
-PENDING_DERIVATIONS: frozenset[str] = frozenset({"tenant_ds_onnet"})
+PENDING_DERIVATIONS: frozenset[str] = frozenset()
 
 
 def register_default(provider: DefaultProvider) -> None:
@@ -166,7 +167,7 @@ def _wants_fragment(request: Request) -> bool:
 
 
 def _requires_login(request: Request) -> RedirectResponse | None:
-    if read_session(request) is None:
+    if not is_authenticated(request):
         return RedirectResponse("/login", status_code=303, headers=NO_STORE)
     return None
 
@@ -292,6 +293,10 @@ def _action(descriptor: descriptors.Descriptor, mode: str, key: Any = None) -> s
     if mode == "create":
         return f"/tables/{descriptor.table}/new"
     return f"/tables/{descriptor.table}/{quote(str(key), safe='')}/edit"
+
+
+class _StaleEdit(Exception):
+    """Row changed between render and write."""
 
 
 def _submit_label(mode: str) -> str:
@@ -551,6 +556,23 @@ def scan_references(
                         value=target_text,
                     )
                 )
+
+    # Family providers cover references the descriptor grammar cannot express
+    # (e.g. an id packed inside another table's flags field).
+    from . import rules as rule_families
+
+    provider = rule_families.REFERENCES.get(descriptor.table)
+    if provider is not None:
+        for item in provider(conn, key):
+            add(
+                Reference(
+                    table=item["table"],
+                    key=item["key"],
+                    label=item["label"],
+                    field=item["field"],
+                    value=item["value"],
+                )
+            )
 
     references.sort(key=lambda reference: (reference.table, reference.label))
     return references
@@ -857,17 +879,15 @@ def _run_form_checks(
     warnings: dict[str, list[str]] = {}
     interruption: dict[str, Any] | None = None
     for check in _form_checks():
-        try:
-            result = check(
-                descriptor,
-                values,
-                conn=conn,
-                mode=mode,
-                existing=existing,
-                key=key,
-            )
-        except Exception:  # a family check must never take the form down
-            continue
+        # Fail closed: a guard that crashes must not silently allow the write.
+        result = check(
+            descriptor,
+            values,
+            conn=conn,
+            mode=mode,
+            existing=existing,
+            key=key,
+        )
         if not result:
             continue
         for name, messages in (result.get("errors") or {}).items():
@@ -1550,10 +1570,31 @@ async def _submit(
     inserted_key: Any = None
     try:
         with db.write_transaction(conn):
+            if (
+                mode == "edit"
+                and submitted_hash
+                and not _truthy(_form_scalar(form, "force"))
+            ):
+                current_raw = db.read_row(conn, table, key)
+                current = (
+                    descriptors.unpack_row(descriptor, current_raw)
+                    if current_raw is not None
+                    else {}
+                )
+                if current_raw is None or submitted_hash != _row_hash(descriptor, current):
+                    raise _StaleEdit()
             if mode == "create":
                 inserted_key = _insert(conn, descriptor, values)
             else:
                 _update(conn, descriptor, values, original_key)
+    except _StaleEdit:
+        return _render_conflict(
+            request,
+            descriptor,
+            key=key,
+            submitted=values,
+            current=existing,
+        )
     except sqlite3.IntegrityError:
         key_field = _key_field(descriptor)
         target = key_field.name if key_field is not None else descriptor.fields[0].name

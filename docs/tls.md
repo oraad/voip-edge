@@ -9,7 +9,7 @@ is deliberately no TLS there.
 | File | Role |
 |---|---|
 | `acme/run.sh` | acme.sh container entrypoint: issues the cert if missing (DNS-01 via nsupdate/RFC2136 or the Technitium API), installs it into the container's `/tls`, registers the deploy hook, then runs the acme cron every 12 h. |
-| `acme/deploy-certs.sh` | `--reloadcmd` target: promotes staged `sip.crt`/`sip.key` into the live directory atomically and touches `.renewed`. Kamailio never reads a half-written pair. |
+| `acme/deploy-certs.sh` | `--reloadcmd` target: writes a timestamped release directory under `/tls/releases/`, flips the stable `current` symlink atomically and re-points `sip.crt`/`sip.key` through it. Kamailio never reads a new certificate with an old key. Keeps the five newest releases. |
 | `watch-certs.sh` | `cert-reloader` container: watches `/certs/.renewed` and calls `kamcmd -s unix:/run/kamailio/kamailio_ctl tls.reload`. No docker.sock, no restart. |
 | `acme-deploy-hook.sh` | Standalone fallback for non-compose setups: sync certs from an acme.sh volume into Kamailio's TLS dir and reload only when files changed. |
 
@@ -32,6 +32,25 @@ Secrets never enter this repo:
 - the TSIG file is gitignored and the pre-commit guard refuses `*technitium_tsig*`;
 - `deploy/*.env`, `deploy/acme.env` and any `.env` are refused;
 - certificate/key material (`*.crt`, `*.key`, `*.pem`) is refused.
+
+## Staging → live promotion
+
+`ACME_SERVER=letsencrypt_test` writes a *staging* certificate that run.sh will
+happily re-install on every start (it only checks that a cert exists). To
+promote:
+
+1. set `ACME_SERVER=letsencrypt`, `ACME_FORCE_ISSUE=1`;
+2. recreate the acme container (`docker compose up -d --force-recreate acme`);
+3. watch `docker logs` for `Cert success`, verify with `openssl s_client`;
+4. set `ACME_FORCE_ISSUE=0` again (otherwise every recreate re-issues and can
+   hit Let's Encrypt duplicate-certificate limits).
+
+## Renewal visibility
+
+Renewal failures are logged by the acme container but not alerted. Add an
+external check on `notAfter` (e.g. `openssl x509 -enddate`) and watch for
+`tls.reload failed` in the cert-reloader logs; the watcher now retries a failed
+reload instead of dropping it.
 
 ## Adding a tenant's TLS name
 

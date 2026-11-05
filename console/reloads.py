@@ -119,6 +119,10 @@ class ReloadWorker:
         """
         self.flush(timeout)
         with self._cond:
+            # Persist anything still queued before dropping it (plan §5.6).
+            for table, entry in list(self._pending.items()):
+                self._notify_store("pending", table, entry.rpc_name, entry.params)
+            self._pending.clear()
             self._stop = True
             self._cond.notify_all()
         thread = self._thread
@@ -139,7 +143,11 @@ class ReloadWorker:
 
     def _ensure_thread_locked(self) -> None:
         if self._thread is not None:
-            return
+            if self._thread.is_alive():
+                return
+            # A crashed worker (e.g. a BaseException in a store callback) is
+            # replaced on the next enqueue rather than leaving intents stuck.
+            self._thread = None
         self._thread = threading.Thread(
             target=self._run, name="console-reload-worker", daemon=True
         )
@@ -182,13 +190,20 @@ class ReloadWorker:
                 continue
 
             assert entry is not None
-            self._execute(table, entry)
+            try:
+                self._execute(table, entry)
+            except BaseException as exc:  # never kill the worker thread
+                self.errors[table] = exc
+                self._notify_store("pending", table, entry.rpc_name, entry.params)
+                with self._cond:
+                    self._in_flight = False
+                    self._cond.notify_all()
 
     def _execute(self, table: str, entry: _Pending) -> None:
         status = "done"
         try:
             self.rpc.call(entry.rpc_name, entry.params)
-        except Exception as exc:  # RPCFault, KamailioUnavailable, or a stub failure
+        except BaseException as exc:  # RPCFault, KamailioUnavailable, or a stub failure
             self.errors[table] = exc
             status = "pending"
         else:

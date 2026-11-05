@@ -65,6 +65,10 @@ class Settings:
     oidc_insecure: bool = _bool("OIDC_INSECURE", False)
     # lifecycle/pending-reload sweeper cadence (0 disables; tests set 0)
     sweeper_interval: int = int(os.environ.get("CONSOLE_SWEEPER_INTERVAL", "30"))
+    # Refuse park/destroy when the htable.delete capability probe fails
+    # (operators set CONSOLE_ENFORCE_CAPABILITIES=1; off by default so unit
+    # tests with fault-injecting RPC doubles stay deterministic).
+    enforce_capabilities: bool = _bool("CONSOLE_ENFORCE_CAPABILITIES", False)
 
 
 settings = Settings()
