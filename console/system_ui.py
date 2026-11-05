@@ -154,6 +154,9 @@ def build_status(app: Any = None) -> dict[str, Any]:
     uptime = capabilities.last_uptime()
     return {
         "readonly": bool(cfg.readonly),
+        "descriptor_problems": list(
+            getattr(getattr(app, "state", None), "descriptor_problems", []) or []
+        ),
         "pending_reloads": pending,
         "sidecar_available": pending is not None,
         "sidecar_error": sidecar_error,
@@ -318,12 +321,16 @@ def _render(
 ) -> HTMLResponse:
     sidecar_error: str | None = None
     audit_rows: list[dict[str, Any]] = []
+    open_intents: list[dict[str, Any]] = []
     try:
         path = sidecar_path()
         if not path.is_file():
             raise SidecarUnavailable(f"sidecar unavailable at {path}")
         sidecar = Sidecar(path)
         audit_rows = _recent_audit(sidecar)
+        open_intents = [
+            row for row in sidecar.list_intents() if row.get("last_error")
+        ]
     except (SidecarUnavailable, OSError, ValueError) as exc:
         sidecar_error = str(exc)
     except Exception as exc:  # defensive: the page renders a banner, never 500
@@ -338,6 +345,7 @@ def _render(
             "fragment": _wants_fragment(request),
             "anchor": anchor,
             "audit_rows": _audit_view(audit_rows),
+            "open_intents": open_intents,
             "backups": _backup_view(),
             "keep": backups_module.KEEP_BACKUPS,
             "sidecar_error": sidecar_error,

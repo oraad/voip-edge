@@ -97,3 +97,19 @@ def test_restore_collision_returns_html_409_without_a_blocking_intent(lifecycle_
     assert response.status_code == 409
     assert "Restore blocked" in response.text
     assert "tenantid" in response.text.lower()
+
+
+def test_destroy_page_uses_typed_confirm_for_an_active_home_after_restore(
+    lifecycle_env,
+):
+    app, client, fake = lifecycle_env
+    assert client.post(f"/homes/{DOMAIN}/park").status_code == 303
+
+    parked_page = client.get(f"/homes/{DOMAIN}/destroy")
+    assert "parked snapshot" in parked_page.text.lower()
+    assert 'name="confirm"' not in parked_page.text
+
+    assert client.post(f"/homes/{DOMAIN}/restore").status_code == 303
+    active_page = client.get(f"/homes/{DOMAIN}/destroy")
+    assert 'name="confirm"' in active_page.text
+    assert "parked snapshot" not in active_page.text.lower()

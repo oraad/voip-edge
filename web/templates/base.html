@@ -111,6 +111,12 @@
     <span class="spacer meta mono">console v1</span>
     {% endif %}
   </header>
+  {% if st.descriptor_problems|default(false) %}
+  <div class="banner banner-global err" role="alert">
+    <strong>database schema/version mismatch</strong> — writes are refused.
+    <ul>{% for problem in st.descriptor_problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
   {% if st.readonly|default(false) %}
   <div class="banner banner-global warn" role="status">
     <strong>console is in read-only mode</strong> — every write is refused by the server.

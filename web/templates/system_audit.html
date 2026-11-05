@@ -4,8 +4,8 @@
 <div class="pagehead">
   <div>
     <h1>Audit &amp; backups</h1>
-    <div class="sub">Console-recorded writes and reloads. Direct CLI edits of the database do not appear here — the console can only record its own writes;
-      re-reading a table is immediate.</div>
+    <div class="sub">Console lifecycle transitions. Direct CLI edits of the database do not appear here — the console can only record its own writes;
+      re-reading a table is immediate. Reload faults remain in the logs and pending-reload status.</div>
   </div>
 </div>
 
@@ -64,9 +64,36 @@
     A hot-swapped database file is never safe while the stack is running.</p>
 </section>
 
+{% if open_intents %}
+<section class="panel" id="lifecycle-errors" aria-labelledby="lifecycle-errors-title">
+  <h2 id="lifecycle-errors-title">Lifecycle errors</h2>
+  <p class="sub">These unfinished intents have a recorded error. The sweeper
+    retries them; there is no separate Retry button. Fix the named cause and
+    the next sweep resumes the operation.</p>
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th scope="col">Updated</th><th scope="col">Operation</th>
+        <th scope="col">Domain</th><th scope="col">State</th>
+        <th scope="col">Error</th></tr></thead>
+      <tbody>
+        {% for row in open_intents %}
+        <tr>
+          <td class="mono">{{ row.updated_at }}</td>
+          <td>{{ row.op }}</td>
+          <td class="mono">{{ row.domain }}</td>
+          <td>{{ row.state }}</td>
+          <td>{{ row.last_error }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
 <section class="panel" id="audit" aria-labelledby="audit-title">
   <h2 id="audit-title">Audit</h2>
-  <p class="sub">Every console lifecycle transition and reload outcome, newest first.
+  <p class="sub">Every console lifecycle transition, newest first.
     Outcome badges: <span class="badge b-warn">scheduled</span>
     <span class="badge b-ok">applied</span>
     <span class="badge b-ok">verified</span>
@@ -101,11 +128,13 @@
     </table>
   </div>
   {% else %}
-  <p class="empty-panel meta">No audit rows recorded yet. Console writes and
-    lifecycle transitions will appear here.</p>
+  <p class="empty-panel meta">No audit rows recorded yet. Console lifecycle
+    transitions will appear here.</p>
   {% endif %}
 
-  <p class="meta">Audit coverage: console-recorded writes only. External CLI edits
+  <p class="meta">Audit coverage: lifecycle transitions and failed-intent
+    errors only. Ordinary form writes and reload outcomes live in the
+    structured logs / pending-reload status, not this table. External CLI edits
     of <span class="mono">edge.sqlite</span> are not logged here — list views
     re-read the database on every load.</p>
 </section>

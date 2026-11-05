@@ -105,12 +105,18 @@ def destroy_confirm(request: Request, domain: str):
     denied = _require_auth(request)
     if denied:
         return denied
-    sidecar_path, _, _ = _paths()
-    parked = False
+    sidecar_path, edge_path, _ = _paths()
+    active = False
     try:
-        parked = Sidecar(sidecar_path).load_snapshot(domain) is not None
+        active = lifecycle._tenant_row(Path(edge_path), domain) is not None
     except Exception:
-        parked = False
+        active = False
+    parked = False
+    if not active:
+        try:
+            parked = Sidecar(sidecar_path).load_snapshot(domain) is not None
+        except Exception:
+            parked = False
     return _render(
         request,
         "lifecycle_confirm.html",

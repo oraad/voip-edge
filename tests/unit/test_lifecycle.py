@@ -1033,3 +1033,36 @@ def test_capability_gate_requires_both_dump_and_delete(env, monkeypatch):
     with pytest.raises(KamailioUnavailable):
         park(env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups)
     assert edge_signature(env.edge) == before
+
+
+def test_park_resume_allows_a_landline_removal_after_snapshot(env):
+    with pytest.raises(InjectedCrash):
+        park(
+            env.sidecar,
+            env.edge,
+            env.worker,
+            DOMAIN_A,
+            backup_dir=env.backups,
+            fail_after="SNAPSHOTTED",
+        )
+
+    with sqlite3.connect(env.edge) as conn:
+        conn.execute(
+            "DELETE FROM tenant_landline WHERE tprefix = ?", (LANDLINE_A,)
+        )
+        conn.commit()
+
+    assert resume_pending(
+        env.sidecar, env.edge, env.worker, backup_dir=env.backups
+    )["completed"] == 1
+    assert restore(
+        env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+    ).done is True
+    assert (
+        count(
+            env.edge,
+            "SELECT count(*) FROM tenant_landline WHERE tprefix = ?",
+            (LANDLINE_A,),
+        )
+        == 0
+    )

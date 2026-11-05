@@ -126,6 +126,28 @@ def create_app() -> FastAPI:
                     "set OIDC_INSECURE=1 only for loopback development"
                 )
 
+        # Startup schema/version consistency check.  A mismatch is a
+        # deployment fault: show it and refuse writes (safe reads still work).
+        app.state.descriptor_problems = []
+        if Path(cfg.db_path).is_file():
+            try:
+                from . import db as db_module
+                from . import descriptors as descriptor_mod
+
+                conn = db_module.connect(cfg.db_path)
+                try:
+                    app.state.descriptor_problems = (
+                        descriptor_mod.validate_against_db(
+                            descriptor_mod.load(), conn
+                        )
+                    )
+                finally:
+                    conn.close()
+            except BaseException as exc:
+                app.state.descriptor_problems = [
+                    f"schema consistency check failed: {exc}"
+                ]
+
         # Advisory capability probe: a daemon thread, never awaited.  Startup
         # must succeed even when Kamailio is down (docker healthcheck contract).
         threading.Thread(
@@ -260,6 +282,23 @@ def create_app() -> FastAPI:
                 '<div class="banner err" role="alert">'
                 "<strong>console is in read-only mode</strong> — writes are refused.</div>",
                 status_code=403,
+                headers=NO_STORE,
+            )
+
+        # Schema/version mismatch: refuse writes before CSRF or route deps.
+        problems = getattr(app.state, "descriptor_problems", None)
+        if (
+            problems
+            and request.method not in SAFE_METHODS
+            and request.url.path not in READONLY_EXEMPT_PATHS
+        ):
+            return HTMLResponse(
+                '<div class="banner err" role="alert">'
+                "<strong>database schema mismatch — writes are refused</strong>"
+                "<ul>"
+                + "".join(f"<li>{escape(item)}</li>" for item in problems)
+                + "</ul></div>",
+                status_code=503,
                 headers=NO_STORE,
             )
 
@@ -418,6 +457,7 @@ def create_app() -> FastAPI:
     app.state.rpc_factory = _default_rpc
     app.state.rpc = None  # set on first use; tests may pre-inject
     app.state.capabilities = None  # T9 startup probe result (advisory only)
+    app.state.descriptor_problems = []  # startup schema/version check
 
     _lazy_lock = threading.RLock()  # worker factory -> rpc factory nests
 

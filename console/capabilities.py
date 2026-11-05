@@ -19,10 +19,9 @@ Probed capabilities
     The purge primitive.  A failed probe is treated conservatively: park and
     destroy must call :func:`require_capability` and are refused rather than
     starting a purge that cannot delete keys.
-``mtree.reload``, ``dispatcher.reload``, ``dialplan.reload``,
-``permissions.trustedReload``
-    Every reload RPC named by ``tables.yaml``.  A successful call proves the
-    method is present; the call itself is Kamailio's normal idempotent reload.
+Reload RPCs are deliberately **not** probed: Kamailio rate-limits them
+(``reload_delta``) and a probe could collide with the queued worker reload.
+The worker's actual reload outcomes are the proof for those methods.
 
 An RPC fault (JSON-RPC ``error``) proves ``jsonrpcs`` is reachable but marks
 the individual capability ``False``.  The probe is intentionally conservative:
@@ -54,24 +53,20 @@ DEFAULT_TTL = 60.0
 # Metadata keys are not individual capabilities (they describe the result).
 META_KEYS = frozenset({"ok", "aggregate", "reachable", "unknown", "jsonrpcs"})
 
+# Probing must never invoke a reload RPC: Kamailio rate-limits reloads with
+# ``reload_delta`` and a probe could collide with a queued worker reload.  The
+# actual reload outcomes prove those methods; the gate only needs the purge
+# primitives plus connectivity.
 _FALLBACK_CHECKS: tuple[tuple[str, list[Any]], ...] = (
     ("core.uptime", []),
     ("htable.dump", ["regcache"]),
     ("htable.delete", ["regcache", "__console_capability_probe__"]),
-    ("mtree.reload", ["tenantdom"]),
-    ("dispatcher.reload", []),
-    ("dialplan.reload", []),
-    ("permissions.trustedReload", []),
 )
 
 CAPABILITY_KEYS: tuple[str, ...] = (
     "core.uptime",
     "htable.dump",
     "htable.delete",
-    "mtree.reload",
-    "dispatcher.reload",
-    "dialplan.reload",
-    "permissions.trustedReload",
 )
 
 # module cache: (rpc identity, monotonic timestamp, result copy)
@@ -81,28 +76,8 @@ _last_uptime_value: str | None = None
 
 
 def _checks() -> tuple[tuple[str, list[Any]], ...]:
-    """Reload checks derived from ``tables.yaml`` (descriptors stay authoritative)."""
-    try:
-        from . import descriptors
-
-        tableset = descriptors.load()
-    except Exception:
-        return _FALLBACK_CHECKS
-
-    seen: set[str] = set()
-    checks: list[tuple[str, list[Any]]] = [
-        ("core.uptime", []),
-        ("htable.dump", ["regcache"]),
-        ("htable.delete", ["regcache", "__console_capability_probe__"]),
-    ]
-    seen.update(method for method, _ in checks)
-    for descriptor in tableset.tables.values():
-        method = descriptor.reload.rpc
-        if method in seen:
-            continue
-        seen.add(method)
-        checks.append((method, list(descriptor.reload.params)))
-    return tuple(checks)
+    """The non-mutating capability checks (never reload RPCs)."""
+    return _FALLBACK_CHECKS
 
 
 def _uptime_text(value: Any) -> str | None:

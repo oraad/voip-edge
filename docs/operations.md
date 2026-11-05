@@ -140,13 +140,13 @@ one RPC is sent per table per window, serialized by `ReloadWorker`.
 
 - `console_pending_reload` in `console.sqlite` persists `table` +
   `enqueued_at` while Kamailio is unreachable. A console restart loses nothing.
-- The startup sweeper re-derives the RPC and params from the descriptor and
-  re-issues the reload once the probe succeeds.
+- The sweeper re-derives the RPC and params from the descriptor and re-issues
+  the reload on its next pass.
 - Symptom: global banner shows a pending count, writes still work. Fix the edge
   or socket, then wait for the sweep (or restart the console).
-- A JSON-RPC fault is a `ReloadError`: the toast names the failed table and
-  shows Kamailio's message verbatim. Old data remains active. Fix the data/RPC
-  and save again.
+- A JSON-RPC reload fault is recorded in the worker's pending-reload error and
+  the structured logs; the status strip shows the pending count. There is no
+  per-save toast. Old data remains active — fix the data/RPC and save again.
 
 ### Live polling stops on a down edge
 

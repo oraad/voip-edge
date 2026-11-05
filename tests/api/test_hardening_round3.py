@@ -292,3 +292,49 @@ def test_dispatcher_create_form_round_trips_numeric_defaults(seeded_db, auth_cli
     )
     response = auth_client.post("/tables/dispatcher/new", data=data)
     assert response.status_code == 303, response.text
+
+
+def test_schema_mismatch_refuses_writes_and_shows_banner(seeded_db, auth_client, app):
+    app.state.descriptor_problems = ["dispatcher: version 3 != expected 4"]
+    response = auth_client.post(
+        "/tables/dispatcher/new",
+        data={
+            "setid": "77",
+            "destination": "sip:10.9.9.9:5060;transport=tcp",
+            "flags": "0",
+            "priority": "0",
+            "description": "x",
+        },
+    )
+    assert response.status_code == 503
+    assert "schema mismatch" in response.text
+    page = auth_client.get("/homes")
+    assert page.status_code == 200
+    assert "schema/version mismatch" in page.text
+
+
+def test_audit_page_shows_failed_intent_last_error(
+    seeded_db, client, monkeypatch, tmp_path
+):
+    from console.sidecar import Sidecar
+
+    state = tmp_path / "console"
+    state.mkdir()
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(
+            settings_module.settings,
+            sidecar_dir=str(state),
+            sweeper_interval=0,
+        ),
+    )
+    sidecar = Sidecar(state / "console.sqlite")
+    intent = sidecar.create_intent("park", "sip.alpha.home.example.net")
+    sidecar.fail_intent(intent, "refusing to widen the park/destroy scope")
+
+    login(client)
+    response = client.get("/system/audit")
+    assert response.status_code == 200
+    assert "Lifecycle errors" in response.text
+    assert "refusing to widen" in response.text

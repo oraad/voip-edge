@@ -159,3 +159,10 @@ def test_probe_treats_htable_delete_404_as_capability_present(fake):
     assert result["htable.delete"] is True
     assert result["ok"] is True
     assert "htable.delete" not in missing_capabilities(result)
+
+
+def test_probe_never_invokes_reload_rpcs(fake):
+    script_healthy(fake)
+    probe(fake)
+    for method in RELOAD_METHODS:
+        assert fake.calls_for(method) == []

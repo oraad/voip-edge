@@ -807,23 +807,14 @@ class _Run:
                 # Identity changes would widen the destructive scope (a new
                 # tenantid/set id can point at another home's rows).  Refuse;
                 # benign edits (label/target/new landline) refresh instead.
-                old_landlines = {
-                    str(row.get("tprefix"))
-                    for row in snapshot.get("tenant_landline") or []
-                }
-                current_landlines = {
-                    str(row.get("tprefix"))
-                    for row in current.get("tenant_landline") or []
-                }
                 if (
                     current.get("tenantid") != snapshot.get("tenantid")
                     or current.get("ds_setids") != snapshot.get("ds_setids")
-                    or not old_landlines <= current_landlines
                 ):
                     raise LifecycleError(
-                        "home identity (tenantid, dispatcher set ids or "
-                        "landline keys) changed after the snapshot; refusing "
-                        "to widen the park/destroy scope"
+                        "home identity (tenantid or dispatcher set ids) "
+                        "changed after the snapshot; refusing to widen the "
+                        "park/destroy scope"
                     )
                 if current != snapshot:
                     with self.sidecar.transaction() as conn:
