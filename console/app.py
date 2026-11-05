@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
         directory=str(TEMPLATES_DIR), context_processors=[_base_context]
     )
     templates.env.filters["mono"] = _mono
+    app.state.templates = templates
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -134,22 +135,36 @@ def create_app() -> FastAPI:
         target = "/homes" if is_authenticated(request) else "/login"
         return RedirectResponse(target, status_code=303, headers=NO_STORE)
 
-    @app.get("/homes", response_class=HTMLResponse)
-    def homes(request: Request):
-        session = read_session(request)
-        if session is None:
-            return RedirectResponse("/login", status_code=303, headers=NO_STORE)
-        fragment = _wants_fragment(request)
-        return templates.TemplateResponse(
-            request,
-            "homes.html",
-            {
-                "nav": "homes",
-                "fragment": fragment,
-                "session": session,
-            },
-            headers=NO_STORE,
+    # ------------------------------------------------------------------
+    # T3 routers: /homes landing + generic read-only table browser
+    # ------------------------------------------------------------------
+    from . import homes_ui, tables_ui
+
+    app.include_router(homes_ui.router)
+    app.include_router(tables_ui.router)
+
+    # ------------------------------------------------------------------
+    # T6: live dashboard (registered phones + route-set probes)
+    # RPC endpoint is lazily built so tests can inject app.state.rpc.
+    # ------------------------------------------------------------------
+    from .live import build_live_router
+    from .rpc import UnixDatagramRPC
+
+    def _default_rpc():
+        return UnixDatagramRPC(
+            settings_module.settings.rpc_sock,
+            timeout_ms=settings_module.settings.rpc_timeout_ms,
         )
+
+    app.state.rpc_factory = _default_rpc
+    app.state.rpc = None  # set on first use; tests may pre-inject
+
+    def _get_rpc():
+        if app.state.rpc is None:
+            app.state.rpc = app.state.rpc_factory()
+        return app.state.rpc
+
+    app.include_router(build_live_router(_get_rpc))
 
     return app
 

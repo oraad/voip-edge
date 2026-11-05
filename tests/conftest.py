@@ -67,3 +67,38 @@ def _reset_login_throttle():
     security.reset_login_rate_limit()
     yield
     security.reset_login_rate_limit()
+
+
+# ---------------------------------------------------------------------------
+# T3 (read-only browser) fixtures — appended, existing fixtures unchanged
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def seeded_db(tmp_path, monkeypatch):
+    """A WAL edge database with the three realistic homes, wired to settings."""
+    from dataclasses import replace
+
+    from tests.fixtures import seeddb
+
+    path = seeddb.seed(tmp_path / "edge.sqlite")
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, db_path=str(path)),
+    )
+    return path
+
+
+@pytest.fixture()
+def empty_db(tmp_path, monkeypatch):
+    """A schema-only WAL edge database (first-use empty state)."""
+    from dataclasses import replace
+
+    from tests.fixtures import seeddb
+
+    path = seeddb.empty(tmp_path / "empty.sqlite")
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, db_path=str(path)),
+    )
+    return path

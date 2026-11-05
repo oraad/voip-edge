@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Live — VoIP Edge Console{% endblock %}
+{% block content %}
+{% if not fragment|default(false) %}
+<style>
+  .chip.err { color: var(--destructive); }
+  .live-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 20px; }
+  @media (max-width: 760px) { .live-grid { grid-template-columns:1fr; } }
+</style>
+<div id="live-dashboard" hx-get="/live/partial" hx-trigger="every {{ poll_ms }}ms" hx-swap="innerHTML"
+     aria-live="off">
+{% endif %}
+
+<div class="pagehead">
+  <div>
+    <h1>Live</h1>
+    <div class="sub">Refreshes every {{ poll_ms // 1000 }} s over the RPC socket. Read-only.
+      Auto-refresh never moves your scroll position.</div>
+  </div>
+  {% if reachable %}
+  <span class="chip ok">edge reachable · uptime <strong>{{ uptime or "unknown" }}</strong></span>
+  {% else %}
+  <span class="chip warn">edge unreachable</span>
+  {% endif %}
+</div>
+
+{% if not reachable %}
+<div class="errsummary" role="alert">
+  <b>edge unreachable</b> — the console could not reach Kamailio over the RPC socket.
+  Writes are unaffected; live state will reappear after the edge recovers and this page is reloaded.
+  <div class="meta">Polling stops while the edge is down (HX-Stop-Polling), so an outage
+    does not turn into a repeated timeout loop.</div>
+</div>
+{% endif %}
+
+{% if data_errors %}
+<div class="errsummary" role="alert">
+  <b>Some live data could not be loaded</b>
+  <ul>
+    {% for error in data_errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="live-grid">
+  <section class="panel" aria-labelledby="live-registrations-title">
+    <h2 id="live-registrations-title">Registered phones (edge cache)</h2>
+    {% if registrations %}
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr><th scope="col">AOR</th><th scope="col">Transport</th><th scope="col">Flow</th></tr>
+        </thead>
+        <tbody>
+          {% for reg in registrations %}
+          <tr>
+            <td class="mono">{{ reg.aor }}</td>
+            <td>{{ reg.transport|upper }}</td>
+            <td class="mono">{{ reg.flow }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="meta">{{ registrations|length }} registration{{ "" if registrations|length == 1 else "s" }} cached</div>
+    {% else %}
+    <p class="meta">No registrations cached.</p>
+    {% endif %}
+    <div class="meta">regcache has no per-key TTL in the current edge config — entries persist
+      until the phone re-registers or the home is parked (plan §3.8).</div>
+  </section>
+
+  <section class="panel" aria-labelledby="live-dispatchers-title">
+    <h2 id="live-dispatchers-title">Route set probes</h2>
+    {% if dispatchers %}
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr><th scope="col">Set</th><th scope="col">Target</th><th scope="col">State</th></tr>
+        </thead>
+        <tbody>
+          {% for route in dispatchers %}
+          <tr>
+            <td class="mono">{{ route.setid }}</td>
+            <td class="mono" title="{{ route.target }}">{{ route.target_display }}</td>
+            <td><span class="chip {{ route.tone }}">{{ route.label }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="meta">No route-set destinations configured.</p>
+    {% endif %}
+    <div class="meta">A = Active · I = Inactive · T = Trying · D = Disabled —
+      plus “probed” when the OPTIONS pinger watches it. Probe timings are not shown in v1.</div>
+  </section>
+</div>
+
+{% if not fragment|default(false) %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ table_label }}: {{ key }} — VoIP Edge Console{% endblock %}
+{% block content %}
+<p class="meta"><a href="/tables/{{ table }}">← Back to {{ table_label }}</a></p>
+<div class="pagehead">
+  <div>
+    <h1>{{ table_label }}</h1>
+    <div class="sub mono">{{ key }}</div>
+  </div>
+  <span class="meta">Read-only</span>
+</div>
+
+<section class="panel" aria-label="{{ table_label }} row details">
+  <dl>
+    {% for field in fields %}
+    <div class="detailfield">
+      <dt>{{ field.label }}</dt>
+      <dd>
+        <span{% if field.mono %} class="mono"{% endif %}>{% if field.value is not none and field.value != "" %}{{ field.value }}{% else %}—{% endif %}</span>
+        {% if field.help %}<span class="meta" style="display:block">{{ field.help }}</span>{% endif %}
+      </dd>
+    </div>
+    {% endfor %}
+  </dl>
+</section>
+
+<p class="meta">Editing this row is not available in the read-only browser.</p>
+{% endblock %}

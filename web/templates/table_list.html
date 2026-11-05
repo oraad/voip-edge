@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ table_label }} — VoIP Edge Console{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>{{ table_label }}</h1>
+    <div class="sub">Read-only browser over the routing database. Values are shown
+      exactly as Kamailio loads them.</div>
+  </div>
+  <span class="meta">
+    {% if rows %}{{ rows|length }} row{{ "" if rows|length == 1 else "s" }}{% endif %}
+  </span>
+</div>
+
+{% if rows or filtered_empty %}
+<form class="filterbar" method="get" action="/tables/{{ table }}" role="search">
+  <label for="q">Filter rows</label>
+  <input id="q" name="q" type="text" value="{{ q }}" autocomplete="off">
+  <button class="btn" type="submit">Filter</button>
+  {% if q %}<a class="btn" href="/tables/{{ table }}">Clear filter</a>{% endif %}
+</form>
+{% endif %}
+
+{% if rows %}
+<div class="panel" style="padding:0; overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        {% for column in columns %}<th scope="col">{{ column.label }}</th>{% endfor %}
+        <th scope="col"><span class="meta">Details</span></th>
+      </tr>
+    </thead>
+    {% include "partials/table_rows.html" %}
+  </table>
+</div>
+{% elif filtered_empty %}
+<section class="panel empty" aria-labelledby="empty-filtered-title">
+  <h2 id="empty-filtered-title">No results match “{{ q }}”</h2>
+  <p>Nothing in {{ table_label }} contains that text.</p>
+  <a class="btn" href="/tables/{{ table }}">Clear filter</a>
+</section>
+{% else %}
+<section class="panel empty" aria-labelledby="empty-table-title">
+  <h2 id="empty-table-title">No rows in {{ table_label }} yet</h2>
+  <p>This table is empty. Create the first row to start routing traffic.</p>
+  <button class="btn pri" type="button" disabled aria-disabled="true">+ Add the first row</button>
+  <p class="meta">Creating and editing rows arrives with the editing screens; this browser is read-only.</p>
+</section>
+{% endif %}
+{% endblock %}

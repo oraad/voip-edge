@@ -10,12 +10,16 @@
   <button class="btn pri" type="button" disabled aria-disabled="true">+ Onboard a home</button>
 </div>
 
+{% if homes %}
+<p class="meta">{{ homes|length }} home{{ "" if homes|length == 1 else "s" }}</p>
+{% else %}
 <section class="panel empty" aria-labelledby="empty-homes-title">
   <h2 id="empty-homes-title">No homes yet</h2>
   <p>Onboard the first home to create its routing rows and trusted source.</p>
   <button class="btn pri" type="button" disabled aria-disabled="true">+ Onboard a home</button>
   <p class="meta">The onboarding wizard arrives in a later task; this button is a placeholder.</p>
 </section>
+{% endif %}
 
 <h2>Homes</h2>
 <div class="panel" style="padding:0; overflow-x:auto">
@@ -31,9 +35,20 @@
       </tr>
     </thead>
     <tbody>
+      {% for home in homes %}
       <tr>
-        <td colspan="6" class="meta">No homes yet — + Onboard a home.</td>
+        <td class="mono"><a href="/tables/tenant_registry/{{ home.domain|urlencode }}">{{ home.domain }}</a></td>
+        <td class="mono">{{ home.landline }}</td>
+        <td class="mono">{{ home.route_sets }}</td>
+        <td>{{ home.coherence }}</td>
+        <td><span class="chip ok">{{ home.status }}</span></td>
+        <td><a href="/tables/tenant_registry/{{ home.domain|urlencode }}">View</a></td>
       </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="meta">No homes yet — use “+ Onboard a home”.</td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>

@@ -1,0 +1,87 @@
+"""homes_ui.py — Homes landing page (plan §6, wireframe v1).
+
+The landing page is a thin, descriptor-driven projection of
+``tenant_registry``: one row per home, its landline and route-set ids, the
+coherence placeholder (live checks arrive with T6) and an Active status badge
+because a row is present.  Parked homes live in the sidecar and are a later
+task.  With no registry rows the page shows the first-use empty state and the
+"+ Onboard a home" CTA.
+"""
+from __future__ import annotations
+
+import sqlite3
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from . import db, descriptors
+from .security import read_session
+
+router = APIRouter()
+
+NO_STORE = {"Cache-Control": "no-store"}
+
+REGISTRY_TABLE = "tenant_registry"
+
+
+def _wants_fragment(request: Request) -> bool:
+    return request.headers.get("HX-Request", "").strip().lower() == "true"
+
+
+def _requires_login(request: Request) -> RedirectResponse | None:
+    if read_session(request) is None:
+        return RedirectResponse("/login", status_code=303, headers=NO_STORE)
+    return None
+
+
+def _route_sets(values: dict) -> str:
+    onnet = values.get("ds_onnet")
+    pstn = values.get("ds_pstn")
+    if onnet in (None, ""):
+        return "—"
+    pstn_text = "no PSTN" if pstn in (None, "", 0, "0") else f"{pstn} PSTN"
+    return f"{onnet} on-net · {pstn_text}"
+
+
+@router.get("/homes", response_class=HTMLResponse)
+def homes(
+    request: Request,
+    conn: sqlite3.Connection | None = Depends(db.get_read_db),
+):
+    redirect = _requires_login(request)
+    if redirect is not None:
+        return redirect
+
+    descriptor = descriptors.load().tables.get(REGISTRY_TABLE)
+    homes: list[dict] = []
+
+    if descriptor is not None and conn is not None:
+        try:
+            key_name = db.key_column(conn, REGISTRY_TABLE)
+            raw_rows = db.read_rows(conn, REGISTRY_TABLE)
+        except sqlite3.Error:
+            raw_rows = []
+            key_name = None
+        for raw in raw_rows:
+            values = descriptors.unpack_row(descriptor, raw)
+            homes.append(
+                {
+                    "domain": values.get("tprefix", ""),
+                    "landline": values.get("cli", ""),
+                    "route_sets": _route_sets(values),
+                    "coherence": "—",  # placeholder until the T6 live check
+                    "status": "Active",  # present in the registry = active
+                    "_key": raw.get(key_name) if key_name else values.get("tprefix"),
+                }
+            )
+
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "homes.html",
+        {
+            "nav": "homes",
+            "fragment": _wants_fragment(request),
+            "homes": homes,
+        },
+        headers=NO_STORE,
+    )

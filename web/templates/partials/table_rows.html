@@ -1,0 +1,10 @@
+<tbody>
+  {% for row in rows %}
+  <tr>
+    {% for column in columns %}
+    <td{% if column.mono %} class="mono"{% endif %}>{{ row[column.name] }}</td>
+    {% endfor %}
+    <td><a href="/tables/{{ table }}/{{ row['_key']|urlencode }}">View</a></td>
+  </tr>
+  {% endfor %}
+</tbody>
