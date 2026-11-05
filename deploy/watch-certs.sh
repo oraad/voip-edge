@@ -7,7 +7,7 @@
 #   acme.sh --install-cert ... --fullchain-file /tls/.staging/fullchain.cer
 #           --key-file /tls/.staging/privkey.key
 #           --reloadcmd '/bin/sh /deploy-certs.sh'
-# and deploy-certs.sh promotes staging → live atomically, then bumps
+# and deploy-certs.sh promotes staging → live as one pair-consistent release, then bumps
 # /tls/.renewed. This watcher reacts to the marker, never half-written pairs.
 #
 # Mounted paths: /certs  = $EDGE_HOME/tls (ro) ;  /run/kamailio = $EDGE_RUN

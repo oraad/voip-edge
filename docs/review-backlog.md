@@ -1,8 +1,8 @@
 # Review notes: accepted risks and follow-ups (v0.1.10)
 
-Three independent review rounds (security, correctness, operations/UI) were
-run against v0.1.8–v0.1.9. Their blockers and important findings are fixed in
-v0.1.10; the entries below are **intentional** for this single-operator
+Four independent review rounds (security, correctness, operations/UI, plus
+a final verification pass) were run against v0.1.8–v0.1.10. Their blockers and
+important findings are fixed; the entries below are **intentional** for this single-operator
 deployment or are non-blocking follow-ups.
 
 ## Accepted risks
