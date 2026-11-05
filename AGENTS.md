@@ -153,6 +153,13 @@ descriptor/SQLite/reload rules.
   and do not claim `docker build` succeeded unless it actually ran on a
   network-enabled host.
 
+## TLS
+
+Edge TLS is automated: `deploy/acme/run.sh` (issue/renew, DNS-01) →
+`deploy/acme/deploy-certs.sh` (atomic live install + marker) →
+`deploy/watch-certs.sh` (`kamcmd tls.reload`). Secrets (TSIG, API tokens) live
+only in env/docker-secrets, never in git. See `docs/tls.md`.
+
 ## Privacy
 
 Never commit tenant data, live DBs, certs or DNS-01 secrets. Run `tools/check-privacy.sh --all` before publishing; the pre-commit hook enforces it (enable with `git config core.hooksPath .githooks`). Placeholder conventions are in docs/privacy.md.
