@@ -87,6 +87,7 @@
     <span class="chip ok">● edge up · 6 d</span>
     <span class="chip warn">● 2 reloads pending (Kamailio unreachable)</span>
     <span class="chip muted">read-only mode off</span>
+    <span class="chip" style="margin-left:auto">operator@example.net · <a href="#" style="color:inherit">Sign out</a></span>
     <span style="margin-left:auto" class="muted mono">console v1 · kamailio 6.1.5</span>
   </div>
 
@@ -113,6 +114,7 @@
       <button data-v="v5">Live</button>
       <button data-v="v6">Lifecycle dialogs</button>
       <button data-v="v7">Audit &amp; backups</button>
+      <button data-v="v8">Login &amp; account (OIDC)</button>
     </div>
 
     <!-- 1 HOMES (landing) -->
@@ -306,6 +308,49 @@
         <tr><td>today 18:09</td><td>token</td><td>edit gamma label</td><td><span class="badge b-ok">verified</span></td></tr>
         <tr><td>today 17:55</td><td>token</td><td>edit alpha landline</td><td><span class="badge b-warn">scheduled — Kamailio unreachable</span></td></tr>
         </tbody></table>
+    </div>
+
+    <!-- 8 LOGIN, DENIAL, EXPIRY, ACCOUNT (OIDC) -->
+    <div class="view" id="v8">
+      <div class="pagehead"><div><h1>Sign in</h1><div class="sub">One identity provider, one edge console. Tokens never reach the browser.</div></div></div>
+
+      <div class="dlg" role="dialog" aria-modal="true" style="max-width:520px">
+        <b>VoIP Edge Console</b>
+        <p class="sub" style="margin:8px 0 14px">Manage homes, routing data and the tenant lifecycle on this edge.</p>
+        <a class="btn pri" href="#" style="display:block;text-align:center;text-decoration:none">Sign in with Example ID</a>
+        <p class="meta" style="margin:10px 0 0">You will be returned to <span class="mono">/homes</span> after signing in.</p>
+        <details style="margin-top:14px">
+          <summary class="meta" style="cursor:pointer">Trouble signing in? Use an access token (break-glass)</summary>
+          <label for="tok" style="margin-top:8px">Access token</label>
+          <input id="tok" type="text" class="mono" placeholder="only when the provider is unavailable">
+          <div style="margin-top:10px"><button class="btn">Sign in with token</button></div>
+        </details>
+      </div>
+
+      <div class="errsummary" tabindex="-1" style="max-width:520px;margin:18px auto 0">
+        <b>Could not sign you in</b>
+        <ul style="margin:6px 0 0 16px;padding:0">
+          <li>Your account is not in an allowed group. Ask an administrator to add you to <span class="mono">edge-operators</span>.</li>
+          <li class="meta">Subject for support: <span class="mono">a4f1…c9</span> · issuer <span class="mono">id.example.net</span></li>
+        </ul>
+      </div>
+
+      <div class="dlg" style="max-width:520px;margin-top:18px">
+        <b>Session expired</b>
+        <p class="sub" style="margin:8px 0 14px">For your security the console signs you out after 30 minutes of inactivity. You will return to <span class="mono">/tables/dispatcher</span>.</p>
+        <a class="btn pri" href="#" style="display:block;text-align:center;text-decoration:none">Sign in again</a>
+      </div>
+
+      <div class="dlg" style="max-width:520px;margin-top:18px">
+        <b>Identity provider unavailable</b>
+        <p class="sub" style="margin:8px 0 14px">Discovery at <span class="mono">id.example.net</span> timed out. Nothing else is affected — the edge keeps serving calls.</p>
+        <div><button class="btn">Retry</button> <button class="btn">Use access token</button></div>
+      </div>
+
+      <div class="meta" style="max-width:520px;margin:14px auto 0">
+        States shown: signed-out login, access-denied (missing group), expired session, provider outage,
+        and the account chip in the status strip (top). All are server-rendered; no JavaScript required.
+      </div>
     </div>
 
   </div>
