@@ -28,6 +28,52 @@ carry packaging/docs fixes.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-05
+
+### Security (review findings fixed)
+
+- OIDC flow cookies are domain-separated from sessions (`typ` claim): a flow
+  cookie can no longer authenticate requests (critical bypass found in review).
+- Session signing has no fixed public fallback: derived from `CONSOLE_TOKEN`
+  when `CONSOLE_SECRET` is absent; empty tokens can no longer log in.
+- CSRF double-submit is bound to the signed session, not only a sibling cookie.
+- Cookies switched to `SameSite=Lax` (Strict broke the OIDC callback redirect).
+- OIDC: per-transaction flow cookies (multi-tab safe), fail-closed allowlist,
+  `email_verified` required for domain rules, `azp`/`sub`/`iat` validation,
+  algorithm-aware `at_hash`, https-only issuer/endpoints, `/auth/login` and
+  `/auth/callback` rate-limited, OIDC login/logout audit events, read-only mode
+  no longer blocks sign-out, backslash/open-redirect hardening.
+- Docker image now installs its OIDC runtime dependencies (httpx/authlib/
+  cryptography) and disables credential-bearing access-log query strings.
+- Privacy guard checks staged blobs (not the worktree), includes untracked
+  files in `--all`, blocks encrypted keys and `.env.*`; `.env` is gitignored.
+
+### Fixes (configuration review)
+
+- kamailio: `WGIP` default aligned with `WGSOCK`; regcache gains `autoexpire`;
+  keepalive pinger iterator arguments fixed (it never pinged); unknown-tenant
+  paths `return` instead of `exit` so the 403 is delivered; exactly one
+  `direction=` pair per call; `dpid 0` can no longer act as a profile; PSTN
+  dial-out no longer gated by the fallback-only `pstn_on` flag; re-INVITEs of
+  anchored calls reach rtpengine; TLS cipher list drops `aNULL`.
+- lifecycle UI wired (Park/Restore/Destroy routes + homes actions) and the
+  pending-reload/lifecycle sweeper started in the app lifespan.
+- UI navigation/actions reach the real table routes, forms and wizard.
+- Error taxonomy mapped to HTTP statuses (422/409/503/502) incl. `DBBusy`.
+- Form values are whitespace-stripped before storage; wizard always validates
+  the landline length; audit page reads newest-first; backup rotation orders by
+  encoded timestamp; deploy docs no longer add the nonexistent
+  `dgram_max_size`; acme fallback hook writes the filenames tls.cfg reads;
+  watcher retries failed reloads.
+
+### Known backlog
+
+See `docs/review-backlog.md` for the review items still open (body limits,
+threadpool offload beyond lifecycle, restore/delete race hardening, exact
+domain matching, TLS promotion doc, non-root ACL recipe, and similar).
+
+
+
 ### Added
 
 - **T0 — Descriptor engine + pack/unpack.** `console/tables.yaml` grammar v1,

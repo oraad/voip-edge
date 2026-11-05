@@ -84,6 +84,8 @@ def oidc_settings(monkeypatch):
             oidc_provider_name="Example ID",
             oidc_allowed_groups=("edge-operators",),
             oidc_allowed_email_domains=(),
+            oidc_allow_any=True,
+            oidc_insecure=True,
         )
         values.update(overrides)
         cfg = replace(settings_module.settings, **values)
@@ -285,7 +287,9 @@ def test_email_domain_allowlist(seeded_db, client, oidc_settings, provider):
             200,
             json={
                 "access_token": "at",
-                "id_token": _token_for(flow, email="someone@example.net"),
+                "id_token": _token_for(
+                    flow, email="someone@example.net", email_verified=True
+                ),
             },
         )
     )
@@ -375,3 +379,54 @@ def auth_client_unused_unused():
     fixture intentionally does nothing.
     """
     return None
+
+
+def test_empty_allowlist_fails_closed(seeded_db, client, oidc_settings, provider):
+    oidc_settings(oidc_allow_any=False, oidc_allowed_groups=(), oidc_allowed_email_domains=())
+    _, token_route = provider
+    flow = _start(client)
+    token_route.mock(
+        return_value=httpx.Response(
+            200, json={"access_token": "at", "id_token": _token_for(flow)}
+        )
+    )
+    response = _callback(client, flow)
+    assert response.status_code == 403
+    assert client.cookies.get("session") is None
+
+
+def test_email_domain_requires_verified_email(
+    seeded_db, client, oidc_settings, provider
+):
+    oidc_settings(
+        oidc_allow_any=False,
+        oidc_allowed_groups=(),
+        oidc_allowed_email_domains=("example.net",),
+    )
+    _, token_route = provider
+    flow = _start(client)
+    token_route.mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "access_token": "at",
+                "id_token": _token_for(
+                    flow, email="someone@example.net", email_verified=False
+                ),
+            },
+        )
+    )
+    response = _callback(client, flow)
+    assert response.status_code == 403
+
+
+def test_flow_cookie_cannot_be_used_as_a_session(seeded_db, client, oidc_settings, provider):
+    oidc_settings()
+    _start(client)
+    flow_cookie = next(
+        (v for k, v in client.cookies.items() if k.startswith("oidc_flow_")), None
+    )
+    assert flow_cookie
+    client.cookies.set("session", flow_cookie, path="/")
+    assert client.get("/homes").status_code in (302, 303)
+    assert client.get("/homes").headers.get("location") == "/login"

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ action|capitalize }} {{ domain }} — VoIP Edge Console{% endblock %}
+{% block content %}
+<h1>{% if action == "park" %}Park home “{{ domain }}”?{% elif action == "destroy" %}{% if parked %}Destroy parked home “{{ domain }}”?{% else %}Destroy home “{{ domain }}”?{% endif %}{% endif %}</h1>
+
+{% if action == "park" %}
+<p class="sub">This home’s remote phones lose service in both directions; calls already in
+progress finish normally.</p>
+<p class="sub">The console will: back up the routing database → snapshot the home’s rows →
+remove them → reload routing → drop its cached registrations (verified).</p>
+<form method="post" action="/homes/{{ domain }}/park">
+  {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+  <div class="formbar"><button class="btn warnact" type="submit">Park this home</button>
+    <a class="btn" href="/homes">Cancel</a></div>
+</form>
+{% else %}
+{% if parked %}
+<p class="sub">This deletes the parked snapshot. The edge already has no trace of this
+home; nothing else changes.</p>
+<form method="post" action="/homes/{{ domain }}/destroy">
+  {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+  <div class="formbar"><button class="btn danger" type="submit">Destroy snapshot</button>
+    <a class="btn" href="/homes">Cancel</a></div>
+</form>
+{% else %}
+<p class="sub">This permanently removes the home and all its routing data, drops its live
+registrations, and discards the snapshot. Shared number rules stay untouched. This cannot
+be undone.</p>
+<label for="confirm">Type <span class="mono">{{ domain }}</span> to confirm</label>
+<form method="post" action="/homes/{{ domain }}/destroy">
+  {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+  <input id="confirm" name="confirm" type="text" class="mono" autocomplete="off" required>
+  <div class="formbar"><button class="btn danger" type="submit">Destroy forever</button>
+    <a class="btn" href="/homes">Cancel</a></div>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

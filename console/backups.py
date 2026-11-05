@@ -223,7 +223,9 @@ def list_backups(backup_dir: str | Path) -> list[Path]:
     if not directory.is_dir():
         return []
     files = [path for path in directory.glob(BACKUP_GLOB) if path.is_file()]
-    files.sort(key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+    # Rotation order follows the timestamp encoded in the name (copying or
+    # restoring a file changes mtime but must not change recency).
+    files.sort(key=lambda path: path.name, reverse=True)
     return files
 
 

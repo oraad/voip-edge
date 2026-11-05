@@ -1,8 +1,18 @@
 [project]
 name = "voip-edge"
-version = "0.1.0"
+version = "0.1.8"
 description = "Admin console for the Kamailio VoIP edge proxy"
 requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.162",
+  "uvicorn>=0.54",
+  "jinja2>=3.1",
+  "httpx>=0.28",
+  "authlib>=1.6",
+  "cryptography>=43",
+  "PyYAML>=6",
+  "MarkupSafe>=3",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -17,5 +27,3 @@ markers = [
 [tool.ruff]
 line-length = 100
 
-[project.optional-dependencies]
-oidc = ["authlib>=1.6", "cryptography>=43"]

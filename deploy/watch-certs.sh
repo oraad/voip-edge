@@ -57,8 +57,10 @@ while :; do
 	[ -f "$MARKER" ] || continue
 	cur=$(stat -c '%Y:%s' "$MARKER")
 	if [ "$cur" != "$last" ]; then
-		# the marker is touched only after fullchain.cer + privkey.key are in
-		reload_once || true
-		last="$cur"
+		# the marker is touched only after the cert pair is fully installed;
+		# keep retrying until Kamailio accepts the reload.
+		if reload_once; then
+			last="$cur"
+		fi
 	fi
 done

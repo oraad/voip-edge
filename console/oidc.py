@@ -35,7 +35,7 @@ from .security import clear_session, issue_session, read_session
 
 router = APIRouter()
 
-FLOW_COOKIE = "oidc_flow"
+FLOW_PREFIX = "oidc_flow_"
 FLOW_TTL_SECONDS = 300
 _DISCOVERY_TTL = 3600.0
 _JWKS_FLOOR = 300.0
@@ -89,7 +89,7 @@ def _sign(raw: str) -> str:
 
 
 def sign_flow(payload: dict) -> str:
-    body = dict(payload, exp=int(time.time()) + FLOW_TTL_SECONDS)
+    body = dict(payload, typ="flow", exp=int(time.time()) + FLOW_TTL_SECONDS)
     raw = json.dumps(body, separators=(",", ":"), sort_keys=True)
     enc = _b64(raw.encode())
     return f"{enc}.{_sign(enc)}"
@@ -107,6 +107,11 @@ def verify_flow(token: str | None) -> dict | None:
         return None
     if int(payload.get("exp", 0)) < int(time.time()):
         return None
+    if payload.get("typ") != "flow":
+        return None
+    for required in ("state", "nonce", "verifier"):
+        if not isinstance(payload.get(required), str) or not payload[required]:
+            return None
     return payload
 
 
@@ -123,7 +128,9 @@ def safe_return_to(value: str | None) -> str:
     """Only same-origin relative paths; never scheme-relative or absolute."""
     if not value or not value.startswith("/"):
         return "/homes"
-    if value.startswith("//"):
+    if value.startswith("//") or "\\" in value or len(value) > 512:
+        return "/homes"
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
         return "/homes"
     return value
 
@@ -138,7 +145,10 @@ async def load_discovery(force: bool = False) -> dict:
     now = time.monotonic()
     if not force and _discovery_cache and now - _discovery_at < _DISCOVERY_TTL:
         return _discovery_cache
-    issuer = _cfg().oidc_issuer.rstrip("/")
+    cfg = _cfg()
+    issuer = cfg.oidc_issuer.rstrip("/")
+    if not cfg.oidc_insecure and not issuer.startswith("https://"):
+        raise ValueError("OIDC_ISSUER must use https")
     url = f"{issuer}/.well-known/openid-configuration"
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.get(url)
@@ -146,6 +156,10 @@ async def load_discovery(force: bool = False) -> dict:
         meta = resp.json()
     if str(meta.get("issuer", "")).rstrip("/") != issuer:
         raise ValueError("issuer mismatch in discovery document")
+    if not cfg.oidc_insecure:
+        for key in ("authorization_endpoint", "token_endpoint", "jwks_uri", "end_session_endpoint"):
+            if meta.get(key) and not str(meta[key]).startswith("https://"):
+                raise ValueError(f"insecure {key} in discovery document")
     _discovery_cache, _discovery_at = meta, now
     return meta
 
@@ -209,7 +223,8 @@ async def validate_id_token(id_token: str, nonce: str, access_token: str | None)
                     "iss": {"essential": True, "value": cfg.oidc_issuer.rstrip("/")},
                     "aud": {"essential": True, "value": cfg.oidc_client_id},
                     "exp": {"essential": True},
-                    "iat": {"essential": False},
+                    "iat": {"essential": True},
+                    "sub": {"essential": True},
                 },
             )
             claims.validate(leeway=_CLOCK_SKEW)
@@ -219,10 +234,23 @@ async def validate_id_token(id_token: str, nonce: str, access_token: str | None)
     else:
         raise ValueError(f"id_token rejected: {last_error}")
 
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not subject or len(subject) > 255:
+        raise ValueError("sub missing or invalid")
+    aud = claims.get("aud")
+    azp = claims.get("azp")
+    if isinstance(aud, (list, tuple)) and len(aud) > 1 and azp != cfg.oidc_client_id:
+        raise ValueError("azp missing for multi-audience token")
+    if azp is not None and azp != cfg.oidc_client_id:
+        raise ValueError("azp mismatch")
     if not hmac.compare_digest(str(claims.get("nonce", "")), nonce):
         raise ValueError("nonce mismatch")
     if access_token and claims.get("at_hash"):
-        digest = hashlib.sha256(access_token.encode()).digest()
+        alg = _jwt_alg(id_token)
+        digest = hashlib.new(
+            {"384": "sha384", "512": "sha512"}.get(alg[-3:], "sha256"),
+            access_token.encode(),
+        ).digest()
         expected = _b64(digest[: len(digest) // 2])
         if not hmac.compare_digest(str(claims["at_hash"]), expected):
             raise ValueError("at_hash mismatch")
@@ -232,14 +260,24 @@ async def validate_id_token(id_token: str, nonce: str, access_token: str | None)
 def identity_allowed(claims: dict) -> bool:
     cfg = _cfg()
     if not cfg.oidc_allowed_groups and not cfg.oidc_allowed_email_domains:
-        return True
+        # Fail closed unless the operator explicitly opted out of an allowlist.
+        return cfg.oidc_allow_any
     groups = claims.get("groups") or []
     if isinstance(groups, str):
         groups = [groups]
+    if not isinstance(groups, (list, tuple)) or not all(
+        isinstance(g, str) for g in groups
+    ):
+        return False
     if cfg.oidc_allowed_groups and set(groups) & set(cfg.oidc_allowed_groups):
         return True
-    email = str(claims.get("email", ""))
-    if cfg.oidc_allowed_email_domains and "@" in email:
+    email = claims.get("email")
+    if (
+        cfg.oidc_allowed_email_domains
+        and isinstance(email, str)
+        and email.count("@") == 1
+        and claims.get("email_verified") is True
+    ):
         domain = email.rsplit("@", 1)[1].lower()
         if domain in {d.lower() for d in cfg.oidc_allowed_email_domains}:
             return True
@@ -260,9 +298,16 @@ async def auth_login(request: Request, next: str = "/homes"):
     if not oidc_enabled():
         return _unavailable()
     cfg = _cfg()
+    from . import observability
+    from .security import login_rate_exceeded
+
+    client_ip = request.client.host if request.client else "unknown"
+    if login_rate_exceeded(client_ip):
+        return PlainTextResponse("Too many sign-in attempts.", status_code=429)
     try:
         meta = await load_discovery()
     except Exception:
+        observability.log_event("oidc_login", outcome="idp_unreachable", client=client_ip)
         return RedirectResponse("/login?error=idp_unreachable", status_code=303)
 
     state = secrets.token_urlsafe(24)
@@ -285,8 +330,10 @@ async def auth_login(request: Request, next: str = "/homes"):
     response = RedirectResponse(
         f"{meta['authorization_endpoint']}?{urlencode(params)}", status_code=303
     )
+    observability.log_event("oidc_login", outcome="started", client=client_ip)
+    # One cookie per transaction: a second tab cannot overwrite the first.
     response.set_cookie(
-        FLOW_COOKIE, flow, max_age=FLOW_TTL_SECONDS, httponly=True,
+        f"{FLOW_PREFIX}{state}", flow, max_age=FLOW_TTL_SECONDS, httponly=True,
         samesite="lax", secure=cfg.secure_cookie, path="/auth",
     )
     return response
@@ -296,9 +343,17 @@ async def auth_login(request: Request, next: str = "/homes"):
 async def auth_callback(request: Request, code: str = "", state: str = ""):
     if not oidc_enabled():
         return _unavailable()
-    flow = verify_flow(request.cookies.get(FLOW_COOKIE))
+    from . import observability
+    from .security import login_rate_exceeded
+
+    client_ip = request.client.host if request.client else "unknown"
+    if login_rate_exceeded(client_ip):
+        return PlainTextResponse("Too many sign-in attempts.", status_code=429)
+    flow_cookie = f"{FLOW_PREFIX}{state}" if state else ""
+    flow = verify_flow(request.cookies.get(flow_cookie) if flow_cookie else None)
 
     def fail(reason: str, status: int = 303) -> HTMLResponse | RedirectResponse:
+        observability.log_event("oidc_login", outcome=reason, client=client_ip)
         if reason == "claims_denied":
             response = HTMLResponse(
                 f"<h1>Access denied</h1><p>{ERROR_TEXT[reason]}</p>"
@@ -307,7 +362,8 @@ async def auth_callback(request: Request, code: str = "", state: str = ""):
             )
         else:
             response = RedirectResponse(f"/login?error={reason}", status_code=status)
-        response.delete_cookie(FLOW_COOKIE, path="/auth")
+        if flow_cookie:
+            response.delete_cookie(flow_cookie, path="/auth")
         return response
 
     if flow is None or not state or not hmac.compare_digest(state, flow["state"]):
@@ -325,19 +381,27 @@ async def auth_callback(request: Request, code: str = "", state: str = ""):
     if not identity_allowed(claims):
         return fail("claims_denied")
 
-    email = str(claims.get("email") or claims.get("preferred_username") or "")
+    email = str(claims.get("email") or claims.get("preferred_username") or "")[:255]
     subject = f"{claims.get('iss')}#{claims.get('sub')}"
     response = RedirectResponse(safe_return_to(flow.get("next")), status_code=303)
     issue_session(response, sub=subject, email=email)
-    response.delete_cookie(FLOW_COOKIE, path="/auth")
+    if flow_cookie:
+        response.delete_cookie(flow_cookie, path="/auth")
+    observability.log_event("oidc_login", outcome="success", client=client_ip)
     return response
 
 
 @router.post("/auth/logout")
 async def auth_logout(request: Request):
+    from . import observability
+
     session = read_session(request)
     response = RedirectResponse("/login", status_code=303)
     clear_session(response)
+    for name in list(request.cookies):
+        if name.startswith(FLOW_PREFIX):
+            response.delete_cookie(name, path="/auth")
+    observability.log_event("oidc_logout", outcome="ok")
     if not session or not oidc_enabled():
         return response
     try:

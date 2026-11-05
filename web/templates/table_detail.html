@@ -24,5 +24,8 @@
   </dl>
 </section>
 
-<p class="meta">Editing this row is not available in the read-only browser.</p>
+<div class="formbar">
+  <a class="btn pri" href="/tables/{{ table }}/{{ key|urlencode }}/edit">Edit</a>
+  <a class="btn" href="/tables/{{ table }}/{{ key|urlencode }}/delete">Delete…</a>
+</div>
 {% endblock %}

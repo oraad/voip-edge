@@ -163,11 +163,11 @@ cd /root/voip-edge
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
 docker build \
   --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.0 .
+  -t voip-edge-console:0.1.8 .
 ```
 
 Arcane: build the same Dockerfile once via **Images → Build** and tag it
-`voip-edge-console:0.1.0`. The compose service references that image; it does
+`voip-edge-console:0.1.8`. The compose service references that image; it does
 not rebuild during a stack deploy.
 
 The build pins `fastapi`, `uvicorn`, `jinja2`, `MarkupSafe` and `PyYAML` to the
@@ -188,7 +188,10 @@ If the console is part of the existing stack, merge this service into
 
 ```yaml
   console:
-    # ... copy the console: service from /root/voip-edge/compose.yml
+    # Merge is discouraged: `env_file: .env` and `build.context: .` are
+    # relative to the compose file, so a copy into another stack silently
+    # loads the WRONG env and build directory. Deploy this repo's compose.yml
+    # as its own stack, or rewrite both paths to absolute values.
 ```
 
 Otherwise deploy `/root/voip-edge/compose.yml` as its own Arcane stack
@@ -294,7 +297,7 @@ run it that way, all of these must be true:
    ```bash
    getent group console                      # e.g. 995
    docker build --build-arg CONSOLE_GID=995 \
-     -t voip-edge-console:0.1.0 .
+     -t voip-edge-console:0.1.8 .
    ```
    `dgram_group "console"` is resolved by name inside `voip-edge`. The stock
    image may not contain that name, and `group_add` does not create one. Build

@@ -10,6 +10,7 @@ task.  With no registry rows the page shows the first-use empty state and the
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -75,6 +76,23 @@ def homes(
                 }
             )
 
+    parked: list[dict] = []
+    try:
+        from . import settings as settings_module
+        from .sidecar import Sidecar
+
+        rows = Sidecar(
+            Path(settings_module.settings.sidecar_dir) / "console.sqlite"
+        ).list_parked()
+        active = {home["domain"] for home in homes}
+        parked = [
+            {"domain": row["domain"], "parked_at": str(row.get("created_at", ""))[:10]}
+            for row in rows
+            if row["domain"] not in active
+        ]
+    except BaseException:
+        parked = []
+
     return request.app.state.templates.TemplateResponse(
         request,
         "homes.html",
@@ -82,6 +100,7 @@ def homes(
             "nav": "homes",
             "fragment": _wants_fragment(request),
             "homes": homes,
+            "parked": parked,
         },
         headers=NO_STORE,
     )

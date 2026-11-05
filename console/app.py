@@ -7,6 +7,7 @@ with T3; ``web/`` must contain zero table logic (plan §4).
 from __future__ import annotations
 
 import hmac
+import time
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -41,7 +42,7 @@ STATIC_DIR = WEB_DIR / "static"
 NO_STORE = {"Cache-Control": "no-store"}
 
 # READONLY exemptions: authentication bootstrap and session teardown only.
-READONLY_EXEMPT_PATHS = frozenset({"/login", "/logout"})
+READONLY_EXEMPT_PATHS = frozenset({"/login", "/logout", "/auth/logout"})
 
 
 def _mono(value: object) -> Markup:
@@ -78,6 +79,26 @@ def create_app() -> FastAPI:
         threading.Thread(
             target=_startup_probe, name="console-capability-probe", daemon=True
         ).start()
+
+        def _sweeper() -> None:
+            from .lifecycle import resume_pending
+            from .sidecar import Sidecar, reissue_pending_reloads
+
+            interval = settings_module.settings.sweeper_interval
+            if interval <= 0:
+                return
+            cfg = settings_module.settings
+            while True:
+                try:
+                    sc = Sidecar(Path(cfg.sidecar_dir) / "console.sqlite")
+                    worker = _get_worker()
+                    resume_pending(sc, cfg.db_path, worker, Path(cfg.sidecar_dir) / "backups")
+                    reissue_pending_reloads(sc, worker)
+                except BaseException:
+                    pass
+                time.sleep(interval)
+
+        threading.Thread(target=_sweeper, name="console-sweeper", daemon=True).start()
         yield
 
     app = FastAPI(
@@ -91,6 +112,40 @@ def create_app() -> FastAPI:
     )
     templates.env.filters["mono"] = _mono
     app.state.templates = templates
+
+    # ---- error taxonomy -> HTTP surfaced consistently (plan §4) ----
+    from fastapi.responses import JSONResponse
+
+    from .errors import (
+        ConflictError,
+        ConsoleError,
+        DBBusy,
+        KamailioUnavailable,
+        ReloadError,
+        SidecarUnavailable,
+        ValidationError,
+    )
+
+    _ERROR_STATUS = {
+        ValidationError: 422,
+        ConflictError: 409,
+        DBBusy: 503,
+        KamailioUnavailable: 503,
+        SidecarUnavailable: 503,
+        ReloadError: 502,
+    }
+
+    @app.exception_handler(ConsoleError)
+    async def _console_error(request: Request, exc: ConsoleError):
+        status = next(
+            (code for cls, code in _ERROR_STATUS.items() if isinstance(exc, cls)), 500
+        )
+        detail = getattr(exc, "summary", "") or str(exc)
+        return JSONResponse(
+            {"error": type(exc).__name__, "detail": detail},
+            status_code=status,
+            headers=NO_STORE,
+        )
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -305,12 +360,20 @@ def create_app() -> FastAPI:
         }
 
         def _store(status: str, table: str, rpc_name: str, params: list) -> None:
-            # Structured observability only; pending-intent persistence is
-            # owned by the lifecycle/startup sweeper paths.  Worker vocabulary
-            # (done/pending) maps to the operator-facing reload outcomes.
-            outcome = {"done": "applied", "pending": "scheduled"}.get(
-                status, status
-            )
+            # Persist pending reloads so a console restart never loses them
+            # (plan §5.6); clear on success.  Never let sidecar trouble take
+            # the worker down.
+            outcome = {"done": "applied", "pending": "scheduled"}.get(status, status)
+            try:
+                from .sidecar import Sidecar
+
+                sc = Sidecar(Path(settings_module.settings.sidecar_dir) / "console.sqlite")
+                if status == "done":
+                    sc.clear_pending_reload(table)
+                else:
+                    sc.record_pending_reload(table, last_error=None)
+            except BaseException:
+                pass
             observability.log_reload_outcome(
                 table=table, status=outcome, rpc=rpc_name
             )
@@ -330,8 +393,9 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     # T7: onboarding wizard (stateless hidden-input draft, one write txn)
     # ------------------------------------------------------------------
-    from . import wizard_ui
+    from . import lifecycle_ui, wizard_ui
 
+    app.include_router(lifecycle_ui.router)
     app.include_router(wizard_ui.router)
 
     # OIDC: /auth/login, /auth/callback, /auth/logout (docs/oidc.md)

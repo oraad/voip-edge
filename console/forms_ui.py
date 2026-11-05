@@ -709,7 +709,7 @@ def _coerce(
                 coerced[field.name] = value
                 problems.append((field, "Enter a whole number."))
         else:
-            coerced[field.name] = "" if value is None else str(value)
+            coerced[field.name] = "" if value is None else str(value).strip()
     # Non-descriptor keys collected for family validators survive coercion.
     for name, value in values.items():
         coerced.setdefault(name, value)

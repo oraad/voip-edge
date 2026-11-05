@@ -285,6 +285,7 @@ class Sidecar:
         op: str | None = None,
         domain: str | None = None,
         limit: int = 200,
+        newest_first: bool = False,
     ) -> list[dict[str, Any]]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -299,7 +300,7 @@ class Sidecar:
         with self._cursor() as conn:
             rows = conn.execute(
                 f"SELECT id, ts, op, domain, state, detail FROM console_audit "
-                f"{where} ORDER BY id LIMIT ?",
+                f"{where} ORDER BY id {'DESC' if newest_first else 'ASC'} LIMIT ?",
                 tuple(params),
             ).fetchall()
         return [dict(row) for row in rows]

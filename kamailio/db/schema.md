@@ -35,7 +35,7 @@ record — fields comma-joined in this order, extracted in the script with
 
 | select idx | field | meaning |
 |---|---|---|
-| — | `tprefix` | SIP domain as phones/homes use it (matches REGISTER To/From domain) |
+| — | `tprefix` | SIP domain as phones/homes use it (matched as mtree longest-prefix) |
 | 0 | tenantid | opaque short id (`T1`, …) |
 | 1 | ds_onnet | dispatcher set id of the home's **voip-stack** (tunnel address) |
 | 2 | ds_pstn | dispatcher set id of the home's **PSTN gateway(s)**; **0 = no trunk** |
@@ -54,8 +54,8 @@ audiotex ranges); the edge answers 403. `0` or omitted = nothing blocked.
 
 | dpid | use |
 |---|---|
-| free (seeded: 10) | emergency "country profile" — matched calls go straight to the origin home's PSTN set (Phase 2 step 1) |
-| 90 (convention) | blocked/premium destinations — matched calls get 403 before any routing |
+| free (operator-defined; none seeded) | emergency "country profile" — matched calls go straight to the origin home's PSTN set (Phase 2 step 1) |
+| free (operator-defined; none seeded) | blocked/premium destinations — matched calls get 403 before any routing |
 
 Emergency vs blocked differ in one crucial way: emergency still REACHES the
 origin home's PSTN gateway (never on-net, never blocked); premium matches are
@@ -87,16 +87,16 @@ Standard Kamailio dispatcher table. Only the setid/destination conventions
 matter:
 
 * per tenant two set ids: voip-stack set and PSTN-gateway set (ids are free;
-  the seed uses `11/12` on-net and `31/32` PSTN as an example),
-* `destination` for a voip-stack: its overlay address
-  `sip:voip.<client>.internal:5060;transport=tcp` (the Pangolin resource
-  name; **TCP is required** over the 1280-MTU tunnel for any
-  SDP-bearing SIP — UDP fragments die silently there),
+  the seed uses `11/12/13` on-net and `31/32/33` PSTN as examples),
+* `destination` for a voip-stack: its **home LAN IP** (reached through the
+  site's native tunnel routing), e.g. `sip:10.0.0.10:5060;transport=tcp`.
+  **TCP is required** over the 1280-MTU tunnel for any SDP-bearing SIP — UDP
+  fragments die silently there. Pangolin `*.internal` resource names are the
+  legacy convention and are not used.
 * `destination` for a PSTN gateway: this deployment routes PSTN via the
   tenant's voip-stack (HT813 stays LAN-only), so the PSTN set destination is
-  the same resource: `sip:voip.<client>.internal:5060;transport=udp`
-  (`pangolin/SETUP.md` §4). (Generic alternative: a direct ATA address over
-  any LAN-routed tunnel — `pangolin/SETUP.md` §4 "direct-to-ATA".)
+  the same LAN-IP URI with `;transport=tcp`. (Generic alternative: a direct
+  ATA address over any LAN-routed tunnel.)
 * destinations are OPTIONS-pinged (`ds_probing_mode=1`); any SIP response
   class counts as alive (`ds_ping_reply_codes` accepts 1xx–5xx), so ATAs that
   answer 405/404 to OPTIONS still stay active.

@@ -41,15 +41,19 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
-# Pinned to the versions verified in this repo's .venv. PyYAML and MarkupSafe
-# are direct imports (descriptors.py, app.py), so they are pinned explicitly.
-# No test dependencies (pytest, httpx, selectolax) belong in the image.
+# Pinned to the versions verified in this repo's .venv. httpx/authlib/
+# cryptography are runtime imports of console.oidc (loaded by create_app even
+# when OIDC is disabled), so they belong in the image.
+# No test dependencies (pytest, selectolax) belong in the image.
 RUN pip install --no-cache-dir \
       "fastapi==0.162.0" \
       "uvicorn==0.54.0" \
       "jinja2==3.1.6" \
       "MarkupSafe==3.0.4" \
-      "PyYAML==6.0.3"
+      "PyYAML==6.0.3" \
+      "httpx==0.28.1" \
+      "authlib==1.6.0" \
+      "cryptography==43.0.0"
 
 # The group name matters: Kamailio creates the jsonrpcs datagram socket with
 # dgram_group "console" and mode 0660. For the non-root recipe the name must
@@ -81,4 +85,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # workers=1 is a hard requirement (process-local locks, queues and session
 # state). Do not add --workers or a multi-process manager here.
-CMD ["sh", "-c", "exec uvicorn console.app:app --host \"${CONSOLE_BIND}\" --port \"${CONSOLE_PORT}\" --workers 1"]
+CMD ["sh", "-c", "exec uvicorn console.app:app --host \"${CONSOLE_BIND}\" --port \"${CONSOLE_PORT}\" --workers 1 --no-access-log"]

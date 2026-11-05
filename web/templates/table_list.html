@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ table_label }} — VoIP Edge Console{% endblock %}
 {% block content %}
+{% if table not in ("tenant_registry", "tenant_landline") %}
+<div class="pagehead" style="margin-bottom:6px">
+  <div></div>
+  <a class="btn pri" href="/tables/{{ table }}/new">+ New row</a>
+</div>
+{% endif %}
 {% set flash_message = request.query_params.get('flash', '') if request else '' %}
 {% set flash_tone = request.query_params.get('tone', 'scheduled') if request else 'scheduled' %}
 {% if flash_tone not in ('scheduled', 'applied', 'verified', 'failed') %}

@@ -23,8 +23,8 @@ from plan §2.
 | `CONSOLE_SECRET` | `dev-secret` | Session cookie signing secret. **Set an explicit random value.** Plan §10 says it may derive from `CONSOLE_TOKEN`; the current settings module uses a fixed dev fallback instead. |
 | `CONSOLE_BIND` | `127.0.0.1` | Production: `100.64.0.9` (host-networked container, reachable only through Pangolin). |
 | `CONSOLE_PORT` | `8080` | Pangolin resource target port. |
-| `CONSOLE_DB_PATH` | `edge.sqlite` | Absolute path to the mounted Kamailio DB, e.g. `/etc/kamailio/voip-edge/db/edge.sqlite`. Never point at a copy. |
-| `CONSOLE_SIDECAR_DIR` | `console-data` | Directory for `console.sqlite` and backups. Production: `${EDGE_HOME}/console`. The directory must exist. |
+| `CONSOLE_DB_PATH` | `edge.sqlite` | Absolute path to the mounted Kamailio DB, e.g. `/data/edge.sqlite` (host: `${EDGE_HOME}/kamailio/db/edge.sqlite`). Never point at a copy. |
+| `CONSOLE_SIDECAR_DIR` | `console-data` | Directory for `console.sqlite` and backups. Production: `/var/lib/console` (host: `${EDGE_HOME}/console`). The directory must exist. |
 | `CONSOLE_RPC_SOCK` | `/run/kamailio/kamailio_rpc.sock` | Kamailio `jsonrpcs` unix datagram socket; the console needs read/write access and the shared `console` group. |
 | `CONSOLE_RPC_TIMEOUT_MS` | `2000` | Per-RPC timeout. A timeout is surfaced as an unreachable edge, not a crash. |
 | `CONSOLE_THROTTLE_TENANTDOM` | not read yet | Plan §10 per-table throttle map (measured deltas). Current code hard-codes 5 s per table; wiring is T10 packaging. |

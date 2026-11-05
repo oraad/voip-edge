@@ -5,7 +5,7 @@
 -- (kamailio -A 'DBURL="mysql://user:pass@host/voip"'), keep table/column names
 -- identical, and use kamdbctl to create them. See schema.md.
 --
--- The rows below are EXAMPLES for two fictional tenants, clearly marked.
+-- The rows below are EXAMPLES for three fictional tenants, clearly marked.
 -- Adding a real home = data rows only (README.md §Onboarding), never edits
 -- of kamailio.cfg. Tunnel addresses/resources must match the Pangolin setup.
 -- ============================================================================
@@ -162,7 +162,7 @@ INSERT OR REPLACE INTO tenant_landline (tprefix, tvalue) VALUES
 -- Destination addressing convention (current): the voip-stack host's LAN IP,
 -- reached through the site's native Newt routing (the Pangolin site carries
 -- the home LAN subnet; no Pangolin "resources" / *.internal names involved).
-INSERT INTO dispatcher (setid, destination, flags, priority, attrs, description)
+INSERT OR REPLACE INTO dispatcher (setid, destination, flags, priority, attrs, description)
 VALUES
 	(11, 'sip:10.0.0.10:5060;transport=tcp', 0, 0, '', 'alpha voip-stack (HA host LAN IP, native routing)'),
 	(31, 'sip:10.0.0.10:5060;transport=tcp', 0, 0, '', 'alpha PSTN via voip-stack (HT813 trunk, LAN-only)');
@@ -181,7 +181,7 @@ INSERT OR REPLACE INTO tenant_landline (tprefix, tvalue) VALUES
 	('03333333', 'T3,home,13,1');
 -- dispatcher destinations: each home's voip-stack LAN IP (native routing);
 -- substitute the real values before seeding:
-INSERT INTO dispatcher (setid, destination, flags, priority, attrs, description)
+INSERT OR REPLACE INTO dispatcher (setid, destination, flags, priority, attrs, description)
 VALUES
 	(12, 'sip:10.0.99.12:5060;transport=tcp', 0, 0, '', 'beta voip-stack (PLACEHOLDER — set its HA LAN IP)'),
 	(32, 'sip:10.0.99.12:5060;transport=tcp', 0, 0, '', 'beta PSTN via voip-stack (PLACEHOLDER)'),

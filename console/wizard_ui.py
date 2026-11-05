@@ -586,7 +586,7 @@ def validate_step(
         # Packed keys cannot contain commas/pluses; landline digits are part
         # of the landline family, but the generic rules keep the wizard honest
         # while that family is still landing.
-        if not validators.is_known("landline_digits"):
+        if True:  # always validate the draft landline (digits >= 3)
             digit_errors, _ = validators.digits(draft.landline, validators.ValidationContext())
             _add(errors, "landline", digit_errors)
             if draft.landline.isdigit() and len(draft.landline) < 3:

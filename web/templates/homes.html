@@ -1,5 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Homes — VoIP Edge Console{% endblock %}
+{% block title %}Homes — VoIP Edge Console{% if parked %}
+<h2>Parked</h2>
+<div class="panel" style="padding:0; overflow-x:auto">
+  <table>
+    <thead><tr><th scope="col">Domain</th><th scope="col">Parked on</th>
+      <th scope="col">Status</th><th scope="col"><span class="meta">Actions</span></th></tr></thead>
+    <tbody>
+      {% for row in parked %}
+      <tr>
+        <td class="mono">{{ row.domain }}</td>
+        <td>{{ row.parked_at }}</td>
+        <td><span class="chip muted">Parked</span></td>
+        <td>
+          <form method="post" action="/homes/{{ row.domain|urlencode }}/restore" style="display:inline">
+            {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+            <button class="btn" type="submit">Restore</button>
+          </form>
+          <a href="/homes/{{ row.domain|urlencode }}/destroy">Destroy…</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
 {% block content %}
 <div class="pagehead">
   <div>
@@ -7,7 +32,7 @@
     <div class="sub">Every tenant routed through this edge. Writes save to the routing
       database and reload Kamailio — no restarts.</div>
   </div>
-  <button class="btn pri" type="button" disabled aria-disabled="true">+ Onboard a home</button>
+  <a class="btn pri" href="/wizard">+ Onboard a home</a>
 </div>
 
 {% if homes %}
@@ -16,7 +41,7 @@
 <section class="panel empty" aria-labelledby="empty-homes-title">
   <h2 id="empty-homes-title">No homes yet</h2>
   <p>Onboard the first home to create its routing rows and trusted source.</p>
-  <button class="btn pri" type="button" disabled aria-disabled="true">+ Onboard a home</button>
+  <a class="btn pri" href="/wizard">+ Onboard a home</a>
   <p class="meta">The onboarding wizard arrives in a later task; this button is a placeholder.</p>
 </section>
 {% endif %}
@@ -42,7 +67,8 @@
         <td class="mono">{{ home.route_sets }}</td>
         <td>{{ home.coherence }}</td>
         <td><span class="chip ok">{{ home.status }}</span></td>
-        <td><a href="/tables/tenant_registry/{{ home.domain|urlencode }}">View</a></td>
+        <td><a href="/tables/tenant_registry/{{ home.domain|urlencode }}">View</a>
+            <a href="/homes/{{ home.domain|urlencode }}/park">Park…</a></td>
       </tr>
       {% else %}
       <tr>
@@ -52,4 +78,29 @@
     </tbody>
   </table>
 </div>
+{% if parked %}
+<h2>Parked</h2>
+<div class="panel" style="padding:0; overflow-x:auto">
+  <table>
+    <thead><tr><th scope="col">Domain</th><th scope="col">Parked on</th>
+      <th scope="col">Status</th><th scope="col"><span class="meta">Actions</span></th></tr></thead>
+    <tbody>
+      {% for row in parked %}
+      <tr>
+        <td class="mono">{{ row.domain }}</td>
+        <td>{{ row.parked_at }}</td>
+        <td><span class="chip muted">Parked</span></td>
+        <td>
+          <form method="post" action="/homes/{{ row.domain|urlencode }}/restore" style="display:inline">
+            {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+            <button class="btn" type="submit">Restore</button>
+          </form>
+          <a href="/homes/{{ row.domain|urlencode }}/destroy">Destroy…</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

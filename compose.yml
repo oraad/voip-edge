@@ -17,7 +17,7 @@
 
 services:
   console:
-    image: voip-edge-console:0.1.0
+    image: voip-edge-console:0.1.8
     build:
       context: .
       dockerfile: Dockerfile
@@ -27,6 +27,8 @@ services:
     container_name: voip-edge-console
     network_mode: host
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
     env_file:
       - .env
     environment:

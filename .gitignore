@@ -16,7 +16,13 @@ kamailio/db/*.sqlite-shm
 *.cer
 *.pem
 tls/
-acme/
+/acme/
 certs/
 backups/
 tools/private-deny.txt
+.env
+.env.*
+!.env.example
+deploy/acme.env
+deploy/*.env
+

@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import re
 import sqlite3
+
+from .errors import DBBusy
 import threading
 from contextlib import contextmanager
 from pathlib import Path

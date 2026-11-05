@@ -66,6 +66,7 @@ def sign_session(payload: dict) -> str:
     is honoured (useful for tests); normal login uses the configured TTL.
     """
     body = dict(payload)
+    body.setdefault("typ", "session")
     body.setdefault(
         "exp", int(time.time()) + settings_module.settings.session_ttl_seconds
     )
@@ -96,6 +97,14 @@ def verify_session(token: str | None) -> dict | None:
     exp = payload.get("exp")
     if not isinstance(exp, int) or exp <= int(time.time()):
         return None
+    # Domain separation: only session tokens are sessions; a flow cookie (or
+    # any other signed payload) must never authenticate a request.
+    if payload.get("typ") != "session":
+        return None
+    if not isinstance(payload.get("sub"), str) or not payload["sub"]:
+        return None
+    if not isinstance(payload.get("csrf"), str) or not payload["csrf"]:
+        return None
     return payload
 
 
@@ -118,11 +127,16 @@ def new_csrf_token() -> str:
 
 
 def csrf_value_matches(request: Request, supplied: str | None) -> bool:
-    """True when *supplied* equals the double-submit cookie value."""
+    """True when *supplied* matches both the csrf cookie and the signed session."""
     cookie = request.cookies.get(CSRF_COOKIE)
     if not cookie or not supplied:
         return False
-    return hmac.compare_digest(cookie.encode("utf-8"), supplied.encode("utf-8"))
+    if not hmac.compare_digest(cookie.encode(), supplied.encode()):
+        return False
+    session = verify_session(request.cookies.get(SESSION_COOKIE))
+    if not session:
+        return False
+    return hmac.compare_digest(session["csrf"].encode(), cookie.encode())
 
 
 def csrf_valid(request: Request) -> bool:
@@ -154,7 +168,7 @@ def issue_session(response: Response, sub: str = "token", email: str = "") -> st
         sign_session(payload),
         max_age=cfg.session_ttl_seconds,
         httponly=True,
-        samesite="Strict",
+        samesite="Lax",
         secure=cfg.secure_cookie,
         path="/",
     )
@@ -163,7 +177,7 @@ def issue_session(response: Response, sub: str = "token", email: str = "") -> st
         csrf,
         max_age=cfg.session_ttl_seconds,
         httponly=False,
-        samesite="Strict",
+        samesite="Lax",
         secure=cfg.secure_cookie,
         path="/",
     )

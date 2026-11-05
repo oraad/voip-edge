@@ -204,11 +204,8 @@ def _audit_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _recent_audit(sidecar: Sidecar, limit: int = AUDIT_LIMIT) -> list[dict[str, Any]]:
-    # ``audit_rows`` returns ascending ids; read a generous window then take
-    # the newest rows so a long history still shows the most recent events.
-    rows = sidecar.audit_rows(limit=max(limit * 5, 1000))
-    rows.reverse()
-    return rows[:limit]
+    # Newest first, straight from the database (no truncation of a window).
+    return sidecar.audit_rows(limit=limit, newest_first=True)
 
 
 def _human_size(size: int) -> str:

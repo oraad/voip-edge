@@ -45,7 +45,14 @@ def login(client: TestClient, token: str | None = None) -> str:
 
 
 @pytest.fixture()
-def app():
+def app(monkeypatch):
+    from dataclasses import replace as _replace
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        _replace(settings_module.settings, sweeper_interval=0),
+    )
     return create_app()
 
 

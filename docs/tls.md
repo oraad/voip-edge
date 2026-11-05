@@ -36,7 +36,7 @@ Secrets never enter this repo:
 ## Adding a tenant's TLS name
 
 1. Append `,sip.<client>.home.example.net` to `ACME_DOMAINS`.
-2. One-shot reissue: `ACME_FORCE_ISSUE=1`, restart the acme container, watch
+2. One-shot reissue: `ACME_FORCE_ISSUE=1`, recreate the acme container (`docker compose up -d --force-recreate acme`), watch
    `docker logs <acme>` for `Cert success`.
 3. Set `ACME_FORCE_ISSUE=0` again.
 4. The deploy hook + cert-reloader install and hot-reload the new certificate

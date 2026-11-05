@@ -44,8 +44,8 @@ def test_correct_token_sets_session_and_csrf_cookies(client):
     csrf_cookie = next(c for c in raw if c.startswith("csrf="))
     assert "httponly" in session_cookie.lower()
     assert "httponly" not in csrf_cookie.lower()
-    assert "samesite=strict" in session_cookie.lower()
-    assert "samesite=strict" in csrf_cookie.lower()
+    assert "samesite=lax" in session_cookie.lower()
+    assert "samesite=lax" in csrf_cookie.lower()
 
     csrf = client.cookies.get("csrf")
     assert csrf

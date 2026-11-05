@@ -29,8 +29,8 @@ install_if_changed() {
 		changed=1
 	fi
 }
-install_if_changed "$FULL" "$DEST/fullchain.cer"
-install_if_changed "$KEY"  "$DEST/privkey.key"
+install_if_changed "$FULL" "$DEST/sip.crt"
+install_if_changed "$KEY"  "$DEST/sip.key"
 
 if [ "$changed" = 1 ]; then
 	if docker inspect voip-edge >/dev/null 2>&1; then

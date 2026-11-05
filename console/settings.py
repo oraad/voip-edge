@@ -16,7 +16,11 @@ def _bool(name: str, default: bool = False) -> bool:
 class Settings:
     # auth / session
     token: str = os.environ.get("CONSOLE_TOKEN", "dev-token")
-    secret: str = os.environ.get("CONSOLE_SECRET", "") or "dev-secret"
+    # No fixed fallback: derive from the token when CONSOLE_SECRET is absent.
+    # (A public constant would let anyone forge a session cookie.)
+    secret: str = os.environ.get("CONSOLE_SECRET", "") or __import__("hashlib").sha256(
+        ("voip-edge-session:" + os.environ.get("CONSOLE_TOKEN", "dev-token")).encode()
+    ).hexdigest()
     secure_cookie: bool = _bool("CONSOLE_SECURE_COOKIE")
     # bind
     bind: str = os.environ.get("CONSOLE_BIND", "127.0.0.1")
@@ -55,6 +59,12 @@ class Settings:
         d for d in os.environ.get("OIDC_ALLOWED_EMAIL_DOMAINS", "").split(",") if d
     )
     oidc_provider_name: str = os.environ.get("OIDC_PROVIDER_NAME", "SSO")
+    # Explicit opt-in when neither groups nor email domains are configured.
+    oidc_allow_any: bool = _bool("OIDC_ALLOW_ANY", False)
+    # Allow http:// issuers/endpoints (loopback development only).
+    oidc_insecure: bool = _bool("OIDC_INSECURE", False)
+    # lifecycle/pending-reload sweeper cadence (0 disables; tests set 0)
+    sweeper_interval: int = int(os.environ.get("CONSOLE_SWEEPER_INTERVAL", "30"))
 
 
 settings = Settings()

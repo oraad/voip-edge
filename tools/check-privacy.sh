@@ -14,24 +14,30 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
+MODE=staged
 if [ "${1:-}" = "--all" ]; then
-    FILES=$(git ls-files)
+    MODE=all
+    FILES=$(git ls-files -co --exclude-standard)
 else
     FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 fi
 [ -n "$FILES" ] || exit 0
 
+read_file() { # read_file <path>: staged mode reads the INDEX blob, not the worktree
+    if [ "$MODE" = "all" ]; then cat -- "$1"; else git show ":$1" 2>/dev/null; fi
+}
+
 fail=0
 deny="tools/private-deny.txt"
 
 # --- 1. file gate ---------------------------------------------------------
-for f in $FILES; do
+printf '%s\n' "$FILES" | while IFS= read -r f; do
     case "$f" in
         *.sqlite|*.sqlite-wal|*.sqlite-shm|*.db)
             echo "privacy: refusing database file: $f" >&2; fail=1 ;;
         *.key|*.pem|*.crt|*.cer|*privkey*|*fullchain*)
             echo "privacy: refusing key/cert material: $f" >&2; fail=1 ;;
-        *technitium_tsig*|*/tls/*|*/acme/*|*console-data/*|*backups/*)
+        *technitium_tsig*|*/tls/*|/acme/*|*/acme/data/*|*console-data/*|*/backups/*)
             echo "privacy: refusing secret/state path: $f" >&2; fail=1 ;;
         .env|*.env|*/.env)
             echo "privacy: refusing env file: $f" >&2; fail=1 ;;
@@ -43,7 +49,7 @@ if [ -f "$deny" ]; then
     while IFS= read -r token; do
         case "$token" in ''|\#*) continue ;; esac
         hits=$(printf '%s\n' "$FILES" | while IFS= read -r f; do
-            [ -f "$f" ] && grep -IilF -- "$token" "$f" 2>/dev/null
+            read_file "$f" 2>/dev/null | grep -IilF -- "$token" /dev/stdin 2>/dev/null | sed "s|/dev/stdin|$f|"
         done | sort -u | tr '\n' ' ')
         if [ -n "$hits" ]; then
             echo "privacy: deny-listed value found in: $hits" >&2
@@ -55,9 +61,9 @@ fi
 
 # generic high-risk patterns that must never appear in tracked text
 gen=$(printf '%s\n' "$FILES" | while IFS= read -r f; do
-    [ -f "$f" ] || continue
-    grep -IlE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' "$f" 2>/dev/null
-    grep -IlE 'RFC2136_(SECRET|KEY)|Technitium_Token=|NSUPDATE_KEY=' "$f" 2>/dev/null
+    read_file "$f" 2>/dev/null | grep -qE 'BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY' && echo "$f"
+    # DNS-01 key *values* are caught by the private deny-list; matching the
+    # variable names here produced false positives in documentation.
 done | sort -u | tr '\n' ' ')
 if [ -n "$gen" ]; then
     echo "privacy: private key / DNS-01 credential material found in: $gen" >&2

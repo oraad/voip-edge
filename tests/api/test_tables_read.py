@@ -92,10 +92,10 @@ def test_detail_lists_descriptor_fields_and_help(seeded_db, auth_client):
     assert "Home SIP domain" in page
     assert "create-only" in page
     assert "Read-only" in page
-    # Detail view is read-only: no table-edit/delete forms.  The global
-    # sign-out form in the status strip is the only POST form on the page.
-    assert "/edit" not in response.text
-    assert "/delete" not in response.text
+    # Detail links to edit/delete but renders no table form itself (the global
+    # sign-out form in the status strip is the only POST form on the page).
+    assert 'action="/tables/' not in response.text
+    assert "/edit" in response.text
 
 
 # ---------------------------------------------------------------------------
