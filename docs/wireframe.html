@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>VoIP Edge console — UI wireframes v2</title><style>
+  /* standalone fallbacks (inside the chat these come from the app theme) */
+  :root {
+    --background:#0f1115; --foreground:#e7e9ee; --muted:#1c2029;
+    --muted-foreground:#a7adbc; --border:#2b3140; --primary:#4f7cff;
+    --primary-foreground:#ffffff; --destructive:#f0564f; --warning:#e7b53c;
+    --success:#41b06c; --info:#4fa8f0; --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.95rem; /* ~15px body — ops-tool density, not marketing page */
+  }
+  html { background: var(--background); color: var(--foreground); font-family: system-ui,-apple-system,sans-serif; }
+  body { margin: 0; }
+  .app { display: grid; grid-template-columns: 190px 1fr; min-height: 560px; }
+
+  /* global status region — reserved on every page */
+  .statusbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:7px 14px;
+               border-bottom:1px solid var(--border); background: var(--muted); font-size:.85em;
+               grid-column: 1 / -1; }
+  .statusbar .chip { display:inline-flex; gap:6px; align-items:center; }
+  .statusbar .chip.warn { color: var(--warning); }
+  .statusbar .chip.err  { color: var(--destructive); }
+  .statusbar .chip.ok   { color: var(--success); }
+  .statusbar .muted { color: var(--muted-foreground); }
+
+  .nav { border-right: 1px solid var(--border); padding: 12px 10px; }
+  .nav .brand { font-weight: 700; font-size: 1.05em; margin: 2px 6px 14px; }
+  .nav .brand small { display:block; font-weight:400; color: var(--muted-foreground); font-size:.72em;}
+  .nav a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--muted-foreground);
+           text-decoration: none; margin-bottom: 2px;}
+  .nav a.on { background: var(--muted); color: var(--foreground); font-weight: 600; }
+  .nav .grp { margin: 12px 6px 5px; font-size:.72em; letter-spacing:.06em; text-transform:uppercase;
+              color: var(--muted-foreground); }
+
+  .main { padding: 14px 18px 22px; max-width: 1100px; }
+  .viewswitch { display:flex; gap:6px; flex-wrap:wrap; margin-bottom: 14px; border-bottom:1px solid var(--border); padding-bottom:10px;}
+  .viewswitch button { font-size:.8em; padding:5px 11px; border-radius:999px; border:1px solid var(--border); background:transparent; color:var(--muted-foreground); cursor:pointer;}
+  .viewswitch button.on { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary);}
+  .view { display:none; } .view.on { display:block; }
+  h1 { font-size: 1.4em; margin: 2px 0 2px; } h2{font-size:1.1em;margin:20px 0 8px}
+  .sub { color: var(--muted-foreground); font-size:.9em; margin-bottom: 12px;}
+  .pagehead { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;}
+  .btn { border-radius:6px; padding: 8px 14px; min-height:32px; border:1px solid var(--border); background: var(--muted); color: var(--foreground); cursor:default; font-size:.9em;}
+  .btn.pri { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); font-weight:600;}
+  .btn.warnact { background: transparent; color: var(--warning); border-color: var(--warning); font-weight:600;}
+  .btn.danger { background: transparent; color: var(--destructive); border-color: var(--destructive); font-weight:600;}
+  table { width:100%; border-collapse: collapse; font-size:.95em; }
+  thead th { text-align:left; font-weight:600; color: var(--muted-foreground); padding: 8px 10px; border-bottom:1px solid var(--border);}
+  tbody td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle;}
+  tbody tr:hover td { background: var(--muted); }
+  .mono { font-family: var(--font-mono); font-size:.92em; }
+  .badge { display:inline-block; font-size:.78em; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .b-ok { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+  .b-warn { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+  .b-err { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--destructive); }
+  .b-info { background: color-mix(in srgb, var(--info) 16%, transparent); color: var(--info); }
+  .actions { color: var(--muted-foreground); white-space:nowrap;}
+  .actions a { color: inherit; margin-left: 12px; text-decoration:none; }
+  .checkline { display:flex; gap:8px; align-items:center; padding:4px 0; font-size:.95em;}
+  .dot { width:9px; height:9px; border-radius:99px; background: var(--success); flex:none;}
+  .dot.warn { background: var(--warning); }
+  .dot.err { background: var(--destructive); }
+  .panel { border:1px solid var(--border); border-radius:10px; padding: 14px 16px; margin-bottom: 14px;}
+  .panel.tight { padding:10px 14px; }
+  label { display:block; font-size:.88em; font-weight:600; margin: 12px 0 4px;}
+  input[type=text], select { width:100%; font-size:.95em; padding:8px 9px; border-radius:6px; border:1px solid var(--border); background: var(--background); color: var(--foreground); min-height:32px; box-sizing:border-box;}
+  fieldset { border:1px solid var(--border); border-radius:10px; padding: 4px 14px 12px; margin:0 0 14px; }
+  legend { font-size:.8em; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color: var(--muted-foreground); padding: 0 6px;}
+  .hint { font-size:.8em; color: var(--muted-foreground); margin-top:4px;}
+  .err { border-color: var(--destructive) !important; }
+  .errtxt { font-size:.82em; color: var(--destructive); margin-top:4px; font-weight:600;}
+  .errsummary { border:1px solid var(--destructive); border-left-width:4px; border-radius:8px; padding:12px 16px; font-size:.9em; margin-bottom: 14px;}
+  .toast { border:1px solid var(--border); border-left: 4px solid var(--success); background: var(--muted); border-radius:8px; padding:9px 13px; font-size:.88em; margin-bottom:14px; display:flex; justify-content:space-between; gap:10px;}
+  .toast.sched { border-left-color: var(--info); }
+  .steps { display:flex; gap:16px; margin-bottom:16px; font-size:.88em; }
+  .steps span { color: var(--muted-foreground); } .steps .done { color: var(--success); } .steps .c { color: var(--primary); font-weight:700; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 0 24px;}
+  .dlg { border:1px solid var(--border); border-radius:12px; padding:18px 20px; max-width: 480px; box-shadow: 0 8px 30px rgba(0,0,0,.25); margin: 8px auto;}
+  .meta { color: var(--muted-foreground); font-size:.82em;}
+  .kbd { font-family: var(--font-mono); background: var(--muted); border:1px solid var(--border); border-bottom-width:2px; border-radius:4px; padding:1px 6px; font-size:.9em;}
+  .formbar { margin-top: 20px; padding-top: 14px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:center;}
+</style></head>
+<body>
+<div class="app">
+
+  <!-- global status region: reserved strip on every page -->
+  <div class="statusbar" aria-live="off">
+    <span class="chip ok">● edge up · 6 d</span>
+    <span class="chip warn">● 2 reloads pending (Kamailio unreachable)</span>
+    <span class="chip muted">read-only mode off</span>
+    <span style="margin-left:auto" class="muted mono">console v1 · kamailio 6.1.5</span>
+  </div>
+
+  <div class="nav">
+    <div class="brand">VoIP Edge <small>console · srv-01</small></div>
+    <a href="#" aria-current="page" class="on">Homes</a>
+    <a href="#">Live</a>
+    <div class="grp">Routing data</div>
+    <a href="#">Landlines</a>
+    <a href="#">Route sets</a>
+    <a href="#">Number rules</a>
+    <a href="#">Trusted sources</a>
+    <div class="grp">System</div>
+    <a href="#">Audit &amp; backups</a>
+  </div>
+
+  <div class="main">
+    <div class="viewswitch" id="vs" aria-hidden="true">
+      <span class="meta" style="align-self:center;margin-right:6px">wireframe states (demo chrome, not product):</span>
+      <button data-v="v1" class="on">Homes</button>
+      <button data-v="v2">Detail · coherence</button>
+      <button data-v="v3">Edit · errors</button>
+      <button data-v="v4">Wizard</button>
+      <button data-v="v5">Live</button>
+      <button data-v="v6">Lifecycle dialogs</button>
+      <button data-v="v7">Audit &amp; backups</button>
+    </div>
+
+    <!-- 1 HOMES (landing) -->
+    <div class="view on" id="v1">
+      <div class="pagehead">
+        <div><h1>Homes</h1><div class="sub">Every tenant routed through this edge. Writes save to the routing database and reload Kamailio — no restarts.</div></div>
+        <button class="btn pri">+ Onboard a home</button>
+      </div>
+      <div class="toast">✔ Saved <b>&nbsp;beta&nbsp;</b> — reloaded &amp; verified: homes, route sets <span class="meta">just now</span></div>
+      <table>
+        <thead><tr><th>Domain</th><th>Landline</th><th>Route sets</th><th>Coherence</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        <tr><td class="mono">sip.alpha.home.example.net</td><td class="mono">01111111</td><td class="mono">11 on-net · 31 PSTN</td><td><span class="badge b-ok">all green</span></td><td><span class="badge b-ok">Active</span></td><td class="actions"><a href="#">Edit</a><a href="#">Park…</a></td></tr>
+        <tr><td class="mono">sip.beta.home.example.net</td><td class="mono">02222222</td><td class="mono">12 on-net · 32 PSTN</td><td><span class="badge b-ok">all green</span></td><td><span class="badge b-ok">Active</span></td><td class="actions"><a href="#">Edit</a><a href="#">Park…</a></td></tr>
+        <tr><td class="mono">sip.gamma.home.example.net</td><td class="mono">03333333</td><td class="mono">13 on-net · 33 PSTN</td><td><span class="badge b-warn">no trusted source</span></td><td><span class="badge b-ok">Active</span></td><td class="actions"><a href="#">Edit</a><a href="#">Park…</a></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Parked</h2>
+      <table>
+        <thead><tr><th>Domain</th><th>Parked on</th><th>Last known landline</th><th>Snapshot</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        <tr><td class="mono">sip.legacy-x.home.example.net</td><td>12 Jul 2026</td><td class="mono">05555555</td><td class="mono">4 rows · 2 KB</td><td><span class="badge b-info">Parked</span></td><td class="actions"><a href="#">Restore…</a><a href="#" style="color:var(--destructive)">Destroy…</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 2 DETAIL -->
+    <div class="view" id="v2">
+      <div class="pagehead">
+        <div><h1>alpha</h1><div class="sub mono">sip.alpha.home.example.net</div></div>
+        <div><button class="btn pri">Edit</button> <button class="btn warnact">Park…</button></div>
+      </div>
+      <div class="panel">
+        <b>Coherence checklist</b> <span class="meta">re-checked live via the edge RPC</span><br><br>
+        <div class="checkline"><span class="dot"></span> <span><b>OK</b> — registry row <span class="mono meta">T1 · sets 11/31 · emergency profile “Example” · premium block on</span></span></div>
+        <div class="checkline"><span class="dot"></span> <span><b>OK</b> — on-net set <span class="meta mono">10.0.0.10:5060 · tcp</span></span></div>
+        <div class="checkline"><span class="dot"></span> <span><b>OK</b> — PSTN set</span></div>
+        <div class="checkline"><span class="dot"></span> <span><b>OK</b> — trusted source <span class="mono">100.64.10.10</span> maps to this home</span></div>
+        <div class="checkline"><span class="dot warn"></span> <span><b>Note</b> — landline <span class="mono">01111111</span> prefixes a delegated range row <span class="mono">2641</span> (same home — legal)</span></div>
+      </div>
+      <h2>Phones registered at the edge</h2>
+      <table><thead><tr><th>AOR</th><th>Flow</th><th>Transport</th></tr></thead>
+        <tbody><tr><td class="mono">mobile1@sip.alpha.home.example.net</td><td class="mono">198.51.100.20:2416</td><td>TLS</td></tr></tbody>
+      </table>
+      <div class="meta">regcache has no per-key TTL in the current edge config — entries persist until the phone re-registers (see plan §3.8 follow-up).</div>
+    </div>
+
+    <!-- 3 EDIT WITH ERRORS -->
+    <div class="view" id="v3">
+      <div class="pagehead"><div><h1>Edit home: beta</h1><div class="sub">Values are validated against every table before writing.</div></div></div>
+      <div class="errsummary" tabindex="-1"><b>2 things need fixing before this can save</b>
+        <ul style="margin:6px 0 0 16px;padding:0">
+          <li><a href="#f-pstn">PSTN route set — choose an existing set, or create set 99 in Route sets first</a></li>
+          <li><a href="#f-label">Display label — remove the comma; it is a packing separator</a></li>
+        </ul>
+      </div>
+      <fieldset><legend>Identity</legend>
+        <label for="f-dom">Domain</label><input id="f-dom" type="text" class="mono" value="sip.beta.home.example.net" disabled>
+        <div class="hint">Create-only — to change it, park the home and re-onboard.</div>
+        <label for="f-ll">Landline (as dialed locally)</label><input id="f-ll" type="text" class="mono" value="02222222">
+        <div class="hint">Matched exactly as your family dials it — no country format assumptions.</div>
+      </fieldset>
+      <fieldset><legend>Routing</legend>
+        <label for="f-pstn">PSTN route set</label><input id="f-pstn" type="text" class="mono err" value="99" aria-invalid="true" aria-describedby="e-pstn">
+        <div class="errtxt" id="e-pstn">Choose an existing PSTN route set, or create set 99 in Route sets first.</div>
+      </fieldset>
+      <fieldset><legend>Call policy</legend>
+        <label for="f-label">Display label for inter-home calls</label><input id="f-label" type="text" class="err" value="A-Example, Example City" aria-invalid="true" aria-describedby="e-label">
+        <div class="errtxt" id="e-label">Remove the comma — “,” and “+” are packing separators.</div>
+        <label for="f-em">Emergency number profile</label>
+        <select id="f-em"><option>Example (112 · 125 · 140 · 175)</option></select>
+        <div style="margin-top:6px"><label for="f-ih" style="display:inline"><input id="f-ih" type="checkbox" checked> Inter-home calling</label>
+        &nbsp; <label for="f-fb" style="display:inline"><input id="f-fb" type="checkbox" checked> PSTN fallback allowed</label></div>
+      </fieldset>
+      <div class="formbar"><button class="btn pri">Save &amp; reload routing</button> <button class="btn">Discard</button>
+        <span class="meta">Saved first, then Kamailio reloads — the toast will say which tables were verified.</span></div>
+    </div>
+
+    <!-- 4 WIZARD (step 1 with in-wizard validation + step 3 review + step 4 verify states stacked for the catalog) -->
+    <div class="view" id="v4">
+      <div class="pagehead"><div><h1>Onboard a home</h1></div></div>
+
+      <div class="panel">
+        <div class="steps"><span class="c">1 · Identity</span><span>2 · Network</span><span>3 · Review &amp; apply</span><span>4 · Verify</span></div>
+        <div class="errsummary" tabindex="-1"><b>1 thing needs fixing</b>
+          <ul style="margin:6px 0 0 16px;padding:0"><li><a href="#w-ll">Landline — 0771 is already delegated to home “legacy-x” (longest-prefix rules)</a></li></ul>
+        </div>
+        <label for="w-dom">Domain</label><input id="w-dom" type="text" class="mono" value="sip.b-example.home.example.net">
+        <div class="hint">Phones at this home will use this exact domain; it must end in <span class="mono">home.example.net</span>.</div>
+        <label for="w-ll">Landline (as dialed locally)</label><input id="w-ll" type="text" class="mono err" value="0771" aria-invalid="true">
+        <div class="errtxt">0771 is already delegated to home “legacy-x”. Use the household’s own number, or pick a range that doesn’t overlap.</div>
+        <label for="w-rg">Ring group / extension to ring</label><input id="w-rg" type="text" class="mono" value="home">
+      </div>
+
+      <div class="panel">
+        <div class="steps"><span class="done">1 · Identity</span><span class="done">2 · Network</span><span class="c">3 · Review &amp; apply</span><span>4 · Verify</span></div>
+        <b>About to be applied</b>
+        <table style="margin-top:8px"><tbody>
+          <tr><td>Home</td><td class="mono">sip.b-example.home.example.net · landline 04444444 · rings “home”</td></tr>
+          <tr><td>Route sets</td><td class="mono">on-net → 10.0.6.20:5060 (tcp) · PSTN → same host</td></tr>
+          <tr><td>Trusted source</td><td class="mono">100.64.10.14 → this home (wire-observed IP you pasted)</td></tr>
+          <tr><td>Call policy</td><td>emergency profile “Example” · premium numbers blocked · inter-home on · PSTN fallback on</td></tr>
+          <tr><td>Consequences</td><td>Phones at this home can register as soon as the trusted-source reload lands. A database backup is taken first; one transaction with full rollback on any failure.</td></tr>
+          <tr><td style="color:var(--warning)">Manual step</td><td>TLS is live: append <span class="mono">sip.b-example.home.example.net</span> to the cert’s domain list and reissue once (README, onboarding step 4) — until then TLS phones of this home won’t verify.</td></tr>
+        </tbody></table>
+        <div class="formbar" style="border:none"><button class="btn pri">Apply and reload routing</button> <button class="btn">Back</button></div>
+      </div>
+
+      <div class="panel">
+        <div class="steps"><span class="done">1</span><span class="done">2</span><span class="done">3</span><span class="c">4 · Verify</span></div>
+        <div class="checkline"><span class="dot"></span> <b>OK</b> — registered in routing tables, reloads verified</div>
+        <div class="checkline"><span class="dot"></span> <b>OK</b> — sets answer OPTIONS</div>
+        <div class="checkline"><span class="dot warn"></span> <b>Waiting</b> — no phone has registered yet <span class="meta">(this pane watches the live cache)</span></div>
+      </div>
+    </div>
+
+    <!-- 5 LIVE -->
+    <div class="view" id="v5">
+      <div class="pagehead"><div><h1>Live</h1><div class="sub">Refreshes every 15 s over the RPC socket. Read-only. Auto-refresh never moves your scroll position.</div></div></div>
+      <div class="grid2">
+        <div class="panel tight">
+          <b>Registered phones (edge cache)</b>
+          <table style="margin-top:6px"><thead><tr><th>AOR</th><th>Transport</th><th>Flow</th></tr></thead>
+            <tbody>
+            <tr><td class="mono">mobile1@sip.alpha.home.example.net</td><td>TLS</td><td class="mono">198.51.100.20:2416</td></tr>
+            <tr><td class="mono">garden@sip.beta.home.example.net</td><td>TCP</td><td class="mono">198.51.100.21:43774</td></tr>
+            </tbody></table>
+          <div class="meta" style="margin-top:6px">2 registrations cached</div>
+        </div>
+        <div class="panel tight">
+          <b>Route set probes</b>
+          <table style="margin-top:6px"><thead><tr><th>Set</th><th>Target</th><th>State</th></tr></thead>
+            <tbody>
+            <tr><td class="mono">11</td><td class="mono">10.0.0.10</td><td><span class="badge b-ok">Active · probed</span></td></tr>
+            <tr><td class="mono">31</td><td class="mono">10.0.0.10</td><td><span class="badge b-ok">Active · probed</span></td></tr>
+            <tr><td class="mono">12</td><td class="mono">10.0.7.10</td><td><span class="badge b-warn">Trying · last probe: no answer</span></td></tr>
+            <tr><td class="mono">13</td><td class="mono">10.0.9.10</td><td><span class="badge b-err">Inactive · not probed</span></td></tr>
+            </tbody></table>
+          <div class="meta" style="margin-top:6px">A = Active · I = Inactive · T = Trying · D = Disabled — plus "probed" when the OPTIONS pinger watches it.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6 LIFECYCLE DIALOGS -->
+    <div class="view" id="v6">
+      <div class="pagehead"><div><h1>Lifecycle dialogs</h1><div class="sub">Each names the object and the consequence. Focus starts on Cancel; Esc closes.</div></div></div>
+
+      <div class="dlg" role="dialog" aria-modal="true">
+        <b>Park home “beta”?</b>
+        <p class="sub" style="margin:10px 0">This home’s remote phones lose service in both directions; calls already in progress finish normally.</p>
+        <p class="sub" style="margin:10px 0">The console will: back up the routing database → snapshot 4 rows (home, landline, sets 12 &amp; 32, trusted source) → remove them → reload routing → drop 2 cached registrations, verified.</p>
+        <div><button class="btn warnact">Park this home</button> <button class="btn">Cancel</button></div>
+      </div>
+
+      <div class="dlg" role="dialog" aria-modal="true" style="border-color: var(--destructive)">
+        <b style="color:var(--destructive)">Destroy home “beta” (active)?</b>
+        <p class="sub" style="margin:10px 0">Permanently removes the home and all its routing data, drops its live registrations, and discards the snapshot. The phone number rules shared with other homes stay untouched. This cannot be undone.</p>
+        <label for="d-type" style="margin-top:2px">Type <span class="kbd">sip.beta.home.example.net</span> to confirm</label>
+        <input id="d-type" type="text" class="mono" autocomplete="off">
+        <div style="margin-top:12px"><button class="btn danger" disabled>Destroy forever</button> <button class="btn">Cancel</button></div>
+      </div>
+
+      <div class="dlg" role="dialog" aria-modal="true">
+        <b>Restore home “legacy-x”?</b>
+        <p class="sub" style="margin:10px 0">Re-inserts the parked snapshot exactly as it was. Blocked if anything claimed its domain, ids, numbers, sets or source address since — nothing is overwritten.</p>
+        <div><button class="btn pri">Restore &amp; verify</button> <button class="btn">Cancel</button></div>
+      </div>
+
+      <div class="dlg" role="dialog" aria-modal="true">
+        <b>Destroy parked home “legacy-x”?</b>
+        <p class="sub" style="margin:10px 0">Deletes its parked snapshot (4 rows · 2 KB). The edge already has no trace of this home; nothing else changes.</p>
+        <div><button class="btn danger">Destroy snapshot</button> <button class="btn">Cancel</button></div>
+      </div>
+    </div>
+
+    <!-- 7 AUDIT & BACKUPS -->
+    <div class="view" id="v7">
+      <div class="pagehead"><div><h1>Audit &amp; backups</h1><div class="sub">Console-recorded writes and reloads. Note: direct CLI edits of the database don’t appear here — re-reading is immediate, though.</div></div></div>
+      <h2>Backups</h2>
+      <table><thead><tr><th>When</th><th>Purpose</th><th>Size</th><th>Retention</th></tr></thead>
+        <tbody>
+        <tr><td>today 18:41</td><td class="mono">before park · beta</td><td class="mono">72 KB</td><td>1 of 5 kept</td></tr>
+        <tr><td>today 09:12</td><td class="mono">before destroy · legacy-x</td><td class="mono">72 KB</td><td>2 of 5 kept</td></tr>
+        </tbody></table>
+      <div class="meta">Restore: stop the stack, replace the file per the runbook (never hot-swap) — DEPLOY.md “console backups”.</div>
+      <h2>Audit</h2>
+      <table><thead><tr><th>When</th><th>Operator</th><th>Action</th><th>Reload outcome</th></tr></thead>
+        <tbody>
+        <tr><td>today 18:41</td><td>token</td><td>park beta</td><td><span class="badge b-ok">verified</span></td></tr>
+        <tr><td>today 18:09</td><td>token</td><td>edit gamma label</td><td><span class="badge b-ok">verified</span></td></tr>
+        <tr><td>today 17:55</td><td>token</td><td>edit alpha landline</td><td><span class="badge b-warn">scheduled — Kamailio unreachable</span></td></tr>
+        </tbody></table>
+    </div>
+
+  </div>
+</div>
+<script>
+  document.getElementById('vs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('#vs button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === b.dataset.v));
+  });
+</script>
+</body></html>

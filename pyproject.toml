@@ -1,0 +1,13 @@
+[project]
+name = "voip-edge-console"
+version = "0.1.0"
+description = "Admin console for the Kamailio VoIP edge proxy"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100

@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+console-data/
+.pytest_cache/
