@@ -193,15 +193,22 @@ async def _load_discovery_locked(force: bool) -> dict:
             resp = await client.get(url)
             resp.raise_for_status()
             meta = resp.json()
+        # Validation failures are also failures: cache the cooldown so
+        # queued waiters and later logins do not refetch a bad document.
+        if str(meta.get("issuer", "")).rstrip("/") != issuer:
+            raise ValueError("issuer mismatch in discovery document")
+        if not cfg.oidc_insecure:
+            for key in (
+                "authorization_endpoint",
+                "token_endpoint",
+                "jwks_uri",
+                "end_session_endpoint",
+            ):
+                if meta.get(key) and not str(meta[key]).startswith("https://"):
+                    raise ValueError(f"insecure {key} in discovery document")
     except Exception:
         _discovery_fail_until = now + 30.0
         raise
-    if str(meta.get("issuer", "")).rstrip("/") != issuer:
-        raise ValueError("issuer mismatch in discovery document")
-    if not cfg.oidc_insecure:
-        for key in ("authorization_endpoint", "token_endpoint", "jwks_uri", "end_session_endpoint"):
-            if meta.get(key) and not str(meta[key]).startswith("https://"):
-                raise ValueError(f"insecure {key} in discovery document")
     _discovery_cache, _discovery_at = meta, now
     _discovery_fail_until = 0.0
     return meta

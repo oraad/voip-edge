@@ -379,3 +379,26 @@ def test_older_completion_does_not_clear_a_newer_pending_intent():
         assert len(done) == 1
     finally:
         worker.shutdown(0.2)
+
+
+def test_shutdown_does_not_clear_a_newer_pending_intent():
+    class BlockingRPC:
+        def __init__(self):
+            self.started = threading.Event()
+            self.release = threading.Event()
+
+        def call(self, method, params=None):
+            self.started.set()
+            self.release.wait(2.0)
+            return 1
+
+    rpc = BlockingRPC()
+    events: list[tuple] = []
+    worker = ReloadWorker(rpc, {"homes": 0}, store=lambda *args: events.append(args))
+    worker.enqueue("homes", "mtree.reload", ["tenantdom"])
+    assert rpc.started.wait(2.0)
+    worker.enqueue("homes", "mtree.reload", ["tenantdom"])  # newer, never ran
+    assert worker.shutdown(0.05) is False
+    rpc.release.set()
+    time.sleep(0.05)
+    assert not [event for event in events if event[0] == "done"]

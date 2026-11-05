@@ -113,7 +113,7 @@ Global: packed free-text fields reject `,`/`+`/whitespace-pads; keys are **creat
 
 ### 5.3 Tenant lifecycle (park/restore/destroy)
 
-**Park sequence (order reviewed & corrected):** intent STARTED → BACKED_UP → SNAPSHOTTED (JSON into `console_parked`, same console.sqlite txn as intent row) → ROWS_DELETED → **RELOADED (batch: tenantdom + landline + dispatcher + trusted — mtree tree-args single-form)** → PURGED (dump regcache → `htable.delete` every key ending `@<domain>` → dump-verify zero, bounded retry) → DONE. (Reload **before** purge: new registrations of the domain must be rejected at the mtree level before the purge runs — closes the re-register race. A REGISTER in flight during the mtree reload is the only residue; TTL-none environment ⇒ sweeper re-runs purge+verify once more after 60 s.) Sidecar unreadable ⇒ refuse before touching edge.sqlite. Crash ⇒ sweeper (startup + every 30 s) resumes oldest non-DONE intent through the same orchestrator; failed step = persistent banner + Retry.
+**Park sequence (order reviewed & corrected):** intent STARTED → BACKED_UP → SNAPSHOTTED (JSON into `console_parked`, same console.sqlite txn as intent row) → ROWS_DELETED → **RELOADED (batch: tenantdom + landline + dispatcher + trusted — mtree tree-args single-form)** → PURGED (dump regcache → `htable.delete` every key ending `@<domain>` → dump-verify zero, bounded retry) → DONE. (Reload **before** purge: new registrations of the domain must be rejected at the mtree level before the purge runs — closes the re-register race. A REGISTER in flight during the mtree reload is the only residue; the sweeper's next purge+verify pass catches it.) Sidecar unreadable ⇒ refuse before touching edge.sqlite. Crash ⇒ sweeper (startup + every 30 s) resumes oldest non-DONE intent through the same orchestrator; failed step = persistent banner + Retry.
 
 **Restore:** BACKED_UP → COLLISION_CHECKED (domain / tenantid / landline digits / set ids / src_ip — each collision class blocks, naming the colliding row) → ROWS_INSERTED (guarded INSERT, never OR REPLACE) → RELOADED → coherence green → DONE.
 
@@ -218,7 +218,7 @@ Journeys (exactly these): smoke-auth-nav · create-tenant-happy · create-tenant
 
 ## 9. Rule→test traceability
 
-T4 delivers `docs/validation-matrix.md`: every §5.2 rule gets an id (e.g. `V-REG-CLI-COLLIDE`), its unit test id, and its form-test id; DoD: matrix complete and green. §7 scenario → owning task is listed above. This is the mechanism that makes "no remaining ambiguity" checkable.
+T4 started `docs/validation-matrix.md`: rules have ids (e.g. `V-REG-CLI-COLLIDE`) and current test/owner links, but several rows remain explicit `TODO` gaps (notably coherence/live checks). Completing the matrix is tracked as a follow-up rather than claimed green. §7 scenario → owning task is listed above.
 
 ## 10. Env/config table, packaging, docs, rollout
 

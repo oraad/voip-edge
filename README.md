@@ -24,7 +24,7 @@ current release is **0.1.10**.
 | T9 | Hardening + observability | done |
 | T10 | Packaging + docs | done; image build not executed in this workspace |
 
-Test baseline: **739 passed, 1 deselected** with
+Test baseline: **744 passed, 1 deselected** with
 `.venv/bin/python -m pytest`. The live Kamailio park/restore gate is
 `tests/live/run-live.sh` and is run separately (it binds SIP port 5060).
 
@@ -103,8 +103,8 @@ through a Pangolin resource with SSO; the token remains a second factor.
 ## Docs
 
 - [Plan](docs/plan.md) — decisions, architecture, task breakdown, review ledger.
-- [Validation matrix](docs/validation-matrix.md) — every §5.2 rule with an id,
-  severity and test/owner traceability.
+- [Validation matrix](docs/validation-matrix.md) — rule ids, severity and
+  current test/owner traceability; explicit `TODO` gaps remain for some rules.
 - [Operations](docs/operations.md) — env vars, backup/restore, lifecycle and
   reload troubleshooting, Pangolin exposure.
 - [Deployment](docs/ops/deploy.md) — image build, compose service, mounts,
@@ -129,7 +129,7 @@ through a Pangolin resource with SSO; the token remains a second factor.
 ## Dev
 
 ```bash
-.venv/bin/python -m pytest             # 739 passed, 1 deselected
+.venv/bin/python -m pytest             # 744 passed, 1 deselected
 .venv/bin/python -m compileall console # packaging smoke, no network
 ./tests/live/run-live.sh               # real Kamailio; run alone
 ```

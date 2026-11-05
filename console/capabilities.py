@@ -153,10 +153,13 @@ def _run_probe(rpc: Any) -> dict[str, bool]:
         try:
             with RPC_LOCK:
                 reply = rpc.call(method, params)
-        except RPCFault:
+        except RPCFault as exc:
             # The channel answered; the individual capability did not pass.
+            # htable.delete returns 404 when the probe key is absent (the
+            # normal case): the handler and the table are both present, so
+            # treat that one fault as proof the capability works.
             reachable = True
-            results[method] = False
+            results[method] = method == "htable.delete" and exc.code == 404
         except KamailioUnavailable:
             # No point waiting out one timeout per method on a dead socket.
             for remaining, _ in checks[index:]:

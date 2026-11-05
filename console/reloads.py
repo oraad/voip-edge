@@ -243,7 +243,11 @@ class ReloadWorker:
                 # pending row now would lose that newer intent, so only send
                 # "done" when nothing newer is queued.  The lock makes the
                 # check/clear atomic with enqueue's on_enqueue persistence.
-                if status == "done" and table not in self._pending:
+                if (
+                    status == "done"
+                    and not self._stop
+                    and table not in self._pending
+                ):
                     self._notify_store(
                         "done", table, entry.rpc_name, entry.params
                     )

@@ -206,3 +206,18 @@ def test_parked_snapshot_corruption_is_reported(tmp_path):
 
     with pytest.raises(SidecarUnavailable):
         sc.load_snapshot(DOMAIN_A)
+
+
+def test_clear_pending_reload_only_clears_the_expected_generation(tmp_path):
+    sc = Sidecar(tmp_path / "console.sqlite")
+    sc.record_pending_reload("dispatcher", enqueued_at="old")
+    sc.record_pending_reload("dispatcher", enqueued_at="new")
+
+    assert sc.clear_pending_reload(
+        "dispatcher", expected_enqueued_at="old"
+    ) is False
+    assert sc.pending_reload_enqueued_at("dispatcher") == "new"
+    assert sc.clear_pending_reload(
+        "dispatcher", expected_enqueued_at="new"
+    ) is True
+    assert sc.pending_reloads() == []

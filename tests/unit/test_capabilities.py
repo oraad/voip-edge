@@ -146,3 +146,16 @@ def test_require_capability_raises_for_unreachable_rpc(tmp_path):
 
     with pytest.raises(KamailioUnavailable):
         require_capability("htable.delete", result)
+
+
+def test_probe_treats_htable_delete_404_as_capability_present(fake):
+    script_healthy(fake)
+    # Kamailio returns 404 when the probe key does not exist; the handler and
+    # the regcache table are present, so the capability is usable.
+    fake.fault("htable.delete", code=404, message="Key not found in htable.")
+
+    result = probe(fake)
+
+    assert result["htable.delete"] is True
+    assert result["ok"] is True
+    assert "htable.delete" not in missing_capabilities(result)

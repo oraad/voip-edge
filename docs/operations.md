@@ -40,6 +40,15 @@ from plan §2.
 | `OIDC_ALLOW_ANY` | `0` | Explicitly allow any authenticated subject when no group/email-domain allowlist is configured. SSO fails closed without it. |
 | `OIDC_INSECURE` | `0` | Allow `http://` issuer/endpoints for loopback development only. |
 
+### OIDC configuration
+
+The full SSO surface is `CONSOLE_AUTH_MODE`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
+`OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, `OIDC_SCOPES`,
+`OIDC_POST_LOGOUT_URI`, `OIDC_ALLOWED_GROUPS`,
+`OIDC_ALLOWED_EMAIL_DOMAINS`, `OIDC_PROVIDER_NAME`, `OIDC_ALLOW_ANY` and
+`OIDC_INSECURE`; see `.env.example` for defaults and `docs/oidc.md` for the
+provider registration and threat model.
+
 ## Backups and restore
 
 Backups use `console.backups.create_backup`: the SQLite online backup API, never

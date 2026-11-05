@@ -610,6 +610,13 @@ def _reload_tables(
         worker.enqueue(key, descriptor.reload.rpc, descriptor.reload.params)
         keys.append(key)
 
+    # Capture the generation persisted by the worker's on_enqueue.  Only
+    # clear that exact generation later: a newer save may have refreshed the
+    # row between flush() and cleanup.
+    stamps = {
+        key: sidecar.pending_reload_enqueued_at(key) for key in keys
+    }
+
     if not worker.flush(timeout):
         for key in keys:
             sidecar.record_pending_reload(
@@ -624,7 +631,9 @@ def _reload_tables(
     for key in keys:
         exc = errors.get(key)
         if exc is None:
-            sidecar.clear_pending_reload(key)
+            sidecar.clear_pending_reload(
+                key, expected_enqueued_at=stamps[key]
+            )
             continue
         failures.append(f"{key}: {exc}")
         if isinstance(exc, KamailioUnavailable):

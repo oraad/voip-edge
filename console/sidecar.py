@@ -550,13 +550,34 @@ class Sidecar:
         self,
         table: str,
         *,
+        expected_enqueued_at: str | None = None,
         conn: sqlite3.Connection | None = None,
     ) -> bool:
+        """Clear one pending reload.
+
+        With *expected_enqueued_at*, only clear the generation this caller
+        enqueued; a newer save that refreshed the row must survive.
+        """
+        if expected_enqueued_at is None:
+            return self._execute(
+                'DELETE FROM console_pending_reload WHERE "table" = ?',
+                (table,),
+                conn=conn,
+            ) > 0
         return self._execute(
-            'DELETE FROM console_pending_reload WHERE "table" = ?',
-            (table,),
+            'DELETE FROM console_pending_reload '
+            'WHERE "table" = ? AND enqueued_at = ?',
+            (table, expected_enqueued_at),
             conn=conn,
         ) > 0
+
+    def pending_reload_enqueued_at(self, table: str) -> str | None:
+        with self._cursor() as conn:
+            row = conn.execute(
+                'SELECT enqueued_at FROM console_pending_reload WHERE "table" = ?',
+                (table,),
+            ).fetchone()
+        return None if row is None else str(row[0])
 
     def pending_reloads(self) -> list[dict[str, Any]]:
         with self._cursor() as conn:
@@ -618,6 +639,13 @@ def reissue_pending_reloads(
     if not issued:
         return []
 
+    # Only clear the generations that were pending at the start of this
+    # reissue; a newer save may refresh the row while the worker drains.
+    stamps = {
+        row["table"]: row.get("enqueued_at") for row in pending
+        if str(row["table"]) in issued
+    }
+
     if not worker.flush(timeout):
         for table in issued:
             sc.record_pending_reload(table, last_error="reload did not drain")
@@ -627,7 +655,9 @@ def reissue_pending_reloads(
     for table in issued:
         exc = errors.get(table)
         if exc is None:
-            sc.clear_pending_reload(table)
+            sc.clear_pending_reload(
+                table, expected_enqueued_at=stamps.get(table)
+            )
         else:
             sc.record_pending_reload(table, last_error=str(exc))
     return issued

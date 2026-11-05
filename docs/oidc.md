@@ -24,7 +24,7 @@ machinery. Token login stays as **break-glass** behind an env switch.
 | Decision | Value / rule |
 |---|---|
 | Flow | **Authorization Code + PKCE (S256)**, even for a confidential client. Never implicit/hybrid. |
-| Binding | `state` (replay/CSRF), `nonce` (ID-token replay) and the PKCE verifier stored **server-side in a short-lived flow cookie** (5 min, `SameSite=Lax`, `HttpOnly`, `Path=/auth`), one per in-flight login (multi-tab safe). |
+| Binding | `state` (replay/CSRF), `nonce` (ID-token replay) and the PKCE verifier live in a **short-lived signed, HttpOnly flow cookie** (client-side but integrity-protected, 5 min, `SameSite=Lax`, `Path=/auth`), one per in-flight login (multi-tab safe). |
 | Redirect URI | Exact match, registered at the IdP: `https://<console-host>/auth/callback`. No wildcards. |
 | ID-token validation | Signature against the **issuer-bound JWKS** (`kid` resolved only inside that set), `alg` allowlist (RS256/ES256), exact `iss`, `aud` contains client_id, `azp` when multiple audiences, `exp`/`iat` with ≤60 s skew, `nonce` equal to the stored one, `at_hash` when present. |
 | Claims | Account key is **`(iss, sub)`** — never email/username. `email`/`name` are display only. |
@@ -32,7 +32,7 @@ machinery. Token login stays as **break-glass** behind an env switch.
 | Local authorization | Env allowlist: `OIDC_ALLOWED_GROUPS` (any-of) and/or `OIDC_ALLOWED_EMAIL_DOMAINS`. Denied → 403 page naming the missing requirement (not "access denied" alone). |
 | Sessions | Issue a **fresh** session on login (fixation defence); store only `sub`, `iss`, `email`, `csrf`, `exp` — **never** tokens. 12 h absolute expiry (implemented). Idle expiry (30 min) is an optional follow-up: it requires rotating the cookie on activity, which is deferred to keep the first version's session semantics simple. |
 | Logout | Local session clear **first**, then RP-initiated logout (`end_session_endpoint`, `client_id`, registered `post_logout_redirect_uri`, `state`). No `id_token_hint`: tokens are never stored, so the provider may show a confirmation. No GET logout (CSRF); POST with existing CSRF check. Back-channel logout: out of scope for a single-instance console — documented as a known gap. |
-| Errors | Typed states: `idp_unreachable`, `invalid_state`, `token_rejected`, `claims_denied`, `clock_skew`, `callback_mismatch` — each renders a distinct operator-facing message with the correlation id, never a stack trace. |
+| Errors | Typed states: `idp_unreachable`, `invalid_state`, `token_rejected`, `claims_denied`, `callback_mismatch` — each renders a distinct operator-facing message, never a stack trace. |
 | Transport | Discovery/JWKS fetched with `httpx` (timeouts, TLS verified), cached (discovery 1 h, JWKS until `kid` miss + 5 min floor); **never** fetch a URL supplied by a token. |
 | Break-glass | `CONSOLE_AUTH_MODE=oidc|token|both` (default `both`): `token` keeps today's flow; `oidc` hides the token form. Documented as incident access. |
 | Secrets | `OIDC_CLIENT_SECRET` via env/docker secret; never in git (the privacy guard already blocks `.env`/secret patterns). |
@@ -52,13 +52,15 @@ POST /auth/logout                   -> clear session, then 303 to IdP end-sessio
   scopes (default `openid profile email groups`), allowed groups/domains,
   redirect URI (read directly from `OIDC_REDIRECT_URI`; never derived from
   `Host`), post-logout URI, auth mode.
-- Discovery at startup (non-blocking, like the capability probe) + on
-  demand; store in `app.state.oidc` with health surfaced in the status strip.
+- Discovery is fetched on demand and cached per process (1 h TTL, 30 s
+  failure cooldown); there is no startup discovery probe and no OIDC health
+  chip in the status strip.
 - `next` handling: only relative paths (`safe_return_to`), reject `//host`.
 - Login endpoint is rate-limited with the existing limiter; callback
   consumption is single-use (`state` cookie cleared whatever the outcome).
-- Audit: log `oidc_login` / `oidc_logout` / `oidc_denied` with `iss`,
-  hashed `sub` (or subject id), outcome — never tokens.
+- Audit: log `oidc_login` / `oidc_logout` with the outcome and client address
+  (denials are `oidc_login` with `claims_denied`); never tokens, `iss` or
+  subject identifiers.
 - Compatibility: if `CONSOLE_AUTH_MODE=token`, `/auth/*` returns 404 and the
   token form stays; if `oidc`, the token form is hidden and POST /login
   returns 403 (break-glass only when explicitly enabled).

@@ -482,3 +482,53 @@ def test_discovery_cooldown_covers_queued_waiters(oidc_settings, monkeypatch):
     results = asyncio.run(scenario())
     assert calls == 1
     assert all(isinstance(result, Exception) for result in results)
+
+
+def test_discovery_validation_failure_also_sets_cooldown(oidc_settings, monkeypatch):
+    import asyncio
+
+    oidc_settings()
+    oidc._discovery_lock = None
+    oidc._discovery_fail_until = 0.0
+    calls = 0
+
+    class WrongIssuerClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url):
+            nonlocal calls
+            calls += 1
+            return self
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"issuer": "https://wrong.example"}
+
+    monkeypatch.setattr(
+        oidc.httpx, "AsyncClient", lambda *args, **kwargs: WrongIssuerClient()
+    )
+
+    async def scenario():
+        return await asyncio.gather(
+            *[oidc.load_discovery() for _ in range(4)], return_exceptions=True
+        )
+
+    results = asyncio.run(scenario())
+    assert calls == 1
+    assert all(isinstance(result, Exception) for result in results)
+
+
+def test_login_starts_do_not_consume_the_failure_budget(
+    client, oidc_settings, provider
+):
+    oidc_settings()
+    for _ in range(10):
+        assert client.get("/auth/login").status_code == 303
+    response = client.post("/login", data={"token": "wrong"})
+    assert response.status_code == 401
