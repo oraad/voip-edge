@@ -7,8 +7,8 @@ online backups.
 
 ## Status
 
-Current working tree; T5 and T9 are parallel lanes that are still landing, so
-their state is marked accordingly.
+All tasks T0–T10 are complete, including three independent review rounds. The
+current release is **0.1.10**.
 
 | Task | Scope | State |
 |---|---|---|
@@ -17,21 +17,20 @@ their state is marked accordingly.
 | T2 | App skeleton, auth/CSRF, health, host-lab harness | done |
 | T3 | Read-only table browser and Homes landing | done |
 | T4 | Create/edit + validation families (T4.1–T4.8) | done |
-| T5 | Row delete + reference guards | **landing** (uncommitted; code/tests present) |
+| T5 | Row delete + reference guards | done |
 | T6 | Live dashboard (registered phones, route-set probes, health) | done |
 | T7 | Onboarding wizard | done |
 | T8 | Lifecycle park/restore/destroy + backups | done |
-| T9 | Hardening + observability | **landing** (uncommitted; wired, tests green) |
-| T10 | Packaging + docs | done in this change; **image build unverified offline** |
+| T9 | Hardening + observability | done |
+| T10 | Packaging + docs | done; image build not executed in this workspace |
 
-Test baseline: **676 passed** with `.venv/bin/python -m pytest -q` (includes
-the T5/T9 tests; the 619+ baseline was verified before those parallel lanes
-added their suites). `tests/live/` and `tests/e2e/` are reserved placeholders
-and are not part of that count.
+Test baseline: **724 passed, 1 deselected** with
+`.venv/bin/python -m pytest`. The live Kamailio park/restore gate is
+`tests/live/run-live.sh` and is run separately (it binds SIP port 5060).
 
-The Docker image and compose service are authored but were **not built** in
-this offline workspace (no network for pip/apt). Verify the image once before
-first deployment; see `docs/ops/deploy.md`.
+The Docker image and compose service are authored and statically verified, but
+`docker build` was **not executed** in this workspace. Verify the image once
+before first deployment; see `docs/ops/deploy.md`.
 
 ## Layout
 
@@ -54,9 +53,10 @@ console/            Python package
   tables_ui.py      generic read-only table browser
   live.py           live dashboard + polling fragment
   wizard_ui.py      onboarding wizard
-  capabilities.py   startup RPC capability probe (T9, landing)
-  observability.py  structured redacted logs (T9, landing)
-  system_ui.py      audit/backups + status-strip routes (T9, landing)
+  capabilities.py   startup RPC capability probe
+  observability.py  structured redacted logs
+  system_ui.py      audit/backups + status-strip routes
+  derivations.py    named `derived:` field rules
   tables.yaml       five table descriptors (grammar v1)
 web/
   templates/        Jinja2 shells and generic table templates
@@ -64,7 +64,7 @@ web/
 tests/
   unit/ api/        unit and API suites
   fixtures/         seed DB, edge DB and FakeRPC doubles
-  live/ e2e/        reserved for the singleton lab/journey work
+  live/             real-Kamailio lifecycle gate; e2e/ reserved
 docs/
   plan.md                    spec v2
   validation-matrix.md       §5.2 rule → test → owner traceability
@@ -90,11 +90,10 @@ Pangolin SSO resource and healthcheck semantics, is `docs/ops/deploy.md`.
 # Build once, pinned to the code version (no test deps in the image).
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
 docker build --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.9 .
+  -t voip-edge-console:0.1.10 .
 
 cp .env.example .env        # set token, secret, bind, read-only=1 first
-# Merge compose.yml's console service into the voip-edge stack, or deploy it
-# as its own Arcane stack with the same EDGE_HOME/EDGE_RUN.
+# Deploy compose.yml as its own Arcane stack with the same EDGE_HOME/EDGE_RUN.
 ```
 
 The console binds `100.64.0.9:8080` on host networking and is exposed only
@@ -114,7 +113,7 @@ through a Pangolin resource with SSO; the token remains a second factor.
   never hot-swap, stopped-stack recovery.
 - [Releases](docs/ops/releases.md) — image pinned to code, baked
   `tables.yaml`, bump and rollback.
-- [Changelog](CHANGELOG.md) — T0–T10 summary and test count.
+- [Changelog](CHANGELOG.md) — release history and review-round fixes.
 - [Wireframe](docs/wireframe.html) — visual/IA reference.
 - [AGENTS.md](AGENTS.md) — module map, code conventions, deployment
   conventions, T4.2–T4.8 workflow.
@@ -122,21 +121,17 @@ through a Pangolin resource with SSO; the token remains a second factor.
 
 ## Not yet
 
-- **T5 and T9** are landing (uncommitted) in the shared working tree; their
-  tests currently pass, but the lanes may still move before integration.
-- **Vendored assets** — `web/static/` still has no `pico.min.css` or
-  `htmx.min.js`; see `web/static/README.md` for the pinned versions, SHA-256
-  record and offline copy procedure.
 - **Image build** — the Dockerfile/compose pair has not been executed here;
   the first build must happen on a host with pip/apt access.
-- **Live/e2e coverage** — `tests/live/` and `tests/e2e/` are empty until the
-  singleton lab harness lands.
+- **Live/e2e coverage** — `tests/live/` contains the real Kamailio lifecycle
+  journey; broader end-to-end browser coverage is still a follow-up.
 
 ## Dev
 
 ```bash
-.venv/bin/python -m pytest -q          # 676 passed in the current tree
+.venv/bin/python -m pytest             # 724 passed, 1 deselected
 .venv/bin/python -m compileall console # packaging smoke, no network
+./tests/live/run-live.sh               # real Kamailio; run alone
 ```
 
 No test touches the live edge; fixtures use temporary databases and a FakeRPC

@@ -11,12 +11,13 @@ The console uses the SQLite **online backup API**
 result is WAL-safe and consistent even while Kamailio and the console are
 writing.
 
-A backup is a pair of files:
+A backup is a set of three files:
 
 | File | Contents |
 |---|---|
 | `edge-<UTC>-<tag>.sqlite` | consistent snapshot of the Kamailio routing DB |
-| `edge-<UTC>-<tag>.sqlite.parked.json` | dump of the sidecar's `console_parked` rows at that moment |
+| `edge-<UTC>-<tag>.sqlite.console.sqlite.bak` | WAL-safe copy of the console sidecar (parked snapshots, intents, audit) |
+| `edge-<UTC>-<tag>.sqlite.parked.json` | human-readable dump of the sidecar's `console_parked` rows at that moment |
 
 Stamps include microseconds, so names sort chronologically even for backups
 taken in the same second. Tags look like `park:<domain>`,
@@ -33,6 +34,7 @@ fix the path/permissions and retry; never proceed without a backup.
 | Backups | `/var/lib/console/backups/` | `${EDGE_HOME}/console/backups/` |
 | Sidecar DB | `/var/lib/console/console.sqlite` | `${EDGE_HOME}/console/console.sqlite` |
 | Parked snapshots | table `console_parked` inside the sidecar | same `console.sqlite` |
+| Sidecar backup | `edge-*.sqlite.console.sqlite.bak` beside each backup | same directory |
 | Parked evidence | `edge-*.sqlite.parked.json` beside each backup | same directory |
 
 `${EDGE_HOME}` is the shared edge workspace root (default `/opt/voip-edge`).
@@ -43,8 +45,9 @@ included in host-level backups.
 
 Rotation is **keep-5 globally**, across all purpose tags; there is no
 per-tenant or per-purpose retention. After a successful backup the oldest files
-beyond the newest five are deleted (the `.sqlite` and its `.parked.json`).
-Failed backups are cleaned up and do not count.
+beyond the newest five are deleted together with their `.console.sqlite.bak`
+and `.parked.json` companions. Failed backups are cleaned up (including a
+partially written sidecar copy) and do not count.
 
 Consequences:
 
@@ -77,7 +80,7 @@ image already contains Python + sqlite3, so no host tooling is required:
 
 ```bash
 docker run --rm -v "${EDGE_HOME}/console/backups:/b:ro" \
-  --entrypoint python voip-edge-console:0.1.9 -c \
+  --entrypoint python voip-edge-console:0.1.10 -c \
   'import sqlite3,sys; c=sqlite3.connect("file:/b/<file>.sqlite?mode=ro", uri=True); print(c.execute("PRAGMA integrity_check").fetchone()[0])'
 ```
 
@@ -164,10 +167,17 @@ If `console.sqlite` is corrupt or missing:
 
 1. Stop the console (Kamailio may stay up).
 2. Preserve the broken file aside.
-3. Restore a copy of `console.sqlite` taken by host-level backup. The console
-   applies forward migrations on startup; a newer sidecar schema cannot be
-   opened by an older image.
-4. Start the console and check the Audit & backups page.
+3. Restore the sibling sidecar copy from the chosen backup
+   (`edge-<UTC>-<tag>.sqlite.console.sqlite.bak`) or a copy taken by host-level
+   backup:
+   ```bash
+   cp "${EDGE_HOME}/console/backups/edge-<UTC>-<tag>.sqlite.console.sqlite.bak" \
+      "${EDGE_HOME}/console/console.sqlite"
+   ```
+   The console applies forward migrations on startup. It **refuses** a sidecar
+   whose `PRAGMA user_version` is newer than the image supports, so deploy the
+   matching console image rather than downgrading the data.
+4. Start the console and check the Audit & backups page and the parked list.
 
 The `.parked.json` file is **disaster-recovery evidence**, not an import
 format. Do not copy it into `edge.sqlite` and do not assume it restores parked

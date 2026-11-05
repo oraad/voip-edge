@@ -1024,6 +1024,8 @@ def _destroy(
         raise LifecycleError(f"home {domain!r} is neither active nor parked")
 
     mode = "active" if active else "parked"
+    if mode == "active":
+        _require_purge_capability(worker)
     if mode == "active" and confirm != domain:
         raise ValidationError(
             {"confirm": f"type {domain} exactly"},
@@ -1052,7 +1054,12 @@ def _destroy(
     return _finish(run, fail_after)
 
 
-def resume_pending(
+def resume_pending(*args, **kwargs):
+    with _OP_LOCK:
+        return _resume_pending(*args, **kwargs)
+
+
+def _resume_pending(
     sidecar: Sidecar | str | Path,
     edge: str | Path,
     worker: Any,

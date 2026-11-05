@@ -54,7 +54,6 @@
   <form method="post" action="{{ action }}" hx-post="{{ action }}"
         hx-target="#form-shell" hx-swap="outerHTML"
         hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
-        hx-on::before-swap="if (event.detail.xhr.status === 422 || event.detail.xhr.status === 409) { event.detail.shouldSwap = true; event.detail.isError = false; }"
         novalidate>
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     {% if mode == 'edit' and row_hash %}<input type="hidden" name="row_hash" value="{{ row_hash }}">{% endif %}
@@ -124,7 +123,7 @@
     </fieldset>
 
     <div class="formbar">
-      <button class="btn pri" type="submit">{{ submit_label }}</button>
+      <button class="btn pri" type="submit"{% if status.readonly %} disabled{% endif %}>{{ submit_label }}</button>
       <a class="btn" href="{{ cancel_url }}">Discard</a>
       <span class="meta">Saved first, then Kamailio reloads — the toast says
         which table was queued, not that it is verified.</span>

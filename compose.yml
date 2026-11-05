@@ -1,10 +1,10 @@
 # compose.yml — VoIP Edge Console service for the existing Arcane/voip-edge
 # stack (or a second stack on the same host using the same EDGE_HOME).
 #
-# Merge the `console:` service below into docker/docker-compose.yml from
-# /root/voip-stack/kamailio-edge, or paste this file as its own Arcane stack.
-# Deployment steps, the group story and the Pangolin SSO resource are in
-# docs/ops/deploy.md.
+# Deploy this file as its OWN stack.  Merging it into another compose file
+# would make the relative `env_file: .env` and `build.context: .` below point
+# at the wrong directory.  Deployment steps, the group story and the Pangolin
+# SSO resource are in docs/ops/deploy.md.
 #
 # Deliberate choices:
 #   * image is built ONCE and pinned; do not build on every deploy
@@ -17,7 +17,7 @@
 
 services:
   console:
-    image: voip-edge-console:0.1.9
+    image: voip-edge-console:0.1.10
     build:
       context: .
       dockerfile: Dockerfile

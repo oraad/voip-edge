@@ -13,7 +13,7 @@
 #     Kamailio is unreachable (see the HEALTHCHECK below).
 #
 # Build once, then deploy the pinned image tag:
-#   docker build -t voip-edge-console:0.1.0 \
+#   docker build -t voip-edge-console:0.1.10 \
 #     --build-arg CONSOLE_GID="$(getent group console | cut -d: -f3)" .
 #
 # The image defaults to the non-root "console" user. The stock edge stack runs

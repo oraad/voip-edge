@@ -66,7 +66,6 @@ modparam("jsonrpcs", "dgram_socket", "/run/kamailio/kamailio_rpc.sock")
 modparam("jsonrpcs", "transport", 4)          # datagram only
 modparam("jsonrpcs", "dgram_mode", 0660)
 modparam("jsonrpcs", "dgram_group", "console")
-modparam("jsonrpcs", "dgram_max_size", 262144)
 modparam("db_sqlite", "db_set_journal_mode", "DBFILE=WAL")
 modparam("db_sqlite", "db_set_busy_timeout", "DBFILE=300")
 #!endif
@@ -163,39 +162,35 @@ cd /root/voip-edge
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
 docker build \
   --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.9 .
+  -t voip-edge-console:0.1.10 .
 ```
 
 Arcane: build the same Dockerfile once via **Images → Build** and tag it
-`voip-edge-console:0.1.9`. The compose service references that image; it does
+`voip-edge-console:0.1.10`. The compose service references that image; it does
 not rebuild during a stack deploy.
 
-The build pins `fastapi`, `uvicorn`, `jinja2`, `MarkupSafe` and `PyYAML` to the
-versions verified in this repo. `pytest` and the test doubles are deliberately
-not installed. `console/tables.yaml` and `web/templates` + `web/static` are
-copied into the image; there is no runtime bind mount for code or descriptors.
+The build pins `fastapi`, `uvicorn`, `jinja2`, `MarkupSafe`, `PyYAML`, `httpx`,
+`authlib` and `cryptography` to the versions verified in this repo. `pytest`
+and the test doubles are deliberately not installed. `console/tables.yaml` and
+`web/templates` + `web/static` (including the vendored htmx/PicoCSS and
+`app.js`) are copied into the image; there is no runtime bind mount for code or
+descriptors.
 
-Build context is the repo root. Until a `.dockerignore` is added, exclude local
-state by building from a clean checkout (`git archive`) rather than a working
-tree containing `.venv`, `.git` and test databases.
+Build context is the repo root. `.dockerignore` excludes `.venv`, `.git`, env
+files, databases and other local state; still prefer building from a clean
+checkout for release tags.
 
 ---
 
 ## 6. Start the service
 
-If the console is part of the existing stack, merge this service into
-`/root/voip-stack/kamailio-edge/docker/docker-compose.yml`:
-
-```yaml
-  console:
-    # Merge is discouraged: `env_file: .env` and `build.context: .` are
-    # relative to the compose file, so a copy into another stack silently
-    # loads the WRONG env and build directory. Deploy this repo's compose.yml
-    # as its own stack, or rewrite both paths to absolute values.
-```
-
-Otherwise deploy `/root/voip-edge/compose.yml` as its own Arcane stack
-on the same host, with the same `EDGE_HOME` / `EDGE_RUN` values.
+Deploy `/root/voip-edge/compose.yml` as its **own** Arcane stack on the same
+host, with the same `EDGE_HOME` / `EDGE_RUN` values as the edge stack. Do not
+merge the service into the edge compose file: its `env_file: .env` and
+`build.context: .` are relative to the console compose file, so a copy into
+another stack silently loads the wrong environment and build directory. If a
+single stack is mandatory, rewrite both paths to absolute values and re-run the
+deployment checks.
 
 The important properties of that service:
 
@@ -297,7 +292,7 @@ run it that way, all of these must be true:
    ```bash
    getent group console                      # e.g. 995
    docker build --build-arg CONSOLE_GID=995 \
-     -t voip-edge-console:0.1.9 .
+     -t voip-edge-console:0.1.10 .
    ```
    `dgram_group "console"` is resolved by name inside `voip-edge`. The stock
    image may not contain that name, and `group_add` does not create one. Build
@@ -326,6 +321,11 @@ run it that way, all of these must be true:
    `group_add: ["995"]`. Remove the default `user: "0:0"` line.
 5. **Root-owned backups.** The backup files are created by the console; the
    directory must be writable by the console user.
+6. **TLS key readability.** `deploy/acme/deploy-certs.sh` writes `sip.key` as
+   `0600`. If Kamailio runs non-root, either run the acme hook with
+   `KAM_UID=<kamailio uid> KAM_GID=<kamailio gid>` (the hook chowns the release)
+   or use a shared group with `0640` and add the Kamailio user to it. Keep the
+   key out of world-readable paths either way.
 
 If any of these is fragile on your host, keep the root default. Running this
 single-purpose container as root on a host that already runs Kamailio as root

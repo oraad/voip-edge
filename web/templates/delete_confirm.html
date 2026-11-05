@@ -46,10 +46,10 @@
   <form method="post" action="{{ action }}"
         hx-post="{{ action }}" hx-target="#delete-shell" hx-swap="outerHTML"
         hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
-        hx-on::after-request="if (event.detail.successful) { window.location='{{ cancel_url }}'; }">
+        data-redirect-on-success="{{ cancel_url }}">
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="formbar">
-      <button class="btn danger" type="submit">Delete {{ object_name }}</button>
+      <button class="btn danger" type="submit"{% if status.readonly %} disabled{% endif %}>Delete {{ object_name }}</button>
       <a class="btn" href="{{ cancel_url }}">Keep it</a>
       <span class="meta">Row key <span class="mono">{{ object_key }}</span></span>
     </div>

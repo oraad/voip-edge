@@ -11,12 +11,13 @@ tag is the unit of release and rollback.
 
 ```toml
 [project]
-name = "voip-edge-console"
-version = "0.1.0"
+name = "voip-edge"
+version = "0.1.10"
 ```
 
-The image tag must match it: `voip-edge-console:0.1.0`. Use an immutable
-version tag (optionally pinned by digest in production), never `latest` for a
+The Python project is `voip-edge`; the image keeps the service name and must
+carry the same version: `voip-edge-console:0.1.10`. Use an immutable version
+tag (optionally pinned by digest in production), never `latest` for a
 deployment that needs rollback.
 
 ## What requires a rebuild
@@ -44,8 +45,8 @@ refuses writes for a table whose declared version does not match the DB.
 ## Bump procedure
 
 1. **Pick the next version** with semantic versioning. Until 1.0, use
-   `0.MINOR.PATCH`; bump MINOR for a new feature set (e.g. T5/T9 landing), PATCH
-   for packaging/docs-only changes.
+   `0.MINOR.PATCH`; bump MINOR for a feature set, PATCH for fixes or
+   packaging/docs-only changes.
 2. **Update `pyproject.toml`** and add the entry to `CHANGELOG.md` under
    `Unreleased`, then move it to the new version on release.
 3. **Run the suite** from the repo virtualenv (no network):
@@ -53,8 +54,9 @@ refuses writes for a table whose declared version does not match the DB.
    .venv/bin/python -m pytest -q
    .venv/bin/python -m compileall console
    ```
-   The current baseline is **676 passed** (619+ was verified before the
-   parallel T5/T9 test additions).
+   The current baseline is **724 passed, 1 deselected**. Run the privacy guard
+   (`tools/check-privacy.sh --all`) and, before a deployment, the live gate
+   (`tests/live/run-live.sh`).
 4. **Build once** from a clean checkout:
    ```bash
    docker build \

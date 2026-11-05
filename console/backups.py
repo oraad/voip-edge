@@ -170,6 +170,8 @@ def create_backup(
     target = _new_backup_path(directory, safe_tag, now)
     tmp = target.with_name(target.name + ".tmp")
     parked_target = Path(str(target) + ".parked.json")
+    sidecar_target = Path(str(target) + ".console.sqlite.bak")
+    sidecar_tmp = Path(str(sidecar_target) + ".tmp")
 
     source: sqlite3.Connection | None = None
     dest: sqlite3.Connection | None = None
@@ -190,20 +192,21 @@ def create_backup(
         # copy next to each edge backup (docs/ops/backups.md).
         if sidecar_path.exists():
             sc_src = sqlite3.connect(f"file:{sidecar_path}?mode=ro", uri=True)
-            sc_dst = sqlite3.connect(str(target) + ".console.sqlite.bak")
+            sc_dst = sqlite3.connect(str(sidecar_tmp))
             try:
                 sc_src.backup(sc_dst)
                 sc_dst.commit()
             finally:
                 sc_dst.close()
                 sc_src.close()
+            os.replace(sidecar_tmp, sidecar_target)
 
         os.replace(tmp, target)
     except BackupError:
-        _cleanup(tmp, parked_target)
+        _cleanup(tmp, parked_target, sidecar_target, sidecar_tmp)
         raise
     except (sqlite3.Error, OSError) as exc:
-        _cleanup(tmp, parked_target)
+        _cleanup(tmp, parked_target, sidecar_target, sidecar_tmp)
         raise BackupError(f"backup of {edge_path} failed: {exc}") from exc
     finally:
         if dest is not None:
@@ -254,6 +257,12 @@ def rotate_backups(
     files = list_backups(backup_dir)
     removed: list[Path] = []
     for old in files[keep:]:
-        _cleanup(old, Path(str(old) + ".parked.json"), Path(str(old) + ".tmp"))
+        _cleanup(
+            old,
+            Path(str(old) + ".parked.json"),
+            Path(str(old) + ".tmp"),
+            Path(str(old) + ".console.sqlite.bak"),
+            Path(str(old) + ".console.sqlite.bak.tmp"),
+        )
         removed.append(old)
     return removed

@@ -7,7 +7,7 @@
   not match the descriptor. Fix them via the CLI (`tvalue` separator/structure).
 </div>
 {% endif %}
-{% if table not in ("tenant_registry", "tenant_landline") %}
+{% if table != "tenant_registry" and not status.readonly %}
 <div class="pagehead" style="margin-bottom:6px">
   <div></div>
   <a class="btn pri" href="/tables/{{ table }}/new">+ New row</a>
@@ -67,8 +67,13 @@
 <section class="panel empty" aria-labelledby="empty-table-title">
   <h2 id="empty-table-title">No rows in {{ table_label }} yet</h2>
   <p>This table is empty. Create the first row to start routing traffic.</p>
-  <button class="btn pri" type="button" disabled aria-disabled="true">+ Add the first row</button>
-  <p class="meta">Creating and editing rows arrives with the editing screens; this browser is read-only.</p>
+  {% if table != "tenant_registry" and not status.readonly %}
+  <a class="btn pri" href="/tables/{{ table }}/new">+ Add the first row</a>
+  {% elif status.readonly %}
+  <p class="meta">The console is in read-only mode; writes are disabled.</p>
+  {% else %}
+  <p class="meta">Onboard a home with the wizard to create registry rows.</p>
+  {% endif %}
 </section>
 {% endif %}
 {% endblock %}

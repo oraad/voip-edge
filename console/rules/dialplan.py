@@ -379,6 +379,8 @@ def _dialplan_references(conn, key) -> list[dict]:
         if found_row is None:
             return []
         number = int(found_row[0])
+        if number == 0:
+            return []
     except Exception:
         return []
     try:
@@ -396,7 +398,7 @@ def _dialplan_references(conn, key) -> list[dict]:
             dpid = int(str(values.get("dpid") or "0"))
         except (KeyError, ValueError):
             continue
-        if dpid == number or block == number:
+        if (dpid and dpid == number) or (block is not None and block == number):
             found.append(
                 {
                     "table": "tenant_registry",

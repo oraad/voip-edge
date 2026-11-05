@@ -98,7 +98,6 @@
     <form method="post" action="/wizard/step1" hx-post="/wizard/step1"
           hx-target="#wizard-shell" hx-swap="outerHTML"
           hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
-          hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }"
           novalidate>
       {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
       {% for name, value in hidden %}
@@ -160,7 +159,7 @@
       </div>
 
       <div class="formbar">
-        <button class="btn pri" type="submit">Continue to network</button>
+        <button class="btn pri" type="submit"{% if status.readonly %} disabled{% endif %}>Continue to network</button>
         <a class="btn" href="/homes">Cancel</a>
         <span class="meta">Step 1 of 4 · nothing is written yet.</span>
       </div>
@@ -172,7 +171,6 @@
     <form method="post" action="/wizard/step2" hx-post="/wizard/step2"
           hx-target="#wizard-shell" hx-swap="outerHTML"
           hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
-          hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }"
           novalidate>
       {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
       {% for name, value in hidden %}
@@ -238,9 +236,9 @@
       {% endif %}
 
       <div class="formbar">
-        <button class="btn pri" type="submit">Review the writes</button>
+        <button class="btn pri" type="submit"{% if status.readonly %} disabled{% endif %}>Review the writes</button>
         <button class="btn" type="submit" formaction="/wizard/step1"
-                formnovalidate>Back</button>
+                formnovalidate{% if status.readonly %} disabled{% endif %}>Back</button>
         <span class="meta">Step 2 of 4 · nothing is written yet.</span>
       </div>
     </form>

@@ -198,11 +198,15 @@ def test_ipv4_rejects_everything_else(value):
     [
         "sip.alpha.home.example.net",
         "sip.beta.home.example.net",
-        "SIP.UPPER.Home.Example.Net",
     ],
 )
 def test_tenant_domain_accepts_allowed_suffixes(value):
     assert run("tenant_domain", value) == ([], [])
+
+
+def test_tenant_domain_rejects_uppercase():
+    errors, _ = run("tenant_domain", "SIP.UPPER.Home.Example.Net")
+    assert errors and "lower-case" in errors[0]
 
 
 def test_tenant_domain_rejects_a_suffix_outside_the_allow_list():

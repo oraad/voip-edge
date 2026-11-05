@@ -18,7 +18,7 @@ mkdir -p "$DEST"
 
 # locate the newest fullchain + key in CERT_DIR (handles _ecc suffix etc.)
 FULL="$(ls -t "$CERT_DIR"/*fullchain*.cer "$CERT_DIR"/fullchain.cer 2>/dev/null | head -1 || true)"
-KEY="$(ls -t "$CERT_DIR"/*.key 2>/dev/null | grep -v ca | head -1 || true)"
+KEY="$(ls -t "$CERT_DIR"/*.key 2>/dev/null | grep -v '/ca\.key$' | head -1 || true)"
 [ -n "$FULL" ] && [ -n "$KEY" ] || { echo "no cert/key found in $CERT_DIR" >&2; exit 1; }
 
 changed=0

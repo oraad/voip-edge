@@ -195,6 +195,11 @@ def tenant_domain(value: Any, context: ValidationContext) -> tuple[list[str], li
         )
 
     errors: list[str] = []
+    if text != text.lower():
+        errors.append(
+            "Use a lower-case domain — Kamailio matches the tenant suffix "
+            "case-sensitively."
+        )
     if text.startswith(".") or text.endswith("."):
         errors.append("The domain may not start or end with a dot.")
     if text.startswith("-") or text.endswith("-"):

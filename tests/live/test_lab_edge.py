@@ -1,9 +1,10 @@
 """Live integration journey: park/restore a home against real Kamailio.
 
 This is the integration gate for the console lifecycle, not a FakeRPC test:
-it boots the edge repository's real ``kamailio`` binary with ``WITH_CONSOLE``
-JSON-RPC, registers a softphone through the edge, then drives the console's
-``park`` and ``restore`` against that live edge.
+it boots the real ``kamailio`` binary with this repository's sanitized config
+and ``WITH_CONSOLE`` JSON-RPC, registers a softphone through the edge, checks
+the tenant-suffix gate, then drives the console's ``park`` and ``restore``
+against that live edge.
 
 Run it with::
 
@@ -30,7 +31,7 @@ from console.sidecar import Sidecar
 
 from tests.live import lab
 
-DOMAIN = "home1.test"
+DOMAIN = "sip.alpha.home.example.net"
 TENANT_ID = "T1"
 ONNET_SET = 11
 PSTN_SET = 31
@@ -98,6 +99,9 @@ def test_live_park_restore_journey():
         # 3. softphone REGISTER through the live edge, cached in regcache ------
         assert lab.register(repo, domain=DOMAIN, bind=BIND, cseq=1) == 200
         lab.wait_regcache(rpc, f"alice@{DOMAIN}", present=True)
+        # The tenant-suffix gate must reject a longer name that prefix-matches
+        # a stored domain before the mtree lookup.
+        assert lab.register(repo, domain=f"{DOMAIN}.evil", bind=BIND, cseq=2) == 403
         sets = lab.dispatcher_sets(rpc)
         assert ONNET_SET in sets and onnet_dest in sets[ONNET_SET]
         assert PSTN_SET in sets and PSTN_DEST in sets[PSTN_SET]

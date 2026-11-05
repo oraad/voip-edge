@@ -1,6 +1,6 @@
 [project]
 name = "voip-edge"
-version = "0.1.9"
+version = "0.1.10"
 description = "Admin console for the Kamailio VoIP edge proxy"
 requires-python = ">=3.11"
 dependencies = [

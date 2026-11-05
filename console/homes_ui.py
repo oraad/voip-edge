@@ -55,6 +55,7 @@ def homes(
 
     descriptor = descriptors.load().tables.get(REGISTRY_TABLE)
     homes: list[dict] = []
+    corrupt = 0
 
     if descriptor is not None and conn is not None:
         try:
@@ -63,7 +64,6 @@ def homes(
         except sqlite3.Error:
             raw_rows = []
             key_name = None
-        corrupt = 0
         for raw in raw_rows:
             try:
                 values = descriptors.unpack_row(descriptor, raw)
@@ -106,7 +106,7 @@ def homes(
             "fragment": _wants_fragment(request),
             "homes": homes,
             "parked": parked,
-            "corrupt_rows": locals().get("corrupt", 0),
+            "corrupt_rows": corrupt,
         },
         headers=NO_STORE,
     )

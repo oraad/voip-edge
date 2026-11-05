@@ -46,6 +46,7 @@ _discovery_cache: dict | None = None
 _discovery_at: float = 0.0
 _jwks_cache: JsonWebKey | None = None
 _jwks_at: float = 0.0
+_discovery_fail_until: float = 0.0
 _discovery_lock: asyncio.Lock | None = None
 _jwks_lock: asyncio.Lock | None = None
 
@@ -155,8 +156,10 @@ def safe_return_to(value: str | None) -> str:
 
 
 async def load_discovery(force: bool = False) -> dict:
-    global _discovery_cache, _discovery_at
+    global _discovery_cache, _discovery_at, _discovery_fail_until
     now = time.monotonic()
+    if not force and _discovery_fail_until > now:
+        raise RuntimeError("identity provider discovery is in failure cooldown")
     if not force and _discovery_cache and now - _discovery_at < _DISCOVERY_TTL:
         return _discovery_cache
     async with _lock("discovery"):
@@ -166,17 +169,21 @@ async def load_discovery(force: bool = False) -> dict:
 
 
 async def _load_discovery_locked(force: bool) -> dict:
-    global _discovery_cache, _discovery_at
+    global _discovery_cache, _discovery_at, _discovery_fail_until
     now = time.monotonic()
     cfg = _cfg()
     issuer = cfg.oidc_issuer.rstrip("/")
     if not cfg.oidc_insecure and not issuer.startswith("https://"):
         raise ValueError("OIDC_ISSUER must use https")
     url = f"{issuer}/.well-known/openid-configuration"
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        meta = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            meta = resp.json()
+    except Exception:
+        _discovery_fail_until = now + 30.0
+        raise
     if str(meta.get("issuer", "")).rstrip("/") != issuer:
         raise ValueError("issuer mismatch in discovery document")
     if not cfg.oidc_insecure:
@@ -184,6 +191,7 @@ async def _load_discovery_locked(force: bool) -> dict:
             if meta.get(key) and not str(meta[key]).startswith("https://"):
                 raise ValueError(f"insecure {key} in discovery document")
     _discovery_cache, _discovery_at = meta, now
+    _discovery_fail_until = 0.0
     return meta
 
 
@@ -336,6 +344,11 @@ async def auth_login(request: Request, next: str = "/homes"):
     client_ip = request.client.host if request.client else "unknown"
     if login_rate_exceeded(client_ip):
         return PlainTextResponse("Too many sign-in attempts.", status_code=429)
+    # Count login starts too: unlimited flow creation is an amplification
+    # vector when the provider is slow or failing.
+    from .security import record_login_failure
+
+    record_login_failure(client_ip)
     try:
         meta = await load_discovery()
     except Exception:

@@ -47,20 +47,26 @@ while [ "$i" -lt 30 ]; do
 	i=$((i + 1))
 	sleep 2
 done
-reload_once || true
-
 last=""
-[ -f "$MARKER" ] && last=$(stat -c '%Y:%s' "$MARKER")
+pending=0
+# Only remember a successful reload; a failed initial attempt stays pending
+# and is retried by the loop below instead of being silently forgotten.
+if reload_once; then
+	[ -f "$MARKER" ] && last=$(stat -c '%Y:%s' "$MARKER")
+else
+	pending=1
+fi
 
 while :; do
 	sleep 30
-	[ -f "$MARKER" ] || continue
-	cur=$(stat -c '%Y:%s' "$MARKER")
-	if [ "$cur" != "$last" ]; then
+	cur=""
+	[ -f "$MARKER" ] && cur=$(stat -c '%Y:%s' "$MARKER")
+	if [ "$cur" != "$last" ] || [ "$pending" = 1 ]; then
 		# the marker is touched only after the cert pair is fully installed;
 		# keep retrying until Kamailio accepts the reload.
 		if reload_once; then
 			last="$cur"
+			pending=0
 		fi
 	fi
 done

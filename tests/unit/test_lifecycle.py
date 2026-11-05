@@ -746,3 +746,34 @@ def test_resume_failed_step_keeps_state_then_recovers(env):
     assert issued == ["tenantdom"]
     assert env.sidecar.pending_reloads() == []
     assert env.fake.calls_for("mtree.reload")[-1].params == ["tenantdom"]
+
+
+def test_active_destroy_is_refused_when_purge_capability_is_missing(env, monkeypatch):
+    from dataclasses import replace
+
+    from console import capabilities
+    from console import settings as settings_module
+    from console.errors import KamailioUnavailable
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, enforce_capabilities=True),
+    )
+    capabilities.clear_cache()
+    env.fake.fault("htable.delete", -32601, "Method not found")
+    before = edge_signature(env.edge)
+
+    with pytest.raises(KamailioUnavailable):
+        destroy(
+            env.sidecar,
+            env.edge,
+            env.worker,
+            DOMAIN_A,
+            confirm=DOMAIN_A,
+            backup_dir=env.backups,
+        )
+
+    assert edge_signature(env.edge) == before
+    assert env.sidecar.latest_intent_any(DOMAIN_A) is None
+    assert list_backups(env.backups) == []

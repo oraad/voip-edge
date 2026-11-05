@@ -9,7 +9,7 @@ is deliberately no TLS there.
 | File | Role |
 |---|---|
 | `acme/run.sh` | acme.sh container entrypoint: issues the cert if missing (DNS-01 via nsupdate/RFC2136 or the Technitium API), installs it into the container's `/tls`, registers the deploy hook, then runs the acme cron every 12 h. |
-| `acme/deploy-certs.sh` | `--reloadcmd` target: writes a timestamped release directory under `/tls/releases/`, flips the stable `current` symlink atomically and re-points `sip.crt`/`sip.key` through it. Kamailio never reads a new certificate with an old key. Keeps the five newest releases. |
+| `acme/deploy-certs.sh` | `--reloadcmd` target: writes a timestamped release directory under `/tls/releases/`, re-points the stable `current` symlink via busybox-safe `ln -sfn`, and keeps `sip.crt`/`sip.key` pointing through it. Both live paths always resolve inside one release, so Kamailio never reads a new certificate with an old key. Keeps the five newest releases. |
 | `watch-certs.sh` | `cert-reloader` container: watches `/certs/.renewed` and calls `kamcmd -s unix:/run/kamailio/kamailio_ctl tls.reload`. No docker.sock, no restart. |
 | `acme-deploy-hook.sh` | Standalone fallback for non-compose setups: sync certs from an acme.sh volume into Kamailio's TLS dir and reload only when files changed. |
 

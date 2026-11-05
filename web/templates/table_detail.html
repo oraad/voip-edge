@@ -25,7 +25,9 @@
 </section>
 
 <div class="formbar">
+  {% if not status.readonly %}
   <a class="btn pri" href="/tables/{{ table }}/{{ key|urlencode }}/edit">Edit</a>
-  <a class="btn" href="/tables/{{ table }}/{{ key|urlencode }}/delete">Delete…</a>
+  {% if deletable %}<a class="btn" href="/tables/{{ table }}/{{ key|urlencode }}/delete">Delete…</a>{% endif %}
+  {% endif %}
 </div>
 {% endblock %}

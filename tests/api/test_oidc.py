@@ -66,6 +66,7 @@ def make_token(claims: dict, key: bytes = PRIV_PEM, kid: str = "k1") -> str:
 def _reset_oidc_caches():
     oidc._discovery_cache = None
     oidc._discovery_at = 0.0
+    oidc._discovery_fail_until = 0.0
     oidc._jwks_cache = None
     oidc._jwks_at = 0.0
     yield

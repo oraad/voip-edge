@@ -107,10 +107,16 @@ def _wants_fragment(request: Request) -> bool:
 # status strip (injected as a template context processor by console.app)
 # ---------------------------------------------------------------------------
 def _app_capabilities(app: Any) -> dict[str, bool] | None:
+    # The TTL cache is refreshed by the startup probe and the sweeper; the
+    # app.state snapshot is only a fallback (a one-shot value goes stale when
+    # Kamailio restarts or the first probe ran before the socket existed).
+    fresh = capabilities.cached()
+    if isinstance(fresh, Mapping):
+        return dict(fresh)
     current = getattr(getattr(app, "state", None), "capabilities", None)
     if isinstance(current, Mapping):
         return dict(current)
-    return capabilities.cached()
+    return None
 
 
 def _pending_reload_count() -> tuple[int | None, str | None]:

@@ -164,3 +164,35 @@ def test_corrupt_sidecar_fails_the_backup(tmp_path):
         create_backup(edge, sidecar_path, tmp_path / "backups", "park:x")
 
     assert list_backups(tmp_path / "backups") == []
+    leftovers = list((tmp_path / "backups").glob("*console.sqlite.bak*"))
+    assert leftovers == []
+
+
+def test_rotation_removes_companion_sidecar_files(tmp_path):
+    from console import backups
+
+    edge = tmp_path / "edge.sqlite"
+    imports = __import__("sqlite3")
+    conn = imports.connect(str(edge))
+    conn.execute("CREATE TABLE t (x INTEGER)")
+    conn.commit()
+    conn.close()
+    sidecar = tmp_path / "console.sqlite"
+    conn = imports.connect(str(sidecar))
+    conn.execute("CREATE TABLE s (x INTEGER)")
+    conn.commit()
+    conn.close()
+
+    from datetime import datetime, timezone, timedelta
+
+    created = []
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for i in range(6):
+        created.append(
+            backups.create_backup(
+                edge, sidecar, tmp_path / "backups", f"t{i}",
+                keep=5, now=base + timedelta(seconds=i),
+            )
+        )
+    assert len(backups.list_backups(tmp_path / "backups")) == 5
+    assert not (tmp_path / "backups" / (created[0].name + ".console.sqlite.bak")).exists()

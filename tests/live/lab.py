@@ -48,7 +48,8 @@ __all__ = [
     "tail",
 ]
 
-DEFAULT_EDGE_REPO = Path("/root/voip-stack/kamailio-edge")
+DEFAULT_EDGE_REPO = Path(__file__).resolve().parents[2]
+LOCAL_ASSETS = Path(__file__).resolve().parent
 KAMAILIO = Path(os.environ.get("KAMAILIO_BIN", "/usr/sbin/kamailio"))
 EDGE_HOSTS = ("127.0.0.1", "127.0.0.9")
 EDGE_PORT = 5060
@@ -59,8 +60,21 @@ _HOME1_LOG = "home1.log"
 # environment / ports
 # ---------------------------------------------------------------------------
 def edge_repo() -> Path:
-    """The edge repository (``VOIP_EDGE_REPO`` overrides the lab default)."""
+    """The repository whose ``kamailio/`` config the live gate boots.
+
+    Defaults to this repository (so the sanitized config is what is tested);
+    set ``VOIP_EDGE_REPO`` to test the deployed edge repo instead.
+    """
     return Path(os.environ.get("VOIP_EDGE_REPO", str(DEFAULT_EDGE_REPO)))
+
+
+def _asset(repo: Path, name: str) -> Path:
+    """Prefer the target repo's test asset, else the copy shipped here."""
+    candidate = repo / "tests" / name
+    if candidate.is_file():
+        return candidate
+    local = LOCAL_ASSETS / name
+    return local if local.is_file() else candidate
 
 
 def missing_requirements() -> str | None:
@@ -68,15 +82,11 @@ def missing_requirements() -> str | None:
     repo = edge_repo()
     if not KAMAILIO.is_file():
         return f"kamailio binary not found at {KAMAILIO}"
-    required = (
-        "kamailio/kamailio.cfg",
-        "tests/seed-test.sql",
-        "tests/fake_voipstack.py",
-        "tests/uac.py",
-    )
-    for relative in required:
-        if not (repo / relative).is_file():
-            return f"edge repository file missing: {repo / relative}"
+    if not (repo / "kamailio" / "kamailio.cfg").is_file():
+        return f"kamailio config missing: {repo / 'kamailio' / 'kamailio.cfg'}"
+    for name in ("seed-test.sql", "fake_voipstack.py", "uac.py"):
+        if not _asset(repo, name).is_file():
+            return f"live test asset missing: {_asset(repo, name)}"
     if shutil.which("sqlite3") is None:
         return "sqlite3 CLI not found"
     return None
@@ -126,7 +136,7 @@ def seed_database(repo: Path, work: Path) -> Path:
     """
     work.mkdir(parents=True, exist_ok=True)
     seed = work / "seed-test.sql"
-    shutil.copyfile(repo / "tests" / "seed-test.sql", seed)
+    shutil.copyfile(_asset(repo, "seed-test.sql"), seed)
     database = work / "edge.sqlite"
     with seed.open("rb") as stream:
         result = subprocess.run(
@@ -351,7 +361,7 @@ def start_fake(
     stream = output.open("wb")
     command = [
         sys.executable,
-        str(repo / "tests" / "fake_voipstack.py"),
+        str(_asset(repo, "fake_voipstack.py")),
         "--port",
         str(port),
         "--log",
@@ -401,7 +411,7 @@ def stop_fake(fake: FakeLab) -> None:
 # ---------------------------------------------------------------------------
 def run_uac(repo: Path, *arguments: str, timeout: float = 30.0) -> int:
     """Run the edge repo's ``uac.py`` and return its ``RESULT=`` SIP status."""
-    command = [sys.executable, str(repo / "tests" / "uac.py"), *arguments]
+    command = [sys.executable, str(_asset(repo, "uac.py")), *arguments]
     result = subprocess.run(
         command, capture_output=True, text=True, timeout=timeout
     )

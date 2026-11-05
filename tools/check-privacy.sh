@@ -31,7 +31,10 @@ fail=0
 deny="tools/private-deny.txt"
 
 # --- 1. file gate ---------------------------------------------------------
-printf '%s\n' "$FILES" | while IFS= read -r f; do
+TMPLIST=$(mktemp)
+trap 'rm -f "$TMPLIST"' EXIT
+printf '%s\n' "$FILES" > "$TMPLIST"
+while IFS= read -r f; do
     case "$f" in
         *.sqlite|*.sqlite-wal|*.sqlite-shm|*.db)
             echo "privacy: refusing database file: $f" >&2; fail=1 ;;
@@ -42,7 +45,7 @@ printf '%s\n' "$FILES" | while IFS= read -r f; do
         .env|*.env|*/.env)
             echo "privacy: refusing env file: $f" >&2; fail=1 ;;
     esac
-done
+done < "$TMPLIST"
 
 # --- 2. content gate ------------------------------------------------------
 if [ -f "$deny" ]; then

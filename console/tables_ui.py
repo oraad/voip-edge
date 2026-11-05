@@ -208,6 +208,7 @@ def table_detail(
             "table": descriptor.table,
             "table_label": _humanize(descriptor.table),
             "key": key,
+            "deletable": descriptor.delete_policy != "lifecycle",
             "fields": fields,
         },
         headers=NO_STORE,

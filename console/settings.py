@@ -15,12 +15,10 @@ def _bool(name: str, default: bool = False) -> bool:
 @dataclass(frozen=True)
 class Settings:
     # auth / session
-    token: str = os.environ.get("CONSOLE_TOKEN", "dev-token")
-    # No fixed fallback: derive from the token when CONSOLE_SECRET is absent.
-    # (A public constant would let anyone forge a session cookie.)
-    secret: str = os.environ.get("CONSOLE_SECRET", "") or __import__("hashlib").sha256(
-        ("voip-edge-session:" + os.environ.get("CONSOLE_TOKEN", "dev-token")).encode()
-    ).hexdigest()
+    # Unset/blank credentials become per-process random values: never a
+    # public default, and never derivable from the other credential.
+    token: str = os.environ.get("CONSOLE_TOKEN") or __import__("secrets").token_urlsafe(24)
+    secret: str = os.environ.get("CONSOLE_SECRET") or __import__("secrets").token_hex(32)
     secure_cookie: bool = _bool("CONSOLE_SECURE_COOKIE")
     # bind
     bind: str = os.environ.get("CONSOLE_BIND", "127.0.0.1")

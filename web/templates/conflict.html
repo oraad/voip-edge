@@ -48,14 +48,13 @@
   <div class="formbar">
     <form method="post" action="{{ action }}"
           hx-post="{{ action }}" hx-target="closest section" hx-swap="outerHTML"
-          hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
-          hx-on::after-request="if (event.detail.successful) { window.location='/tables/{{ table }}'; }">
+          hx-headers='{"X-CSRF-Token": "{{ csrf }}"}' data-redirect-on-success="/tables/{{ table }}">
       {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
       <input type="hidden" name="force" value="1">
       {% for hidden in hidden_fields %}
       <input type="hidden" name="{{ hidden.name }}" value="{{ hidden.value }}">
       {% endfor %}
-      <button class="btn pri" type="submit">Keep my changes</button>
+      <button class="btn pri" type="submit"{% if status.readonly %} disabled{% endif %}>Keep my changes</button>
     </form>
     <a class="btn" href="{{ load_latest_url }}">Load latest</a>
     <a class="btn" href="{{ cancel_url }}">Discard</a>

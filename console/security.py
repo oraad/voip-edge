@@ -231,7 +231,8 @@ def record_login_failure(client_ip: str) -> None:
         _login_attempts.setdefault(client_ip or "unknown", deque()).append(now)
         _prune_locked(now)
         if len(_login_attempts) > 10000:  # bound memory across many peers
-            _login_attempts.clear()
+            oldest = min(_login_attempts, key=lambda k: _login_attempts[k][0])
+            _login_attempts.pop(oldest, None)
 
 
 def login_rate_exceeded(client_ip: str) -> bool:

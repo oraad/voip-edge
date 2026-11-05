@@ -4,25 +4,23 @@ This directory is mounted at `/static` and copied into the console image. The
 console **never** loads assets from a CDN at runtime; it must work on a host
 with no outbound network.
 
-`base.html` references exactly two files:
+`base.html` references exactly three files:
 
 | Path | Purpose | Pinned version |
 |---|---|---|
 | `/static/pico.min.css` | PicoCSS v2 (classless baseline) | **2.0.6** |
 | `/static/htmx.min.js` | htmx 2 (fragment swaps, CSRF header wiring) | **2.0.4** |
+| `/static/app.js` | project-owned htmx event handlers (CSP-safe, no `hx-on`) | this repo |
 
 ## Status in this tree
 
-The files are **not committed yet**. Until they are vendored, both URLs return
-404. That is safe: every page is server-rendered and usable without CSS or
-JavaScript (the base template carries a small inline fallback stylesheet).
-Production should not ship without the pinned files, however, because the CSRF
-header wiring and fragment swaps depend on htmx.
+All three files are **vendored and committed**. The console loads them from its
+own origin only; the CSP is `script-src 'self'` with no `unsafe-eval`.
 
 ## Vendoring procedure
 
-Do this once, offline, from the release artifacts you have verified. Never
-fetch at runtime and never use a `latest` URL.
+Do this only from release artifacts you have verified. Never fetch at runtime
+and never use a `latest` URL.
 
 1. Download the exact releases:
    - PicoCSS **v2.0.6** — `pico.min.css`
@@ -39,14 +37,15 @@ fetch at runtime and never use a `latest` URL.
    sha256sum web/static/pico.min.css web/static/htmx.min.js
    ```
 4. Rebuild the console image. `web/static` is copied into the image; there is
-   no runtime asset mount.
+   no runtime asset mount. Run `pytest tests/api/test_hardening_round3.py` to
+   confirm all three URLs return 200.
 
 ## Integrity record
 
 | File | Version | SHA-256 |
 |---|---|---|
-| `pico.min.css` | 2.0.6 | `TODO: fill at vendoring time` |
-| `htmx.min.js` | 2.0.4 | `TODO: fill at vendoring time` |
+| `pico.min.css` | 2.0.6 | `dd5fd5591afd81ee21dcc117ad85c014dc3f1f19dc2d7b7d101ea0acc29274c2` |
+| `htmx.min.js` | 2.0.4 | `e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447` |
 
 > The version numbers above are the pins this repo documents. If you deliberately
 > upgrade, change the version in the table, update the two SHA-256 values, run

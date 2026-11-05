@@ -273,7 +273,9 @@ def test_edit_post_cannot_rename_a_packed_key(seeded_db, auth_client, app):
     worker = RecordingWorker()
     app.state.worker = worker
     domain = "sip.alpha.home.example.net"
-    payload = dict(VALID_TENANT, tprefix="sip.renamed.home.example.net")
+    payload = dict(
+        VALID_TENANT, tprefix="sip.renamed.home.example.net", force="1"
+    )
 
     response = auth_client.post(
         f"/tables/tenant_registry/{domain}/edit", data=payload

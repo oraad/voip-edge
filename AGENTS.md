@@ -47,8 +47,9 @@ design reference, not a template source.
 | `console/security.py` | Session cookie, CSRF, login rate limit |
 | `console/homes_ui.py`, `console/tables_ui.py`, `console/live.py` | Homes landing, generic read browser, live dashboard routes |
 | `console/tables.yaml` | The five table descriptors (grammar v1) |
-| `web/templates/`, `web/static/` | Jinja2 templates and vendored htmx/PicoCSS only |
-| `tests/` | `unit/`, `api/`, `fixtures/`; `live/` and `e2e/` are reserved placeholders |
+| `console/derivations.py` | Named `derived:` field rules (e.g. landline `ds_onnet`) |
+| `web/templates/`, `web/static/` | Jinja2 templates; vendored htmx/PicoCSS and `app.js` |
+| `tests/` | `unit/`, `api/`, `fixtures/`; `live/` is the real-Kamailio gate; `e2e/` is a reserved placeholder |
 
 ## Run the tests
 
@@ -58,15 +59,17 @@ Use the repo virtualenv; there is no network or install step in this workspace.
 .venv/bin/python -m pytest -q
 ```
 
-Current baseline: **198 passed**. Focused runs are fine while developing:
+Current baseline: **724 passed, 1 deselected**. Focused runs are fine while
+developing:
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_pack.py -q
 ```
 
-Tests never touch the live edge. Use `tests/fixtures/seeddb.py`,
+Unit/API tests never touch the live edge. Use `tests/fixtures/seeddb.py`,
 `tests/fixtures/edgedb.py` and `tests/fixtures/fakerpc.py`; per-test temporary
-databases and injected clocks only. Live/e2e work is a serialized singleton.
+databases and injected clocks only. `tests/live/run-live.sh` is the serialized
+singleton gate that boots the sanitized Kamailio config and binds SIP 5060.
 
 ## Coding conventions
 
@@ -146,12 +149,11 @@ descriptor/SQLite/reload rules.
 - **Env surface is single-source.** `.env.example` mirrors plan §10. Note that
   `CONSOLE_THROTTLE_TENANTDOM` is reserved but not read yet; throttles come from
   `console/tables.yaml`. Restart after changing env values (read at import).
-- **Testing a packaging change.** Run `.venv/bin/python -m pytest -q` (baseline
-  **676 passed** in the current tree; 619+ was verified at the T10 change before
-  the parallel T5/T9 test additions) and `.venv/bin/python -m compileall
-  console` (offline smoke). Do not put `pytest` or test doubles in the image,
-  and do not claim `docker build` succeeded unless it actually ran on a
-  network-enabled host.
+- **Testing a packaging change.** Run `.venv/bin/python -m pytest` (baseline
+  **724 passed, 1 deselected**), `.venv/bin/python -m compileall console`
+  (offline smoke), and `./tools/check-privacy.sh --all`. Do not put `pytest` or
+  test doubles in the image, and do not claim `docker build` succeeded unless
+  it actually ran on a network-enabled host.
 
 ## TLS
 

@@ -1,11 +1,14 @@
 #!/bin/sh
 set -eu
-# acme.sh --reloadcmd target: promote the staged pair atomically.
+# acme.sh --reloadcmd target: promote the staged pair as one release.
 #
 # We cannot atomically replace two files; instead each release is a directory
 # and the live pair is two stable symlinks through a single "current" symlink.
-# Flipping "current" (rename of a symlink) is atomic, so Kamailio never sees a
-# new certificate with an old key, even on a manual `tls.reload`.
+# Both paths therefore always resolve inside the same release, so Kamailio
+# never sees a new certificate with an old key.  The symlink is replaced with
+# busybox-safe `ln -sfn` (the acme image has no GNU `mv -T`); the brief
+# unlink/symlink window is harmless because Kamailio only reloads after this
+# hook returns.
 STAGE=/tls/.staging
 LIVE=/tls
 RELEASES="$LIVE/releases"
@@ -20,9 +23,15 @@ cp "$STAGE/sip.key" "$RELEASES/$TAG/sip.key"
 chmod 644 "$RELEASES/$TAG/sip.crt"
 chmod 600 "$RELEASES/$TAG/sip.key"
 
+# Optional: give a non-root Kamailio ownership of the release (set KAM_UID and
+# KAM_GID in the acme container).  Root-owned 0600 is correct for the default
+# root Kamailio container.
+if [ -n "${KAM_UID:-}" ] && [ -n "${KAM_GID:-}" ]; then
+    chown "$KAM_UID:$KAM_GID" "$RELEASES/$TAG/sip.crt" "$RELEASES/$TAG/sip.key"
+fi
+
 # Stable symlinks consumed by kamailio/tls.cfg (paths never change).
-ln -sfn "releases/$TAG" "$LIVE/.current.new"
-mv -Tf "$LIVE/.current.new" "$LIVE/current"
+ln -sfn "releases/$TAG" "$LIVE/current"
 ln -sfn current/sip.crt "$LIVE/sip.crt"
 ln -sfn current/sip.key "$LIVE/sip.key"
 

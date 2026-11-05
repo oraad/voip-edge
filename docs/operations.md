@@ -19,31 +19,35 @@ from plan §2.
 
 | Variable | Default | Purpose / production note |
 |---|---|---|
-| `CONSOLE_TOKEN` | `dev-token` | Shared login token. **Set a strong value in production.** The token is a second factor in front of Pangolin SSO, not a replacement for it. |
-| `CONSOLE_SECRET` | `dev-secret` | Session cookie signing secret. **Set an explicit random value.** Plan §10 says it may derive from `CONSOLE_TOKEN`; the current settings module uses a fixed dev fallback instead. |
+| `CONSOLE_TOKEN` | random per process | Shared login token. **Set a strong value in production.** If unset/blank a random token is generated, so no one can sign in. The token is a second factor in front of Pangolin SSO, not a replacement for it. |
+| `CONSOLE_SECRET` | random per process | Session/flow cookie signing secret. **Set an explicit random value.** It is never derived from the token; a generated secret invalidates sessions on restart. |
 | `CONSOLE_BIND` | `127.0.0.1` | Production: `100.64.0.9` (host-networked container, reachable only through Pangolin). |
 | `CONSOLE_PORT` | `8080` | Pangolin resource target port. |
 | `CONSOLE_DB_PATH` | `edge.sqlite` | Absolute path to the mounted Kamailio DB, e.g. `/data/edge.sqlite` (host: `${EDGE_HOME}/kamailio/db/edge.sqlite`). Never point at a copy. |
 | `CONSOLE_SIDECAR_DIR` | `console-data` | Directory for `console.sqlite` and backups. Production: `/var/lib/console` (host: `${EDGE_HOME}/console`). The directory must exist. |
 | `CONSOLE_RPC_SOCK` | `/run/kamailio/kamailio_rpc.sock` | Kamailio `jsonrpcs` unix datagram socket; the console needs read/write access and the shared `console` group. |
 | `CONSOLE_RPC_TIMEOUT_MS` | `2000` | Per-RPC timeout. A timeout is surfaced as an unreachable edge, not a crash. |
-| `CONSOLE_THROTTLE_TENANTDOM` | not read yet | Plan §10 per-table throttle map (measured deltas). Current code hard-codes 5 s per table; wiring is T10 packaging. |
-| `CONSOLE_ALLOWED_SUFFIXES` | `home.example.net` | Comma-separated allowed home suffixes. |
+| `CONSOLE_THROTTLE_TENANTDOM` | not read | Reserved. Per-table throttles are authoritative in `console/tables.yaml` (`reload.throttle_seconds`, 5 s per table). |
+| `CONSOLE_ALLOWED_SUFFIXES` | `home.example.net` | Comma-separated allowed home suffixes. Keep in sync with `TENANTSUFFIXRE` in `kamailio/kamailio.cfg`; the edge also enforces it before the mtree lookup. |
 | `CONSOLE_POLL_MS` | `15000` | Live-dashboard polling interval. In the lab use ~500 ms; never use `wait_for_timeout` in tests. |
 | `CONSOLE_READONLY` | `0` | `1` gates every mutating route, disables action buttons and shows the read-only banner. Use for the first production session. |
 | `CONSOLE_TLS_LIVE` | `1` | Enables the wizard's mandatory TLS-SAN notice (`ACME_DOMAINS` + force-reissue). |
 | `CONSOLE_SECURE_COOKIE` | `0` | Set `1` when Pangolin terminates HTTPS; adds `Secure` to the session cookie. |
 | `CONSOLE_SESSION_TTL` | `43200` | Absolute session lifetime in seconds (12 h); there is no sliding refresh. |
-| `CONSOLE_LOGIN_RATE` | `5` | Failed logins per minute per IP before a 429. |
+| `CONSOLE_LOGIN_RATE` | `5` | Failed auth attempts and SSO login starts per minute per IP before a 429. |
+| `CONSOLE_SWEEPER_INTERVAL` | `30` | Seconds between lifecycle-intent/reload sweeps; `0` disables (tests use 0). |
+| `CONSOLE_ENFORCE_CAPABILITIES` | `0` | `1` refuses park/destroy up front when `htable.delete` is proven unavailable. Set `1` in production. |
+| `OIDC_ALLOW_ANY` | `0` | Explicitly allow any authenticated subject when no group/email-domain allowlist is configured. SSO fails closed without it. |
+| `OIDC_INSECURE` | `0` | Allow `http://` issuer/endpoints for loopback development only. |
 
 ## Backups and restore
 
 Backups use `console.backups.create_backup`: the SQLite online backup API, never
-a file copy of a running database. Each backup is
-`edge-<UTC>-<tag>.sqlite` with a sibling `.parked.json` dump of the sidecar's
-parked snapshots. Rotation keeps the newest **5 globally**, across all purpose
-tags. A backup is taken before every destructive lifecycle operation and before
-wizard apply.
+a file copy of a running database. Each backup is `edge-<UTC>-<tag>.sqlite`
+with a sibling `.console.sqlite.bak` (WAL-safe sidecar copy, including parked
+snapshots) and a readable `.parked.json` dump. Rotation keeps the newest **5
+globally** and removes all three companions together. A backup is taken before
+every destructive lifecycle operation and before wizard apply.
 
 Backups live in the configured backup directory (the deployment convention is
 `${CONSOLE_SIDECAR_DIR}/backups`). The `.parked.json` file is disaster-recovery
@@ -154,7 +158,6 @@ second factor. Do not publish the port directly or bypass the resource.
   Pangolin can probe liveness; it reveals only `{"status":"ok"}`.
 - First production session: `CONSOLE_READONLY=1`, verify reads and the status
   strip, then enable writes.
-- Console resource steps for Pangolin are part of T10 packaging. Until they
-  land, follow the existing Pangolin resource pattern in
-  `/root/voip-stack/kamailio-edge/DEPLOY.md` §C rather than inventing a second
-  exposure path.
+- Follow the existing Pangolin resource pattern in
+  `/root/voip-stack/kamailio-edge/DEPLOY.md` §C and the concrete steps in
+  `docs/ops/deploy.md` rather than inventing a second exposure path.

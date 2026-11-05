@@ -298,6 +298,10 @@ def _action(descriptor: descriptors.Descriptor, mode: str, key: Any = None) -> s
 class _StaleEdit(Exception):
     """Row changed between render and write."""
 
+    def __init__(self, current: Mapping[str, Any] | None = None):
+        self.current = dict(current or {})
+        super().__init__("stale edit")
+
 
 def _submit_label(mode: str) -> str:
     return "Create & reload routing" if mode == "create" else "Save & reload routing"
@@ -1371,7 +1375,13 @@ def edit_form(
     if raw is None:
         return _not_found(request, f"No row “{key}” in {_humanize(table)}.")
 
-    loaded = descriptors.unpack_row(descriptor, raw)
+    try:
+        loaded = descriptors.unpack_row(descriptor, raw)
+    except (KeyError, ValueError):
+        return _not_found(
+            request,
+            f"Row “{key}” is corrupt (bad packed record) — fix it via the CLI.",
+        )
     row_hash = _row_hash(descriptor, loaded)
     values = dict(loaded)
     if conn is not None:
@@ -1490,7 +1500,13 @@ async def _submit(
             existing_raw = None
         if existing_raw is None:
             return _not_found(request, f"No row “{key}” in {_humanize(table)}.")
-        existing = descriptors.unpack_row(descriptor, existing_raw)
+        try:
+            existing = descriptors.unpack_row(descriptor, existing_raw)
+        except (KeyError, ValueError):
+            return _not_found(
+                request,
+                f"Row “{key}” is corrupt (bad packed record) — fix it via the CLI.",
+            )
 
     form = await _form_data(request)
     values = _collect_values(descriptor, form, mode=mode, existing=existing)
@@ -1500,13 +1516,8 @@ async def _submit(
     # database; a mismatch is a 409 banner, never an overwrite.  ``force=1``
     # is the deliberate "Keep my changes" resubmit.
     submitted_hash = _form_scalar(form, "row_hash")
-    if (
-        mode == "edit"
-        and existing
-        and submitted_hash
-        and not _truthy(_form_scalar(form, "force"))
-    ):
-        if submitted_hash != _row_hash(descriptor, existing):
+    if mode == "edit" and existing and not _truthy(_form_scalar(form, "force")):
+        if not submitted_hash or submitted_hash != _row_hash(descriptor, existing):
             return _render_conflict(
                 request,
                 descriptor,
@@ -1582,18 +1593,18 @@ async def _submit(
                     else {}
                 )
                 if current_raw is None or submitted_hash != _row_hash(descriptor, current):
-                    raise _StaleEdit()
+                    raise _StaleEdit(current)
             if mode == "create":
                 inserted_key = _insert(conn, descriptor, values)
             else:
                 _update(conn, descriptor, values, original_key)
-    except _StaleEdit:
+    except _StaleEdit as exc:
         return _render_conflict(
             request,
             descriptor,
             key=key,
             submitted=values,
-            current=existing,
+            current=exc.current or existing,
         )
     except sqlite3.IntegrityError:
         key_field = _key_field(descriptor)

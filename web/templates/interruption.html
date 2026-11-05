@@ -54,8 +54,7 @@
 
   <form method="post" action="{{ action }}"
         hx-post="{{ action }}" hx-target="closest section" hx-swap="outerHTML"
-        hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
-        hx-on::after-request="if (event.detail.successful) { window.location='/tables/{{ table }}'; }"
+        hx-headers='{"X-CSRF-Token": "{{ csrf }}"}' data-redirect-on-success="/tables/{{ table }}"
         novalidate>
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     {% for hidden in hidden_fields %}
@@ -72,7 +71,7 @@
       </label>
     </div>
     <div class="formbar">
-      <button class="btn pri" type="submit">Save anyway (same home)</button>
+      <button class="btn pri" type="submit"{% if status.readonly %} disabled{% endif %}>Save anyway (same home)</button>
       <a class="btn" href="{{ action }}">Back to the form</a>
       <a class="btn" href="{{ cancel_url }}">Discard</a>
     </div>

@@ -757,7 +757,11 @@ def _enqueue_reloads(
         except BaseException as exc:
             drained = False
             warnings.append(f"Reload queue did not drain: {exc}")
-    errors = getattr(worker, "errors", {}) or {}
+    errors = {
+        table: err
+        for table, err in (getattr(worker, "errors", {}) or {}).items()
+        if table in keys
+    }
     if errors:
         detail = ", ".join(f"{table}: {err}" for table, err in errors.items())
         warnings.append(

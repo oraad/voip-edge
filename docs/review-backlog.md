@@ -1,34 +1,48 @@
-# Review notes: accepted risks and follow-ups (v0.1.9)
+# Review notes: accepted risks and follow-ups (v0.1.10)
 
-The second review round closed the open findings from v0.1.8. What remains is
-**intentional**, either accepted for this single-operator deployment or a
-follow-up that does not change the security posture.
+Three independent review rounds (security, correctness, operations/UI) were
+run against v0.1.8–v0.1.9. Their blockers and important findings are fixed in
+v0.1.10; the entries below are **intentional** for this single-operator
+deployment or are non-blocking follow-ups.
 
 ## Accepted risks
 
 1. **Stateless sessions cannot be revoked before expiry (12 h).** Logout clears
-   the cookies and flow cookies; a stolen cookie lives until `exp`. Accepted for
+   the session and flow cookies; a stolen cookie lives until `exp`. Accepted for
    a single-operator console behind Pangolin SSO; revisit with `jti` + a
    revocation table if the console becomes multi-user.
 2. **RP-initiated logout sends no `id_token_hint`.** The design stores no
    tokens (deliberate). Providers show a logout confirmation instead. Accepted.
-3. **Forms/wizard still do blocking sqlite work on async handlers.** Lifecycle
+3. **Forms/wizard still do blocking SQLite work on async handlers.** Lifecycle
    paths are offloaded to the threadpool; the remaining writes are single-row
    and bounded by the 2 s busy timeout on a `workers=1` console. Accepted.
 4. **Domain matching is longest-prefix with a suffix gate.** A stored domain
    still prefix-matches names that end in the configured tenant suffix; the
-   suffix gate blocks the practical spoofing vector. Exact matching would need
-   a second htable/DB lookup per request. Accepted.
+   `TENANTSUFFIXRE` gate (INVITE and REGISTER) blocks the practical spoofing
+   vector. Exact matching would need a second htable/DB lookup per request.
+   Accepted.
 5. **Base image pinned by tag, not digest.** `.dockerignore` is in place; pin a
    digest (and ideally a lockfile for transitives) when publishing the image.
+6. **Generated credentials when env is unset.** `CONSOLE_TOKEN` and
+   `CONSOLE_SECRET` fall back to per-process random values (never a public
+   default and never derived from each other). A random token means nobody can
+   sign in, and a random secret invalidates sessions on restart; production
+   must set both. This is fail-closed rather than a public default.
 
 ## Follow-ups (non-blocking)
 
-- Sidecar/certificate ownership for the non-root deployment recipe is documented
-  but not automated (`docs/ops/deploy.md`).
+- The image build/compose pair has not been executed in this offline workspace;
+  run the first build from a clean checkout and verify the pinned image.
+- Browser end-to-end coverage is limited to API tests and the server-rendered
+  page assertions; add Playwright coverage for htmx swaps and the readonly UI.
+- Certificate ownership for a non-root Kamailio is supported through
+  `KAM_UID`/`KAM_GID` in the acme hook, but not automated in compose.
 - Compose runs the console as root with `cap_drop: ALL` and
   `no-new-privileges`; a read-only rootfs + tmpfs is the next hardening step.
 - Add an alert on certificate `notAfter` and acme renewal failures
   (`docs/tls.md` §Renewal visibility).
 - Optional OIDC features: back-channel logout, UserInfo enrichment, idle
   timeout (30 min) in addition to the absolute 12 h expiry.
+- `tests/live/run-live.sh` boots the sanitized `kamailio/kamailio.cfg` by
+  default and can target the deployed repo with `VOIP_EDGE_REPO=...`; run it
+  against the deployed repo after applying config changes there.

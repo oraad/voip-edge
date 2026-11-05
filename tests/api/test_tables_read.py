@@ -136,7 +136,11 @@ def test_empty_database_shows_first_use_cta(empty_db, auth_client, table):
     response = auth_client.get(f"/tables/{table}")
     assert response.status_code == 200
     assert "No rows in" in response.text
-    assert "+ Add the first row" in response.text
+    if table == "tenant_registry":
+        # Registry rows are created by the onboarding wizard, not a bare form.
+        assert "Onboard a home with the wizard" in response.text
+    else:
+        assert "+ Add the first row" in response.text
     assert "Clear filter" not in response.text
 
 

@@ -152,11 +152,12 @@ Options, in preference order:
 3. Hand-rolled flow + `joserfc` for JWTs — fewest moving parts, most code to
    review; only if the above are unacceptable.
 
-Recommendation: **Authlib**, pinned, added to `pyproject.toml` extras
-(`[project.optional-dependencies] oidc = ["authlib>=1.6"]`), with the console
-image installing the extra. Tests use Authlib's client with a stub provider
-(httpx transport) or `oidcauth`-style fake — no network needed at test time
-beyond localhost.
+Recommendation: **Authlib**, pinned. It is a normal runtime dependency in
+`pyproject.toml` (`authlib>=1.6`, with `cryptography>=43`), not an optional
+extra: the console imports the OIDC module on every start and the image must
+always be able to validate tokens. Tests use Authlib's client with a stub
+provider (httpx transport) or `oidcauth`-style fake — no network needed at test
+time beyond localhost.
 
 ## 8. Task breakdown (T11, TDD, after deps are available)
 

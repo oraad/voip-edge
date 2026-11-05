@@ -10,7 +10,7 @@ progress finish normally.</p>
 remove them → reload routing → drop its cached registrations (verified).</p>
 <form method="post" action="/homes/{{ domain }}/park">
   {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
-  <div class="formbar"><button class="btn warnact" type="submit">Park this home</button>
+  <div class="formbar"><button class="btn warnact" type="submit"{% if status.readonly %} disabled{% endif %}>Park this home</button>
     <a class="btn" href="/homes">Cancel</a></div>
 </form>
 {% else %}
@@ -19,7 +19,7 @@ remove them → reload routing → drop its cached registrations (verified).</p>
 home; nothing else changes.</p>
 <form method="post" action="/homes/{{ domain }}/destroy">
   {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
-  <div class="formbar"><button class="btn danger" type="submit">Destroy snapshot</button>
+  <div class="formbar"><button class="btn danger" type="submit"{% if status.readonly %} disabled{% endif %}>Destroy snapshot</button>
     <a class="btn" href="/homes">Cancel</a></div>
 </form>
 {% else %}
@@ -30,7 +30,7 @@ be undone.</p>
 <form method="post" action="/homes/{{ domain }}/destroy">
   {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
   <input id="confirm" name="confirm" type="text" class="mono" autocomplete="off" required>
-  <div class="formbar"><button class="btn danger" type="submit">Destroy forever</button>
+  <div class="formbar"><button class="btn danger" type="submit"{% if status.readonly %} disabled{% endif %}>Destroy forever</button>
     <a class="btn" href="/homes">Cancel</a></div>
 </form>
 {% endif %}

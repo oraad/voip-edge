@@ -61,6 +61,7 @@ class ReloadWorker:
 
         self._cond = threading.Condition()
         self._pending: dict[str, _Pending] = {}
+        self._current: tuple[str, _Pending] | None = None
         self._in_flight = False
         self._stop = False
         self._thread: threading.Thread | None = None
@@ -119,8 +120,13 @@ class ReloadWorker:
         """
         self.flush(timeout)
         with self._cond:
-            # Persist anything still queued before dropping it (plan §5.6).
+            # Persist anything still queued or in flight before dropping it
+            # (plan §5.6).  A successful in-flight RPC clears the row when it
+            # finishes; a lost one is re-issued by the startup sweeper.
             for table, entry in list(self._pending.items()):
+                self._notify_store("pending", table, entry.rpc_name, entry.params)
+            if self._current is not None:
+                table, entry = self._current
                 self._notify_store("pending", table, entry.rpc_name, entry.params)
             self._pending.clear()
             self._stop = True
@@ -183,6 +189,7 @@ class ReloadWorker:
                 else:
                     del self._pending[table]
                     self._in_flight = True
+                    self._current = (table, candidate)
                     entry = candidate
 
             if wait_for is not None:
@@ -196,6 +203,7 @@ class ReloadWorker:
                 self.errors[table] = exc
                 self._notify_store("pending", table, entry.rpc_name, entry.params)
                 with self._cond:
+                    self._current = None
                     self._in_flight = False
                     self._cond.notify_all()
 
@@ -212,6 +220,7 @@ class ReloadWorker:
         self._notify_store(status, table, entry.rpc_name, entry.params)
 
         with self._cond:
+            self._current = None
             self._in_flight = False
             self._cond.notify_all()
 

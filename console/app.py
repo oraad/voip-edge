@@ -41,6 +41,39 @@ STATIC_DIR = WEB_DIR / "static"
 
 NO_STORE = {"Cache-Control": "no-store"}
 
+MAX_BODY = 1_048_576  # 1 MiB: form/login bodies are tiny
+
+
+class _BodyTooLarge(Exception):
+    """Raised while draining a request whose body exceeds ``MAX_BODY``."""
+
+
+async def _read_capped_body(request: Request) -> bytes:
+    """Read the request body with a hard byte cap and cache it for replay.
+
+    ``Content-Length`` is advisory (HTTP/2 and chunked requests may omit or
+    lie about it), so the stream itself is counted.  Caching on the request
+    makes Starlette's ``_CachedRequest`` replay the same bytes downstream.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        message = await request._receive()
+        if message["type"] != "http.request":
+            break
+        chunk = message.get("body", b"")
+        total += len(chunk)
+        if total > MAX_BODY:
+            raise _BodyTooLarge
+        if chunk:
+            chunks.append(chunk)
+        if not message.get("more_body", False):
+            break
+    body = b"".join(chunks)
+    request._body = body  # consumed here; downstream must replay, not re-read
+    return body
+
+
 # READONLY exemptions: authentication bootstrap and session teardown only.
 READONLY_EXEMPT_PATHS = frozenset({"/login", "/logout", "/auth/logout"})
 
@@ -75,7 +108,15 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def _lifespan(app_instance: FastAPI):
         cfg = settings_module.settings
-        if cfg.auth_mode == "oidc":
+        from .oidc import oidc_enabled as _oidc_enabled
+
+        if cfg.auth_mode not in ("both", "oidc", "token"):
+            raise RuntimeError(
+                "CONSOLE_AUTH_MODE must be one of: both, oidc, token"
+            )
+        # Fail closed in SSO-only mode even when credentials are missing;
+        # in `both` mode validate as soon as OIDC is actually configured.
+        if cfg.auth_mode == "oidc" or _oidc_enabled():
             if not cfg.oidc_issuer or not cfg.oidc_client_id:
                 raise RuntimeError(
                     "CONSOLE_AUTH_MODE=oidc requires OIDC_ISSUER and OIDC_CLIENT_ID"
@@ -104,14 +145,27 @@ def create_app() -> FastAPI:
                 try:
                     sc = Sidecar(Path(cfg.sidecar_dir) / "console.sqlite")
                     worker = _get_worker()
-                    resume_pending(sc, cfg.db_path, worker, Path(cfg.sidecar_dir) / "backups")
-                    reissue_pending_reloads(sc, worker)
-                except BaseException:
-                    pass
+                    resume_pending(
+                        sc, cfg.db_path, worker,
+                        backup_dir=Path(cfg.sidecar_dir) / "backups",
+                    )
+                    reissue_pending_reloads(sc, worker, descriptors_module.load())
+                    if Path(cfg.rpc_sock).exists():
+                        app.state.capabilities = capabilities.probe(_get_rpc())
+                except BaseException as exc:
+                    observability.log_event("sweeper.error", error=str(exc)[:200])
                 time.sleep(interval)
 
         threading.Thread(target=_sweeper, name="console-sweeper", daemon=True).start()
-        yield
+        try:
+            yield
+        finally:
+            worker = getattr(app.state, "worker", None)
+            if worker is not None and hasattr(worker, "shutdown"):
+                try:
+                    worker.shutdown()
+                except BaseException:
+                    pass
 
     app = FastAPI(
         title="VoIP Edge Console",
@@ -162,21 +216,27 @@ def create_app() -> FastAPI:
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    MAX_BODY = 1_048_576  # 1 MiB: form/login bodies are tiny
-
     @app.middleware("http")
     async def csrf_middleware(request: Request, call_next):
+        # Cap request bodies before any route reads them.  The declared length
+        # is an early reject; the stream is counted as well because HTTP/2 and
+        # chunked requests can omit or misstate it.  Bodies are buffered (the
+        # console has no uploads) and replayed downstream by Starlette.
         try:
             declared = int(request.headers.get("content-length") or "0")
         except ValueError:
             declared = 0
         if declared > MAX_BODY:
             return PlainTextResponse("Request body too large", status_code=413)
-        # READONLY is a cross-cutting gate, not a per-route check (plan §6/T9).
-        # Unsafe methods are refused before any route or DB dependency runs;
-        # GET/HEAD/OPTIONS are unaffected.  /login must stay reachable so an
-        # operator can authenticate into the read-only console, and /logout is
-        # allowed so a session can always be ended.
+        if request.method not in SAFE_METHODS:
+            try:
+                await _read_capped_body(request)
+            except _BodyTooLarge:
+                return PlainTextResponse(
+                    "Request body too large", status_code=413
+                )
+
+        # READONLY gate: refuse writes before CSRF/route dependencies run.
         if (
             settings_module.settings.readonly
             and request.method not in SAFE_METHODS
@@ -200,7 +260,7 @@ def create_app() -> FastAPI:
         # the console must stay usable with JavaScript disabled).
         # POST /login is the single bootstrap exemption (no cookie yet).
         if csrf_protected(request) and not csrf_valid(request):
-            body = await request.body()
+            body = await request.body()  # already capped and cached above
             supplied = None
             ctype = request.headers.get("content-type", "")
             if "application/x-www-form-urlencoded" in ctype:
@@ -219,14 +279,6 @@ def create_app() -> FastAPI:
                     "CSRF token missing or invalid", status_code=403, headers=NO_STORE
                 )
 
-            if len(body) > MAX_BODY:
-                return PlainTextResponse("Request body too large", status_code=413)
-
-            # Replay the body for the route: reading it here consumed the stream.
-            async def _replay():
-                return {"type": "http.request", "body": body, "more_body": False}
-
-            request = Request(request.scope, _replay)
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
@@ -293,7 +345,7 @@ def create_app() -> FastAPI:
         token = parse_qs(body.decode("utf-8", "replace")).get("token", [""])[0]
         supplied = token.encode("utf-8")
         expected = settings_module.settings.token.encode("utf-8")
-        if not hmac.compare_digest(supplied, expected):
+        if not expected or not hmac.compare_digest(supplied, expected):
             from .security import record_login_failure
 
             record_login_failure(client_ip)

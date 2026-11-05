@@ -5,134 +5,123 @@ All notable changes to the VoIP Edge Console are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While the project is pre-1.0, MINOR bumps carry feature sets and PATCH bumps
-carry packaging/docs fixes.
+carry fixes.
+
+## [0.1.10] - 2026-11-05
+
+Third review round: closes the regressions found while verifying 0.1.9 and
+finishes the operations/docs alignment.
+
+### Security
+
+- No default or derivable credentials: unset `CONSOLE_TOKEN`/`CONSOLE_SECRET`
+  become per-process random values (never `dev-token` and never derived from
+  each other); an empty token can never match at login.
+- Request bodies are counted as they are streamed (1 MiB cap) for every unsafe
+  method, including chunked/HTTP-2 bodies with no trustworthy
+  `Content-Length`; the capped bytes are replayed for form parsing.
+- SSO startup validation now runs whenever OIDC is enabled, including `both`
+  mode; the status strip prefers the fresh capability cache over a one-shot
+  startup snapshot.
+- Privacy guard file gate now actually fails the commit (the `fail` flag no
+  longer dies in a pipeline subshell); vendored assets are served with
+  `script-src 'self'` and no `unsafe-eval`.
+
+### Fixes
+
+- Kamailio tenant-suffix gate is now a `#!substdef` (defines are not expanded
+  inside quoted strings) and is applied to the REGISTER path before the mtree
+  prefix lookup; `sip.<stored-domain>.evil` is rejected on both INVITE and
+  REGISTER.
+- TLS promotion is busybox-safe: the `current` release symlink is replaced
+  with `ln -sfn` (no GNU `mv -T`), the pair always resolves inside one release,
+  and the acme hook can optionally chown the release to a non-root Kamailio.
+- Backups now include a WAL-safe `.console.sqlite.bak` sidecar copy with
+  atomic temp+rename, rotation removes all three companions, and the restore
+  runbook documents the sidecar path and schema-version refusal.
+- Lifecycle: the startup/sweeper calls use the real signatures, `resume_pending`
+  takes the global operation lock, active destroy checks `htable.delete` before
+  touching data, and restore verifies the inserted row count inside its
+  transaction.
+- Forms: `row_hash` is mandatory on edit (missing = stale), the in-transaction
+  conflict page carries the fresh row, both edit paths reject corrupt packed
+  rows with 404, and landline `ds_onnet` is always derived from the home.
+- Dialplan delete guard maps the row id to `dpid`, ignores `dpid 0`/empty block
+  partitions, and names the referencing homes.
+- Wizard reload warnings only mention tables from this apply batch; corrupt
+  rows are skipped with a banner on list/detail/homes; status/capability,
+  worker shutdown/restart, and pending-reload persistence are wired.
+- UI: parked table moved out of `<title>`, active homes have a Destroy link,
+  lifecycle rows hide Delete, landlines get a New-row action, stale
+  "unimplemented" copy is gone, and read-only mode disables submit buttons and
+  write links while keeping login/sign-out reachable.
+- Static assets htmx 2.0.4, PicoCSS 2.0.6 and project `app.js` are vendored;
+  `hx-on` handlers moved to external event listeners so the CSP can stay
+  strict.
+
+### Ops
+
+- `.dockerignore`, pinned dependency list, compose "own stack" guidance,
+  environment-variable table, OIDC dependency note, release examples and
+  version metadata aligned to 0.1.10.
+
+## [0.1.9] - 2026-11-05
+
+Second review round: hardening and correctness fixes across auth, lifecycle,
+forms, backups and the Kamailio routes.
+
+- OIDC flow/session domain separation (`typ`), CSRF bound to the signed
+  session, per-state flow cookies, fail-closed allowlist with
+  `email_verified`, `azp`/`sub`/`iat`, alg-aware `at_hash`, https-only endpoints,
+  discovery/JWKS single-flight, failure-only rate limiting, logout state.
+- Session `amr` claim and SSO-only mode enforcement; token sessions are
+  rejected in `oidc` mode on every route.
+- Security headers (CSP, nosniff, frame-ancestors), a 1 MiB body limit,
+  OIDC-secret redaction, and SameSite=Lax cookies.
+- Stale-edit re-check inside the write transaction, derived landline
+  `ds_onnet`, dialplan delete guard, restore row-count verification, global
+  lifecycle lock and capability gate, wizard reload warnings, corrupt-row
+  tolerance, and worker resilience/persistence.
+- Kamailio route fixes: pinger arguments, 403 delivery, one `direction=` pair,
+  `dpid 0`, PSTN gating, re-INVITE anchoring, `WGIP`/`WGSOCK`, regcache
+  `autoexpire`, TLS `!aNULL`, and atomic certificate release directories.
+
+## [0.1.8] - 2026-11-05
+
+First multi-lens review round.
+
+- Fixed a critical OIDC flow-cookie-as-session bypass; removed the public
+  fallback secret and empty-token login; bound CSRF to the session; moved
+  cookies to SameSite=Lax.
+- Added OIDC hardening (per-tab flow cookies, fail-closed allowlist,
+  `email_verified`, `azp`/`sub`/`iat`, alg-aware `at_hash`, https-only,
+  rate limits, audit, sign-out in read-only mode), and installed the image's
+  OIDC dependencies.
+- Fixed Kamailio route bugs (pinger iterator order, 403 replies, duplicate
+  `direction=`, `dpid 0`, `pstn_on`, re-INVITE anchoring, `WGIP`/`WGSOCK`,
+  regcache expiry, `aNULL`), wired the lifecycle UI/sweeper, and mapped the
+  error taxonomy to HTTP statuses.
+- Privacy guard checks staged blobs and blocks `.env.*`, keys and databases;
+  deploy docs drop the nonexistent `dgram_max_size`.
 
 ## [0.1.0] - 2026-11-05
 
 ### Added
 
-- Descriptor-driven console (T0–T10 from docs/plan.md): pack/unpack engine, tables.yaml grammar,
-  sqlite WAL layer, JSON-RPC unix-datagram client, coalescing reload worker with pending-intent
-  persistence, auth/CSRF (header + hidden-field double submit), generic read/edit/delete UI,
-  validation families (tenant/landline/dispatcher/dialplan/trusted), stale-edit 409, landline
-  prefix interruption, onboarding wizard (4 steps, 5/4 rows, backup-first), tenant lifecycle
-  park/restore/destroy with durable resume and bounded regcache purge, live dashboard,
-  capabilities probe, read-only mode, audit/backups pages, Docker/compose packaging, ops docs.
-- Live Kamailio integration gate (`tests/live/run-live.sh`): park → REGISTER 403 → restore → 200.
+- Descriptor-driven console (T0–T10 from `docs/plan.md`): pack/unpack engine,
+  `tables.yaml` grammar, SQLite WAL layer, JSON-RPC unix-datagram client,
+  coalescing reload worker with pending-intent persistence, auth/CSRF,
+  generic read/edit/delete UI, validation families, stale-edit 409, landline
+  prefix interruption, onboarding wizard, tenant lifecycle
+  park/restore/destroy with durable resume, live dashboard, capability probes,
+  read-only mode, audit/backups pages, Docker/compose packaging and ops docs.
+- Live Kamailio integration gate (`tests/live/run-live.sh`): park → REGISTER
+  403 → restore → 200.
 
 ### Notes
 
-- `WITH_CONSOLE` ifdef added to the edge repo's kamailio.cfg (jsonrpcs dgram socket).
-- Static assets (htmx 2.0.4, PicoCSS 2.0.6) are not vendored yet — see web/static/README.md.
-- Docker build/compose unverified in this environment (no Docker/network); runbook in docs/ops/deploy.md.
-
-## [Unreleased]
-
-## [0.1.8] - 2026-11-05
-
-### Security (review findings fixed)
-
-- OIDC flow cookies are domain-separated from sessions (`typ` claim): a flow
-  cookie can no longer authenticate requests (critical bypass found in review).
-- Session signing has no fixed public fallback: derived from `CONSOLE_TOKEN`
-  when `CONSOLE_SECRET` is absent; empty tokens can no longer log in.
-- CSRF double-submit is bound to the signed session, not only a sibling cookie.
-- Cookies switched to `SameSite=Lax` (Strict broke the OIDC callback redirect).
-- OIDC: per-transaction flow cookies (multi-tab safe), fail-closed allowlist,
-  `email_verified` required for domain rules, `azp`/`sub`/`iat` validation,
-  algorithm-aware `at_hash`, https-only issuer/endpoints, `/auth/login` and
-  `/auth/callback` rate-limited, OIDC login/logout audit events, read-only mode
-  no longer blocks sign-out, backslash/open-redirect hardening.
-- Docker image now installs its OIDC runtime dependencies (httpx/authlib/
-  cryptography) and disables credential-bearing access-log query strings.
-- Privacy guard checks staged blobs (not the worktree), includes untracked
-  files in `--all`, blocks encrypted keys and `.env.*`; `.env` is gitignored.
-
-### Fixes (configuration review)
-
-- kamailio: `WGIP` default aligned with `WGSOCK`; regcache gains `autoexpire`;
-  keepalive pinger iterator arguments fixed (it never pinged); unknown-tenant
-  paths `return` instead of `exit` so the 403 is delivered; exactly one
-  `direction=` pair per call; `dpid 0` can no longer act as a profile; PSTN
-  dial-out no longer gated by the fallback-only `pstn_on` flag; re-INVITEs of
-  anchored calls reach rtpengine; TLS cipher list drops `aNULL`.
-- lifecycle UI wired (Park/Restore/Destroy routes + homes actions) and the
-  pending-reload/lifecycle sweeper started in the app lifespan.
-- UI navigation/actions reach the real table routes, forms and wizard.
-- Error taxonomy mapped to HTTP statuses (422/409/503/502) incl. `DBBusy`.
-- Form values are whitespace-stripped before storage; wizard always validates
-  the landline length; audit page reads newest-first; backup rotation orders by
-  encoded timestamp; deploy docs no longer add the nonexistent
-  `dgram_max_size`; acme fallback hook writes the filenames tls.cfg reads;
-  watcher retries failed reloads.
-
-### Known backlog
-
-See `docs/review-backlog.md` for the review items still open (body limits,
-threadpool offload beyond lifecycle, restore/delete race hardening, exact
-domain matching, TLS promotion doc, non-root ACL recipe, and similar).
-
-
-
-### Added
-
-- **T0 — Descriptor engine + pack/unpack.** `console/tables.yaml` grammar v1,
-  strict descriptor loader, packed mtree codec and flags (`1+1+90`), startup DB
-  consistency check, golden-vector tests in both directions including the
-  absent `block_dpid` segment.
-- **T1 — RPC client + reload worker + capability probes.** Unix-datagram
-  JSON-RPC client with typed faults, `htable.dump` bucket flattening, one
-  serialized `ReloadWorker` with a per-table coalescing throttle, and advisory
-  capability probes. The Kamailio-down path persists reload intent instead of
-  crashing.
-- **T2 — App skeleton + host-lab harness.** FastAPI app factory, token login,
-  signed session cookie, double-submit CSRF, always-200 `/health`, PicoCSS/htmx
-  layout with an inline fallback, and the loopback host-lab harness.
-- **T3 — Read-only table browser + Homes landing.** All five tables browsed
-  through descriptors with zero per-table route code; empty states and
-  fragment/full-page assertions.
-- **T4 — Create/edit + validation families (T4.1–T4.8).** Generic
-  descriptor-driven forms, named validator registry, the §5.2 matrix across
-  homes, landlines, route sets, number rules and trusted sources, warning-save
-  paths, cross-refs, longest-prefix interruption page and stale-edit 409
-  handling. `docs/validation-matrix.md` is the traceability deliverable.
-- **T5 — Row delete + guards.** Named-object confirmation and blocked
-  consequence pages, reference guards, and lifecycle-only tables refusing row
-  delete. *Landing in parallel at the time of this entry.*
-- **T6 — Live dashboard + detail fragments.** Registered-phone panel, route-set
-  probe state, edge health in the status strip, and polling fragments with
-  `HX-Stop-Polling` on a down edge.
-- **T7 — Onboarding wizard.** Four-step onboarding (identity, network, review,
-  verify), one-transaction apply of 4–5 rows, per-insert rollback, checklist
-  verification, and the mandatory TLS-SAN notice when `CONSOLE_TLS_LIVE=1`.
-- **T8 — Lifecycle park/restore/destroy + backups.** Durable, resumable state
-  machines with fault-injection resume, reload-before-purge ordering, regcache
-  purge gate, five collision classes on restore, typed confirmation for an
-  active destroy, online SQLite backups with global keep-5 rotation, and
-  `.parked.json` evidence.
-- **T9 — Hardening + observability.** CSRF and login-rate tests, read-only mode
-  across mutating routes, capability probe surface, structured redacted JSON
-  logs, audit and backups pages, and the throttle burst test. *Landing in
-  parallel at the time of this entry.*
-- **T10 — Packaging + docs.** Single-process `Dockerfile` (non-root default,
-  pinned runtime dependencies, `workers=1`, liveness healthcheck),
-  `compose.yml` for the existing Arcane stack (host networking, rw DB/run/
-  sidecar mounts, group story, limits, restart policy), `.env.example` for the
-  plan §10 surface, vendored-asset instructions, deployment/release/backup
-  runbooks, and updated README/AGENTS status.
-
-### Tests
-
-- **676 passed** with `.venv/bin/python -m pytest -q` (current working tree;
-  the 619+ baseline was verified before the parallel T5/T9 lanes added their
-  test suites). `tests/live/` and `tests/e2e/` remain reserved for the
-  serialized lab journeys and are not part of that count.
-
-### Notes
-
-- T5 and T9 are parallel lanes in the same working tree; the status table in
-  `README.md` marks them as landing. Their counts may change as those lanes
-  merge.
+- `WITH_CONSOLE` ifdef added to the edge repo's `kamailio.cfg` (jsonrpcs
+  datagram socket).
 - The Docker image was authored and statically reviewed in an offline
-  workspace. `docker build` was **not** executed here (no network for pip/apt);
-  see `README.md` and the T10 hand-off notes.
+  workspace; the first real `docker build` must be verified from a clean
+  checkout (see `docs/ops/deploy.md`).
