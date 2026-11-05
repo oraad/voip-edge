@@ -22,7 +22,21 @@
     .chip { display:inline-flex; gap:6px; align-items:center; }
     .chip.warn { color:var(--warning); } .chip.ok { color:var(--success); }
     .chip.muted { color:var(--muted-foreground); }
+    .chip.err { color:var(--destructive); }
     .statusbar .spacer { margin-left:auto; }
+    .banner { border:1px solid var(--border); border-left-width:4px; border-radius:8px;
+              padding:10px 14px; margin:0 0 16px; font-size:.9em; background:var(--muted); }
+    .banner.err { border-color:var(--destructive); }
+    .banner.warn { border-color:var(--warning); }
+    .banner-global { grid-column:1 / -1; margin:0; border-radius:0;
+                     border-left-width:1px; border-top:0; border-left:0; border-right:0; }
+    .badge { display:inline-block; border:1px solid var(--border); border-radius:999px;
+             padding:1px 8px; font-size:.8em; font-weight:600; }
+    .badge.b-ok { border-color:var(--success); color:var(--success); }
+    .badge.b-warn { border-color:var(--warning); color:var(--warning); }
+    .badge.b-err { border-color:var(--destructive); color:var(--destructive); }
+    .badge.b-muted { color:var(--muted-foreground); }
+    .empty-panel { border:1px dashed var(--border); border-radius:8px; padding:12px 14px; }
     .nav { border-right:1px solid var(--border); padding:14px 10px; }
     .nav .brand { font-weight:700; margin:0 6px 14px; }
     .nav .brand small { display:block; font-weight:400; color:var(--muted-foreground);
@@ -73,11 +87,26 @@
 {% if show_chrome|default(true) %}
 <div class="app">
   <header class="statusbar" role="status" aria-live="off" aria-label="Console status">
-    <span class="chip ok">edge health: <strong>not wired yet</strong></span>
-    <span class="chip warn">pending reloads: <strong>0</strong></span>
-    <span class="chip muted">read-only: <strong>off</strong></span>
+    {% set st = status|default({}) %}
+    <span class="chip {{ st.edge_tone|default('muted') }}">edge health: <strong>{{ st.edge_text|default('not wired yet') }}</strong>{% if st.uptime %} · uptime {{ st.uptime }}{% endif %}</span>
+    {% if st.capabilities_unknown|default(true) %}
+    <span class="chip warn">capabilities unknown (edge unreachable)</span>
+    {% elif st.capability_mismatch|default(false) %}
+    <span class="chip warn">capability mismatch: {{ st.missing_capabilities|join(', ') }}</span>
+    {% endif %}
+    <span class="chip muted">pending reloads: <strong>{% if st.pending_reloads is not none %}{{ st.pending_reloads }}{% else %}unknown{% endif %}</strong></span>
+    {% if st.sidecar_error|default(false) %}
+    <span class="chip err">sidecar unavailable</span>
+    {% endif %}
+    <span class="chip muted">read-only: <strong>{% if st.readonly|default(false) %}on{% else %}off{% endif %}</strong></span>
     <span class="spacer meta mono">console v1</span>
   </header>
+  {% if st.readonly|default(false) %}
+  <div class="banner banner-global warn" role="status">
+    <strong>console is in read-only mode</strong> — every write is refused by the server.
+    Browsing, audit and backups remain available.
+  </div>
+  {% endif %}
   <nav class="nav" aria-label="Main navigation">
     <div class="brand">VoIP Edge <small>console</small></div>
     <a href="/homes"{% if nav == "homes" %} aria-current="page"{% endif %}>Homes</a>
@@ -88,7 +117,7 @@
     <a href="/number-rules"{% if nav == "number-rules" %} aria-current="page"{% endif %}>Number rules</a>
     <a href="/trusted-sources"{% if nav == "trusted-sources" %} aria-current="page"{% endif %}>Trusted sources</a>
     <div class="grp">System</div>
-    <a href="/audit"{% if nav == "audit" %} aria-current="page"{% endif %}>Audit &amp; backups</a>
+    <a href="/system/audit"{% if nav == "audit" %} aria-current="page"{% endif %}>Audit &amp; backups</a>
   </nav>
   <main class="main" id="main">
 {% else %}

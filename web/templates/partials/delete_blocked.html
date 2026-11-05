@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ object_name }} is in use — VoIP Edge Console{% endblock %}
+{% block content %}
+<style>
+  .blocked-table td { vertical-align:top; }
+</style>
+
+<section id="delete-blocked" aria-labelledby="delete-blocked-title">
+  <p class="meta"><a href="{{ cancel_url }}">← Back to {{ table_label }}</a></p>
+
+  <div class="pagehead">
+    <div>
+      <h1 id="delete-blocked-title">Cannot delete {{ object_name }}</h1>
+      <div class="sub">This row is still in use. Nothing was deleted and no
+        reload was scheduled.</div>
+    </div>
+    <span class="meta">{{ table_label }}</span>
+  </div>
+
+  <div class="errsummary" role="alert">
+    <b>{{ object_name }} is still in use by {{ references|length }}
+      {{ "row" if references|length == 1 else "rows" }}.</b>
+    Remove or reassign every reference below before deleting it.
+  </div>
+
+  <div class="panel" style="padding:0; overflow-x:auto">
+    <table class="blocked-table">
+      <thead>
+        <tr>
+          <th scope="col">Referenced by</th>
+          <th scope="col">Row</th>
+          <th scope="col">Field</th>
+          <th scope="col">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for reference in references %}
+        <tr>
+          <td>{{ reference.table_label }}</td>
+          <td><span class="mono">{{ reference.label }}</span></td>
+          <td class="mono">{{ reference.field }}</td>
+          <td class="mono">{{ reference.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="formbar">
+    <a class="btn" href="{{ cancel_url }}">Back to {{ table_label }}</a>
+    <span class="meta">Deleting a home and its dependants is a lifecycle
+      action: use Park / Destroy from <a href="/homes">Homes</a>.</span>
+  </div>
+</section>
+{% endblock %}

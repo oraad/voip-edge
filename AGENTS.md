@@ -109,3 +109,46 @@ templates or another lane's files.
    plan/issue tracker. A matrix row without both test IDs is not done.
 5. Run the focused tests, then the full `pytest -q` baseline. No live edge,
    no network, no template edits.
+
+## Deployment & packaging conventions (T10)
+
+These are additive to the conventions above; they do not relax the
+descriptor/SQLite/reload rules.
+
+- **One process.** `uvicorn --workers 1` is a hard requirement. Reload
+  serialization, the coalescing queue, the write lock and session state are
+  process-local. Never add a second worker or a multi-process manager to the
+  image or compose service.
+- **The image is the release.** `console/`, `web/` and `console/tables.yaml`
+  are copied into the image; `tables.yaml` is **baked**, never a runtime mount.
+  Changing code, templates, static assets, descriptors or dependencies means a
+  rebuild and a new version tag (`docs/ops/releases.md`), not a restart.
+- **Host networking.** `compose.yml` uses `network_mode: host` and no `ports:`;
+  the console binds `${CONSOLE_BIND}:${CONSOLE_PORT}` (`100.64.0.9:8080` in
+  production) and is exposed only through Pangolin SSO. The token stays on as a
+  second factor.
+- **Mounts.** DB `rw` (in-place SQLite + WAL/SHM), `${EDGE_RUN}` `rw` (unix
+  datagram client needs write on the socket path), `${EDGE_HOME}/console` `rw`
+  (sidecar + backups). Never point `CONSOLE_DB_PATH` at a copy, and never
+  hot-swap the DB (`docs/ops/backups.md`).
+- **Healthcheck is console liveness only.** `/health` is public and always 200,
+  even when Kamailio is unreachable; its state belongs in the status strip, not
+  the container exit code. Do not add an RPC probe to the healthcheck or Docker
+  will restart-loop the console during an edge outage.
+- **Group story.** Kamailio creates the jsonrpcs datagram socket as
+  `0660 root:console` (`dgram_group "console"`). `dgram_group` is resolved by
+  name **inside the Kamailio container**, so the name must exist in that
+  container's `/etc/group`; Docker `group_add` does not create it. The stock
+  stack runs Kamailio and its DB/WAL as root, so `compose.yml` runs the console
+  as `0:0` by default (a `0660 root:root` socket is still usable). The non-root
+  recipe needs a matching GID in both containers plus DB ACL/umask work; see
+  `docs/ops/deploy.md`.
+- **Env surface is single-source.** `.env.example` mirrors plan §10. Note that
+  `CONSOLE_THROTTLE_TENANTDOM` is reserved but not read yet; throttles come from
+  `console/tables.yaml`. Restart after changing env values (read at import).
+- **Testing a packaging change.** Run `.venv/bin/python -m pytest -q` (baseline
+  **676 passed** in the current tree; 619+ was verified at the T10 change before
+  the parallel T5/T9 test additions) and `.venv/bin/python -m compileall
+  console` (offline smoke). Do not put `pytest` or test doubles in the image,
+  and do not claim `docker build` succeeded unless it actually ran on a
+  network-enabled host.

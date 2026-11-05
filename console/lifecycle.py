@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from console import descriptors
+from console import observability
 from console.backups import create_backup
 from console.descriptors import Descriptor, TableSet, unpack_row
 from console.errors import (
@@ -683,6 +684,15 @@ class _Run:
     def _transition(self, state: str, detail: str = "") -> None:
         self.sidecar.record_transition(
             self.intent_id, state, detail=detail
+        )
+        # T9 observability: the sidecar audit row remains the source of truth;
+        # this JSON line is the operational log mirror (no secrets in fields).
+        observability.log_lifecycle_transition(
+            op=self.op,
+            domain=self.domain,
+            state=state,
+            intent_id=self.intent_id,
+            detail=detail or None,
         )
 
     def _backup_tag(self) -> str:

@@ -7,6 +7,8 @@ with T3; ``web/`` must contain zero table logic (plan §4).
 from __future__ import annotations
 
 import hmac
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -18,14 +20,17 @@ from markupsafe import Markup, escape
 
 from .security import (
     CSRF_COOKIE,
+    SAFE_METHODS,
     clear_session,
     csrf_protected,
     csrf_valid,
+    csrf_value_matches,
     is_authenticated,
     issue_session,
     login_rate_exceeded,
     read_session,
 )
+from . import capabilities, observability, system_ui
 from . import settings as settings_module
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,6 +39,9 @@ TEMPLATES_DIR = WEB_DIR / "templates"
 STATIC_DIR = WEB_DIR / "static"
 
 NO_STORE = {"Cache-Control": "no-store"}
+
+# READONLY exemptions: authentication bootstrap and session teardown only.
+READONLY_EXEMPT_PATHS = frozenset({"/login", "/logout"})
 
 
 def _mono(value: object) -> Markup:
@@ -48,11 +56,27 @@ def _wants_fragment(request: Request) -> bool:
 
 def _base_context(request: Request) -> dict[str, object]:
     """Template globals shared by every page (T3/T4 routes get these free)."""
-    return {"csrf": request.cookies.get(CSRF_COOKIE)}
+    context: dict[str, object] = {"csrf": request.cookies.get(CSRF_COOKIE)}
+    context.update(system_ui.status_context(request))
+    return context
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="VoIP Edge Console", docs_url=None, redoc_url=None)
+    @asynccontextmanager
+    async def _lifespan(app_instance: FastAPI):
+        # Advisory capability probe: a daemon thread, never awaited.  Startup
+        # must succeed even when Kamailio is down (docker healthcheck contract).
+        threading.Thread(
+            target=_startup_probe, name="console-capability-probe", daemon=True
+        ).start()
+        yield
+
+    app = FastAPI(
+        title="VoIP Edge Console",
+        docs_url=None,
+        redoc_url=None,
+        lifespan=_lifespan,
+    )
     templates = Jinja2Templates(
         directory=str(TEMPLATES_DIR), context_processors=[_base_context]
     )
@@ -64,12 +88,58 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def csrf_middleware(request: Request, call_next):
-        # Double-submit: unsafe methods need X-CSRF-Token == csrf cookie.
+        # READONLY is a cross-cutting gate, not a per-route check (plan §6/T9).
+        # Unsafe methods are refused before any route or DB dependency runs;
+        # GET/HEAD/OPTIONS are unaffected.  /login must stay reachable so an
+        # operator can authenticate into the read-only console, and /logout is
+        # allowed so a session can always be ended.
+        if (
+            settings_module.settings.readonly
+            and request.method not in SAFE_METHODS
+            and request.url.path not in READONLY_EXEMPT_PATHS
+        ):
+            observability.log_readonly_refusal(
+                method=request.method,
+                path=request.url.path,
+                client=request.client.host if request.client else None,
+            )
+            return HTMLResponse(
+                '<div class="banner err" role="alert">'
+                "<strong>console is in read-only mode</strong> — writes are refused.</div>",
+                status_code=403,
+                headers=NO_STORE,
+            )
+
+        # Double-submit: unsafe methods need the token from the cookie, supplied
+        # either as X-CSRF-Token (htmx / machine clients) or as the hidden
+        # `csrf_token` form field (plain browser form posts — htmx is optional,
+        # the console must stay usable with JavaScript disabled).
         # POST /login is the single bootstrap exemption (no cookie yet).
         if csrf_protected(request) and not csrf_valid(request):
-            return PlainTextResponse(
-                "CSRF token missing or invalid", status_code=403, headers=NO_STORE
-            )
+            body = await request.body()
+            supplied = None
+            ctype = request.headers.get("content-type", "")
+            if "application/x-www-form-urlencoded" in ctype:
+                from urllib.parse import parse_qs
+
+                supplied = parse_qs(body.decode("utf-8", "replace")).get(
+                    "csrf_token", [None]
+                )[0]
+            if not csrf_value_matches(request, supplied):
+                observability.log_auth_failure(
+                    reason="csrf",
+                    path=request.url.path,
+                    client=request.client.host if request.client else None,
+                )
+                return PlainTextResponse(
+                    "CSRF token missing or invalid", status_code=403, headers=NO_STORE
+                )
+
+            # Replay the body for the route: reading it here consumed the stream.
+            async def _replay():
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            request = Request(request.scope, _replay)
         return await call_next(request)
 
     # ------------------------------------------------------------------
@@ -95,6 +165,9 @@ def create_app() -> FastAPI:
     async def login_submit(request: Request):
         client_ip = request.client.host if request.client else "unknown"
         if login_rate_exceeded(client_ip):
+            observability.log_auth_failure(
+                reason="rate_limited", client=client_ip, path="/login"
+            )
             return PlainTextResponse(
                 "Too many sign-in attempts. Try again in a minute.",
                 status_code=429,
@@ -109,6 +182,9 @@ def create_app() -> FastAPI:
         supplied = token.encode("utf-8")
         expected = settings_module.settings.token.encode("utf-8")
         if not hmac.compare_digest(supplied, expected):
+            observability.log_auth_failure(
+                reason="invalid_token", client=client_ip, path="/login"
+            )
             return templates.TemplateResponse(
                 request,
                 "login.html",
@@ -147,6 +223,9 @@ def create_app() -> FastAPI:
     app.include_router(forms_ui.router)
     app.include_router(tables_ui.router)
 
+    # T9: audit & backups page (read-only projection over sidecar + backups).
+    app.include_router(system_ui.router)
+
     # ------------------------------------------------------------------
     # T6: live dashboard (registered phones + route-set probes)
     # RPC endpoint is lazily built so tests can inject app.state.rpc.
@@ -162,11 +241,25 @@ def create_app() -> FastAPI:
 
     app.state.rpc_factory = _default_rpc
     app.state.rpc = None  # set on first use; tests may pre-inject
+    app.state.capabilities = None  # T9 startup probe result (advisory only)
 
     def _get_rpc():
         if app.state.rpc is None:
             app.state.rpc = app.state.rpc_factory()
         return app.state.rpc
+
+    def _startup_probe() -> None:
+        """Advisory probe on a daemon thread; startup never waits on Kamailio."""
+        try:
+            if not Path(settings_module.settings.rpc_sock).exists():
+                # Missing socket: leave capabilities unknown ("not wired yet")
+                # instead of burning a timeout per method.
+                return
+            result = capabilities.probe(_get_rpc())
+            app.state.capabilities = result
+        except BaseException:
+            # A probe must never take the console down.
+            app.state.capabilities = None
 
     app.include_router(build_live_router(_get_rpc))
 
@@ -185,7 +278,19 @@ def create_app() -> FastAPI:
             descriptor.table: descriptor.reload.throttle_seconds
             for descriptor in tableset.tables.values()
         }
-        return ReloadWorker(_get_rpc(), throttles)
+
+        def _store(status: str, table: str, rpc_name: str, params: list) -> None:
+            # Structured observability only; pending-intent persistence is
+            # owned by the lifecycle/startup sweeper paths.  Worker vocabulary
+            # (done/pending) maps to the operator-facing reload outcomes.
+            outcome = {"done": "applied", "pending": "scheduled"}.get(
+                status, status
+            )
+            observability.log_reload_outcome(
+                table=table, status=outcome, rpc=rpc_name
+            )
+
+        return ReloadWorker(_get_rpc(), throttles, store=_store)
 
     app.state.worker = None
     app.state.worker_factory = _default_worker

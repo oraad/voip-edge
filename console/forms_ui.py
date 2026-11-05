@@ -6,6 +6,8 @@ Routes
 ``POST /tables/{table}/new``             validate, write, enqueue reload
 ``GET  /tables/{table}/{key}/edit``      edit form
 ``POST /tables/{table}/{key}/edit``      validate, write, enqueue reload
+``GET  /tables/{table}/{key}/delete``    named-object confirmation / blocked page
+``POST /tables/{table}/{key}/delete``    re-check refs, delete, enqueue reload
 
 Every table-shaped decision comes from a descriptor: fields and order from
 ``fields``/``form_order``, widgets from ``widget``, immutable fields from
@@ -81,6 +83,7 @@ import importlib
 import json
 import re
 import sqlite3
+from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 from urllib.parse import parse_qs, quote, urlencode
 
@@ -293,6 +296,303 @@ def _action(descriptor: descriptors.Descriptor, mode: str, key: Any = None) -> s
 
 def _submit_label(mode: str) -> str:
     return "Create & reload routing" if mode == "create" else "Save & reload routing"
+
+
+# ---------------------------------------------------------------------------
+# delete guard (T5, plan §5.2/§7.8)
+# ---------------------------------------------------------------------------
+class LifecycleDeleteError(Exception):
+    """Raised when a row delete is refused because the table is lifecycle-only."""
+
+
+@dataclass(frozen=True)
+class Reference:
+    """One row that points at the row we are about to delete.
+
+    ``label`` is the operator-facing name (tenant domain for a route set,
+    landline digits + owning home for a landline, source address for an
+    allow-list entry).  The scanner derives it from the *referencing*
+    descriptor, so a new table only needs a ``cross_refs`` declaration to join
+    the guard.
+    """
+
+    table: str
+    key: Any
+    label: str
+    field: str
+    value: str
+
+
+def delete_is_blocked_by_policy(descriptor: descriptors.Descriptor) -> bool:
+    """True when the descriptor forbids row delete (lifecycle-only tables)."""
+    return descriptor.delete_policy == "lifecycle"
+
+
+def assert_deletable(descriptor: descriptors.Descriptor) -> None:
+    """Raise :class:`LifecycleDeleteError` for lifecycle-only tables."""
+    if delete_is_blocked_by_policy(descriptor):
+        raise LifecycleDeleteError(
+            f"{descriptor.table} rows are lifecycle-only; "
+            "use Park / Destroy instead."
+        )
+
+
+# Reference scans that need richer naming than a reverse cross-ref lookup.
+# Set ids are named by the tenant domains that use them, through the shared
+# rule-family helper (which already understands the packed registry layout).
+# The scan is keyed by the descriptor *field* (``setid``), not by a table name,
+# so ``forms_ui`` stays free of per-table code.
+def _load_set_referenced():
+    """Locate the rule family's shared ``set_referenced`` helper.
+
+    Imported by capability rather than by module path so this router keeps its
+    no-table-names invariant (the rule families own table knowledge).
+    """
+    for name in getattr(_rule_families, "FAMILIES", ()):
+        try:
+            module = importlib.import_module(f"console.rules.{name}")
+        except ImportError:  # pragma: no cover - family not landed yet
+            continue
+        helper = getattr(module, "set_referenced", None)
+        if callable(helper):
+            return helper
+    return None
+
+
+_SET_REFERENCED = _load_set_referenced()
+
+
+def _set_domain_references(
+    conn: sqlite3.Connection | None,
+    setid: Any,
+    *,
+    field: str,
+    value: str,
+) -> list[Reference]:
+    """Named tenant-domain references for a route-set id.
+
+    Uses the rule family's ``set_referenced`` helper for the packed-registry
+    lookup.  The descriptor that owns a ``domain`` key is the one whose key
+    names each reference (the home registry); no table name is hard-coded here.
+    """
+    if _SET_REFERENCED is None:
+        return []
+    references: list[Reference] = []
+    for candidate in _tableset().tables.values():
+        key_field = _key_field(candidate)
+        if key_field is None or key_field.type != "domain":
+            continue
+        for domain in _SET_REFERENCED(conn, setid):
+            references.append(
+                Reference(
+                    table=candidate.table,
+                    key=domain,
+                    label=domain,
+                    field=field,
+                    value=value,
+                )
+            )
+    return references
+
+
+def _target_field(
+    descriptor: descriptors.Descriptor, ref_field: str
+) -> descriptors.Field | None:
+    """Resolve ``table.field`` in a cross-ref to the target descriptor field."""
+    try:
+        return descriptor.field(ref_field)
+    except KeyError:
+        try:
+            return descriptor.field_by_column(ref_field)
+        except KeyError:
+            return None
+
+
+def _unpacked_rows(
+    conn: sqlite3.Connection | None, descriptor: descriptors.Descriptor
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    if conn is None:
+        return []
+    try:
+        raw_rows = db.read_rows(conn, descriptor.table)
+    except sqlite3.Error:
+        return []
+    rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for raw in raw_rows:
+        try:
+            rows.append((raw, descriptors.unpack_row(descriptor, raw)))
+        except (ValueError, KeyError):
+            continue
+    return rows
+
+
+def _reference_label(
+    descriptor: descriptors.Descriptor,
+    values: Mapping[str, Any],
+    key: Any,
+) -> str:
+    key_field = _key_field(descriptor)
+    if key_field is not None:
+        subject = values.get(key_field.name, key)
+    else:
+        subject = f"#{key}"
+
+    details: list[str] = []
+    for field in descriptor.fields:
+        if not field.show_in_list:
+            continue
+        value = values.get(field.name)
+        text = "" if value is None else str(value)
+        if text and text != str(subject) and text not in details:
+            details.append(text)
+
+    label = f"{_humanize(descriptor.table)} {subject}"
+    if details:
+        label += f" ({' · '.join(details[:2])})"
+    return label
+
+
+def scan_references(
+    conn: sqlite3.Connection | None,
+    descriptor: descriptors.Descriptor,
+    key: Any,
+    *,
+    raw: Mapping[str, Any] | None = None,
+) -> list[Reference]:
+    """Return every row whose descriptor ``cross_refs`` point at this row.
+
+    The scan is deliberately reverse-direction and metadata-driven: for every
+    other descriptor, each cross-ref whose ``ref`` names *descriptor.table*
+    becomes a lookup into that source table.  Rows are unpacked through their
+    own descriptor, so packed layouts stay declared in ``tables.yaml``.
+
+    ``setid`` is named through the rule family's ``set_referenced`` helper
+    (tenant domains, not opaque ids).  Other references keep a generic named
+    label built from the source descriptor's key and ``show_in_list`` fields.
+    """
+    if raw is None:
+        if conn is None:
+            return []
+        try:
+            raw = db.read_row(conn, descriptor.table, key)
+        except sqlite3.Error:
+            return []
+    if raw is None:
+        return []
+
+    try:
+        target_values = descriptors.unpack_row(descriptor, raw)
+    except (ValueError, KeyError):
+        return []
+
+    tableset = _tableset()
+    references: list[Reference] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    def add(reference: Reference) -> None:
+        marker = (
+            reference.table,
+            str(reference.key),
+            reference.field,
+            reference.value,
+        )
+        if marker in seen:
+            return
+        seen.add(marker)
+        references.append(reference)
+
+    for source in tableset.tables.values():
+        if source.table == descriptor.table:
+            continue
+        for cross_ref in source.cross_refs:
+            try:
+                ref_table, ref_field = cross_ref.ref.split(".", 1)
+            except ValueError:
+                continue
+            if ref_table != descriptor.table:
+                continue
+
+            target_field = _target_field(descriptor, ref_field)
+            if target_field is None:
+                continue
+            target_value = target_values.get(target_field.name, "")
+            target_text = "" if target_value is None else str(target_value).strip()
+            # 0/empty means "no reference" for the int reference fields; the
+            # form validator applies the same convention (ds_pstn=0).
+            if target_text == "" or (
+                target_field.type == "int" and target_text == "0"
+            ):
+                continue
+
+            # A set id is named by the tenant domains that use it, through the
+            # shared rule-family helper.  The generic reverse scan below still
+            # runs, so other referencing rows (for example a landline's own
+            # ds_onnet) are named too; the registry row is de-duplicated.
+            if target_field.name == "setid":
+                for reference in _set_domain_references(
+                    conn,
+                    target_value,
+                    field=cross_ref.field,
+                    value=target_text,
+                ):
+                    add(reference)
+
+            for source_raw, source_values in _unpacked_rows(conn, source):
+                source_value = source_values.get(cross_ref.field, "")
+                if str(source_value).strip() != target_text:
+                    continue
+                source_key = _row_key(conn, source, source_raw)  # type: ignore[arg-type]
+                add(
+                    Reference(
+                        table=source.table,
+                        key=source_key,
+                        label=_reference_label(source, source_values, source_key),
+                        field=cross_ref.field,
+                        value=target_text,
+                    )
+                )
+
+    references.sort(key=lambda reference: (reference.table, reference.label))
+    return references
+
+
+def _object_view(
+    descriptor: descriptors.Descriptor,
+    values: Mapping[str, Any],
+    key: Any,
+) -> dict[str, Any]:
+    """Human-readable object name + descriptor fields for the delete dialogs."""
+    key_field = _key_field(descriptor)
+    if key_field is not None:
+        subject = values.get(key_field.name, key)
+    else:
+        subject = ""
+        for field in descriptor.fields:
+            if not field.show_in_list:
+                continue
+            value = values.get(field.name)
+            text = "" if value is None else str(value).strip()
+            if text:
+                subject = text
+                break
+        if not subject:
+            subject = f"#{key}"
+
+    object_name = f"{_humanize(descriptor.table)} {subject}"
+    details = [
+        {
+            "name": field.name,
+            "label": _humanize(field.name),
+            "value": "" if values.get(field.name) is None else values.get(field.name),
+            "mono": field.type in MONO_TYPES,
+        }
+        for field in descriptor.fields
+    ]
+    return {
+        "object_name": object_name,
+        "object_key": "" if key is None else str(key),
+        "object_details": details,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -883,6 +1183,92 @@ def _toast_response(
     )
 
 
+def _render_delete_confirm(
+    request: Request,
+    descriptor: descriptors.Descriptor,
+    *,
+    key: Any,
+    values: Mapping[str, Any],
+) -> HTMLResponse:
+    view = _object_view(descriptor, values, key)
+    return _templates(request).TemplateResponse(
+        request,
+        "delete_confirm.html",
+        {
+            "nav": "tables",
+            "fragment": _wants_fragment(request),
+            "table": descriptor.table,
+            "table_label": _humanize(descriptor.table),
+            "key": "" if key is None else str(key),
+            "action": f"/tables/{descriptor.table}/{quote(str(key), safe='')}/delete",
+            "cancel_url": f"/tables/{descriptor.table}",
+            **view,
+        },
+        headers=NO_STORE,
+    )
+
+
+def _render_delete_blocked(
+    request: Request,
+    descriptor: descriptors.Descriptor,
+    *,
+    key: Any,
+    values: Mapping[str, Any],
+    references: list[Reference],
+    status_code: int,
+) -> HTMLResponse:
+    view = _object_view(descriptor, values, key)
+    reference_views = [
+        {
+            "table": reference.table,
+            "table_label": _humanize(reference.table),
+            "key": reference.key,
+            "label": reference.label,
+            "field": reference.field,
+            "value": reference.value,
+        }
+        for reference in references
+    ]
+    return _templates(request).TemplateResponse(
+        request,
+        "partials/delete_blocked.html",
+        {
+            "nav": "tables",
+            "fragment": _wants_fragment(request),
+            "table": descriptor.table,
+            "table_label": _humanize(descriptor.table),
+            "key": "" if key is None else str(key),
+            "cancel_url": f"/tables/{descriptor.table}",
+            "references": reference_views,
+            **view,
+        },
+        status_code=status_code,
+        headers=NO_STORE,
+    )
+
+
+def _lifecycle_delete_not_found(
+    request: Request, descriptor: descriptors.Descriptor
+) -> HTMLResponse:
+    """404 page for lifecycle-only tables: row delete is deliberately absent."""
+    panel = (
+        '<section class="panel empty" aria-labelledby="lifecycle-delete-title">'
+        '<h1 id="lifecycle-delete-title">Row delete is not available</h1>'
+        "<p>Homes are managed through Park / Destroy.</p>"
+        '<p><a class="btn" href="/homes">Go to Homes (Park / Destroy)</a></p>'
+        "</section>"
+    )
+    if _wants_fragment(request):
+        body = panel
+    else:
+        body = (
+            '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
+            "<title>Row delete is not available — VoIP Edge Console</title>"
+            f'</head><body><main class="main" id="main">{panel}</main></body></html>'
+        )
+    return HTMLResponse(body, status_code=404, headers=NO_STORE)
+
+
 # ---------------------------------------------------------------------------
 # reload worker (lazily constructed in app.py; tests may pre-inject)
 # ---------------------------------------------------------------------------
@@ -1033,6 +1419,19 @@ def _update(
     conn.execute(
         f'UPDATE "{descriptor.table}" SET {set_sql} WHERE "{pk}" = ?',
         [row[column] for column in assignments] + [original_key],
+    )
+
+
+def _delete_row(
+    conn: sqlite3.Connection,
+    descriptor: descriptors.Descriptor,
+    key: Any,
+) -> None:
+    """Delete exactly one row by its primary key (packed key or auto ``id``)."""
+    pk = descriptor.key or db.key_column(conn, descriptor.table)
+    _checked_identifier(pk)
+    conn.execute(
+        f'DELETE FROM "{descriptor.table}" WHERE "{pk}" = ?', (key,)
     )
 
 
@@ -1238,6 +1637,138 @@ router.add_api_route(
 router.add_api_route(
     "/tables/{table}/{key}/edit",
     _edit_submit,
+    methods=["POST"],
+    response_class=HTMLResponse,
+)
+
+
+# ---------------------------------------------------------------------------
+# delete (T5)
+# ---------------------------------------------------------------------------
+@router.get("/tables/{table}/{key}/delete", response_class=HTMLResponse)
+def delete_confirm(
+    request: Request,
+    table: str,
+    key: str,
+    conn: sqlite3.Connection | None = Depends(db.get_read_db),
+):
+    redirect = _requires_login(request)
+    if redirect is not None:
+        return redirect
+    descriptor = _descriptor(table)
+    if descriptor is None:
+        return _not_found(request, f"No table named “{table}”.")
+    if delete_is_blocked_by_policy(descriptor):
+        return _lifecycle_delete_not_found(request, descriptor)
+
+    raw = None
+    if conn is not None:
+        try:
+            raw = db.read_row(conn, table, key)
+        except sqlite3.Error:
+            raw = None
+    if raw is None:
+        return _not_found(request, f"No row “{key}” in {_humanize(table)}.")
+
+    values = descriptors.unpack_row(descriptor, raw)
+    references = scan_references(conn, descriptor, key, raw=raw)
+    if references:
+        return _render_delete_blocked(
+            request,
+            descriptor,
+            key=key,
+            values=values,
+            references=references,
+            status_code=200,
+        )
+    return _render_delete_confirm(
+        request,
+        descriptor,
+        key=key,
+        values=values,
+    )
+
+
+def _delete_submit(
+    request: Request,
+    table: str,
+    key: str,
+    conn: sqlite3.Connection = Depends(db.get_db),
+):
+    redirect = _requires_login(request)
+    if redirect is not None:
+        return redirect
+    descriptor = _descriptor(table)
+    if descriptor is None:
+        return _not_found(request, f"No table named “{table}”.")
+    if delete_is_blocked_by_policy(descriptor):
+        return _lifecycle_delete_not_found(request, descriptor)
+
+    raw = None
+    values: dict[str, Any] = {}
+    references: list[Reference] = []
+
+    # Re-check blockers *inside* the same write transaction that would delete:
+    # another writer may have added a reference between the GET and this POST.
+    with db.write_transaction(conn):
+        try:
+            raw = db.read_row(conn, table, key)
+        except sqlite3.Error:
+            raw = None
+        if raw is not None:
+            values = descriptors.unpack_row(descriptor, raw)
+            references = scan_references(conn, descriptor, key, raw=raw)
+            if not references:
+                _delete_row(conn, descriptor, key)
+
+    if raw is None:
+        return _not_found(request, f"No row “{key}” in {_humanize(table)}.")
+    if references:
+        return _render_delete_blocked(
+            request,
+            descriptor,
+            key=key,
+            values=values,
+            references=references,
+            status_code=409,
+        )
+
+    message = f"Deleted {key} — reload scheduled shortly"
+    warning_messages: list[str] = []
+    try:
+        worker = _worker(request)
+        worker_table, rpc_name, params = _reload_intent(descriptor)
+        worker.enqueue(worker_table, rpc_name, params)
+    except Exception as exc:  # a scheduling failure must not undo the delete
+        warning_messages.append(
+            f"The row was deleted, but the reload could not be scheduled: {exc}"
+        )
+
+    if _wants_fragment(request):
+        return _toast_response(
+            request,
+            message=message,
+            warnings=warning_messages,
+            tone="scheduled",
+            table=descriptor.table,
+        )
+
+    flash_message = message
+    if warning_messages:
+        flash_message = (
+            message + " · Warning: " + " | ".join(warning_messages)
+        )
+    query = urlencode({"flash": flash_message, "tone": "scheduled"})
+    return RedirectResponse(
+        f"/tables/{descriptor.table}?{query}",
+        status_code=303,
+        headers=NO_STORE,
+    )
+
+
+router.add_api_route(
+    "/tables/{table}/{key}/delete",
+    _delete_submit,
     methods=["POST"],
     response_class=HTMLResponse,
 )

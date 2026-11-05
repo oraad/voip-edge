@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ object_name }} — VoIP Edge Console{% endblock %}
+{% block content %}
+<style>
+  .delete-panel { border:1px solid var(--destructive); border-left-width:4px;
+                  border-radius:10px; padding:14px 18px; margin-bottom:16px; }
+  .btn.danger { background:var(--destructive); border-color:var(--destructive);
+                color:#fff; font-weight:600; }
+  .delete-details { margin:0; }
+  .delete-details div { padding:5px 0; border-bottom:1px solid var(--border); }
+  .delete-details div:last-child { border-bottom:none; }
+  .delete-details dt { font-size:.8em; color:var(--muted-foreground); }
+  .delete-details dd { margin:2px 0 0; }
+</style>
+
+<section id="delete-shell">
+  <p class="meta"><a href="{{ cancel_url }}">← Back to {{ table_label }}</a></p>
+
+  <div class="pagehead">
+    <div>
+      <h1>Delete {{ object_name }}?</h1>
+      <div class="sub">This removes exactly one row from the routing database
+        and schedules a Kamailio reload. It cannot be undone.</div>
+    </div>
+    <span class="meta">{{ table_label }}</span>
+  </div>
+
+  <div class="delete-panel" role="alert">
+    <b>Consequence:</b> calls that still route through {{ object_name }} will
+    fail after the reload lands. If this row is required by a home or another
+    table, delete is blocked instead — remove or reassign those references
+    first.
+  </div>
+
+  <section class="panel" aria-label="{{ object_name }} details">
+    <dl class="delete-details">
+      {% for detail in object_details %}
+      <div>
+        <dt>{{ detail.label }}</dt>
+        <dd><span{% if detail.mono %} class="mono"{% endif %}>{{ detail.value if detail.value != "" else "—" }}</span></dd>
+      </div>
+      {% endfor %}
+    </dl>
+  </section>
+
+  <form method="post" action="{{ action }}"
+        hx-post="{{ action }}" hx-target="#delete-shell" hx-swap="outerHTML"
+        hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
+        hx-on::after-request="if (event.detail.successful) { window.location='{{ cancel_url }}'; }">
+    {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    <div class="formbar">
+      <button class="btn danger" type="submit">Delete {{ object_name }}</button>
+      <a class="btn" href="{{ cancel_url }}">Keep it</a>
+      <span class="meta">Row key <span class="mono">{{ object_key }}</span></span>
+    </div>
+  </form>
+</section>
+{% endblock %}

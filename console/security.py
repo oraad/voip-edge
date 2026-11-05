@@ -117,13 +117,17 @@ def new_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def csrf_value_matches(request: Request, supplied: str | None) -> bool:
+    """True when *supplied* equals the double-submit cookie value."""
+    cookie = request.cookies.get(CSRF_COOKIE)
+    if not cookie or not supplied:
+        return False
+    return hmac.compare_digest(cookie.encode("utf-8"), supplied.encode("utf-8"))
+
+
 def csrf_valid(request: Request) -> bool:
     """Double-submit check: header value must equal the csrf cookie value."""
-    cookie = request.cookies.get(CSRF_COOKIE)
-    header = request.headers.get(CSRF_HEADER)
-    if not cookie or not header:
-        return False
-    return hmac.compare_digest(cookie.encode("utf-8"), header.encode("utf-8"))
+    return csrf_value_matches(request, request.headers.get(CSRF_HEADER))
 
 
 def csrf_protected(request: Request) -> bool:

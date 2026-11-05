@@ -1,0 +1,79 @@
+# compose.yml — VoIP Edge Console service for the existing Arcane/voip-edge
+# stack (or a second stack on the same host using the same EDGE_HOME).
+#
+# Merge the `console:` service below into docker/docker-compose.yml from
+# /root/voip-stack/kamailio-edge, or paste this file as its own Arcane stack.
+# Deployment steps, the group story and the Pangolin SSO resource are in
+# docs/ops/deploy.md.
+#
+# Deliberate choices:
+#   * image is built ONCE and pinned; do not build on every deploy
+#     (docs/ops/releases.md)
+#   * host networking: the app binds ${CONSOLE_BIND}:${CONSOLE_PORT}; there is
+#     no ports: mapping and no docker NAT in front of it
+#   * healthcheck tests the console process only — /health is 200 even when
+#     Kamailio is down, so Docker never restart-loops the console during an
+#     edge outage
+
+services:
+  console:
+    image: voip-edge-console:0.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CONSOLE_UID: ${CONSOLE_UID:-10001}
+        CONSOLE_GID: ${CONSOLE_GID:-10001}
+    container_name: voip-edge-console
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Fixed in-container paths; override the host-side location via the
+      # volume mounts below, not by changing these.
+      CONSOLE_DB_PATH: /data/edge.sqlite
+      CONSOLE_SIDECAR_DIR: /var/lib/console
+      CONSOLE_RPC_SOCK: /run/kamailio/kamailio_rpc.sock
+    volumes:
+      # The Kamailio DB. rw is required: the console edits the five routing
+      # tables in place and SQLite creates/updates edge.sqlite-wal and -shm
+      # in this directory. Never point this at a copy.
+      - ${EDGE_HOME:?set EDGE_HOME (e.g. /opt/voip-edge)}/kamailio/db:/data:rw
+      # The jsonrpcs unix datagram socket. rw because the unix-dgram client
+      # needs write permission on the socket path (mode 0660 + the shared
+      # "console" group); the same mount also lets the socket reappear after a
+      # Kamailio restart without recreating the container. Kamailio's compose
+      # service mounts the same host directory at /run/kamailio.
+      - ${EDGE_RUN:-/run/kamailio-edge}:/run/kamailio:rw
+      # Sidecar directory: console.sqlite (audit, parked snapshots, intents,
+      # pending reloads) and backups/. rw; must survive container replacement.
+      - ${EDGE_HOME:?set EDGE_HOME (e.g. /opt/voip-edge)}/console:/var/lib/console:rw
+    # The stock stack runs Kamailio as root and edge.sqlite + its WAL/SHM files
+    # are root-owned 0644, so a non-root console cannot write them. Running the
+    # console as root here is the working default and also covers the 0660
+    # jsonrpcs socket. The image itself defaults to the non-root console user;
+    # docs/ops/deploy.md documents the matching-GID/ACL recipe if you want to
+    # switch. group_add only adds the numeric GID to this process; it does not
+    # create an /etc/group entry inside the Kamailio container.
+    user: "0:0"
+    group_add:
+      - "${CONSOLE_GID:-10001}"
+    # Guard rails only; the console is deliberately small. Reload serialization
+    # needs one worker, so CPU is mostly idle between saves and page loads.
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      # $$ escapes compose interpolation: the container shell expands the
+      # values from env_file at runtime. /health is unauthenticated and never
+      # touches Kamailio. Do not add an RPC probe here.
+      test: ["CMD-SHELL", "curl -fsS \"http://$${CONSOLE_BIND:-127.0.0.1}:$${CONSOLE_PORT:-8080}/health\" >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

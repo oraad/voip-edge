@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Audit &amp; backups — VoIP Edge Console{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>Audit &amp; backups</h1>
+    <div class="sub">Console-recorded writes and reloads. Direct CLI edits of the database do not appear here — the console can only record its own writes;
+      re-reading a table is immediate.</div>
+  </div>
+</div>
+
+{% if capability_banner %}
+<div class="banner err" role="status" aria-live="polite">
+  <strong>{{ capability_banner.message }}</strong>
+  <div class="meta">{{ capability_banner.detail }}</div>
+</div>
+{% endif %}
+
+{% if sidecar_error %}
+<div class="banner err" role="alert">
+  <strong>sidecar unavailable — audit history cannot be read.</strong>
+  <div class="meta">Destructive lifecycle operations are refused while the sidecar is unreadable.</div>
+</div>
+{% endif %}
+
+<section class="panel" id="backups" aria-labelledby="backups-title">
+  <h2 id="backups-title">Backups</h2>
+  <p class="sub">One online SQLite backup is taken before every destructive lifecycle
+    operation. Rotation keeps the newest {{ keep }} globally,
+    regardless of purpose.</p>
+
+  {% if backups %}
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">When</th>
+          <th scope="col">Purpose</th>
+          <th scope="col">Size</th>
+          <th scope="col">Retention</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for backup in backups %}
+        <tr>
+          <td><span class="mono">{{ backup.when }}</span></td>
+          <td>
+            <span>{{ backup.purpose }}</span>
+            <span class="meta mono">{{ backup.tag }}</span>
+          </td>
+          <td class="mono">{{ backup.size }}</td>
+          <td>{{ backup.retention }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-panel meta">No backups have been taken yet. The first park,
+    restore, destroy or wizard apply will create one.</p>
+  {% endif %}
+
+  <p class="meta">Restore: {{ restore_note }} — follow the backup-restore runbook.
+    A hot-swapped database file is never safe while the stack is running.</p>
+</section>
+
+<section class="panel" id="audit" aria-labelledby="audit-title">
+  <h2 id="audit-title">Audit</h2>
+  <p class="sub">Every console lifecycle transition and reload outcome, newest first.
+    Outcome badges: <span class="badge b-warn">scheduled</span>
+    <span class="badge b-ok">applied</span>
+    <span class="badge b-ok">verified</span>
+    <span class="badge b-err">failed</span>.</p>
+
+  {% if audit_rows %}
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">When</th>
+          <th scope="col">Action</th>
+          <th scope="col">Domain</th>
+          <th scope="col">Reload outcome</th>
+          <th scope="col">Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in audit_rows %}
+        <tr>
+          <td class="mono">{{ row.ts }}</td>
+          <td>{{ row.op }}</td>
+          <td class="mono">{{ row.domain }}</td>
+          <td>
+            <span class="badge b-{{ row.badge_tone }}">{{ row.outcome_label }}</span>
+            <span class="meta">{{ row.state }}</span>
+          </td>
+          <td>{{ row.detail or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-panel meta">No audit rows recorded yet. Console writes and
+    lifecycle transitions will appear here.</p>
+  {% endif %}
+
+  <p class="meta">Audit coverage: console-recorded writes only. External CLI edits
+    of <span class="mono">edge.sqlite</span> are not logged here — list views
+    re-read the database on every load.</p>
+</section>
+{% endblock %}

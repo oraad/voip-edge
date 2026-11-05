@@ -508,7 +508,12 @@ def build_live_router(get_rpc: Any) -> APIRouter:
         app.include_router(build_live_router(lambda: app.state.rpc))
     """
     router = APIRouter()
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    fallback_templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+    def _templates(request: Request):
+        # Prefer the application's shared environment so base.html gets the
+        # T9 status-strip context processor; fall back for bare test apps.
+        return getattr(request.app.state, "templates", None) or fallback_templates
 
     def _render(request: Request, *, partial: bool):
         state = _load_live_state(_get_rpc_safely(get_rpc))
@@ -517,7 +522,7 @@ def build_live_router(get_rpc: Any) -> APIRouter:
             # 286-capable response (plan T6): stop the poll loop while the edge
             # is down; a page load restarts it.  Deliberately no HX-Reswap.
             headers["HX-Stop-Polling"] = "true"
-        return templates.TemplateResponse(
+        return _templates(request).TemplateResponse(
             request,
             "live.html",
             {
