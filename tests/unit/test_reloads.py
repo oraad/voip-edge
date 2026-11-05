@@ -348,3 +348,34 @@ def test_probe_and_worker_do_not_run_reloads_concurrently():
         assert rpc.max_concurrency == 1
     finally:
         worker.shutdown(0.2)
+
+
+def test_older_completion_does_not_clear_a_newer_pending_intent():
+    class BlockingRPC:
+        def __init__(self):
+            self.calls = []
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.lock = threading.Lock()
+
+        def call(self, method, params=None):
+            with self.lock:
+                self.calls.append(method)
+            self.started.set()
+            self.release.wait(2.0)
+            return 1
+
+    rpc = BlockingRPC()
+    events: list[tuple] = []
+    worker = ReloadWorker(rpc, {"homes": 0}, store=lambda *args: events.append(args))
+    try:
+        worker.enqueue("homes", "mtree.reload", ["tenantdom"])
+        assert rpc.started.wait(2.0)
+        worker.enqueue("homes", "mtree.reload", ["tenantdom"])  # newer intent
+        rpc.release.set()
+        assert worker.flush(5.0) is True
+        assert rpc.calls == ["mtree.reload", "mtree.reload"]
+        done = [event for event in events if event[0] == "done"]
+        assert len(done) == 1
+    finally:
+        worker.shutdown(0.2)

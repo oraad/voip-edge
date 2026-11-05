@@ -234,9 +234,19 @@ class ReloadWorker:
             else:
                 self.errors.pop(table, None)
 
-            self._notify_store(status, table, entry.rpc_name, entry.params)
+            if status == "pending":
+                self._notify_store("pending", table, entry.rpc_name, entry.params)
         finally:
             with self._cond:
+                # A newer save for this table may have been enqueued (and
+                # persisted) while this RPC was in flight.  Clearing the
+                # pending row now would lose that newer intent, so only send
+                # "done" when nothing newer is queued.  The lock makes the
+                # check/clear atomic with enqueue's on_enqueue persistence.
+                if status == "done" and table not in self._pending:
+                    self._notify_store(
+                        "done", table, entry.rpc_name, entry.params
+                    )
                 self._current = None
                 self._in_flight = False
                 self._cond.notify_all()

@@ -1257,7 +1257,13 @@ async def _apply(request: Request, conn: sqlite3.Connection):
 
     reload_warnings: list[str] = []
     try:
-        _keys, _warnings = _enqueue_reloads(request, tableset)
+        from starlette.concurrency import run_in_threadpool
+
+        # flush() is blocking (throttle + RPC); keep the event loop free so
+        # /health and other requests are not stalled behind a 5–30 s apply.
+        _keys, _warnings = await run_in_threadpool(
+            _enqueue_reloads, request, tableset
+        )
         reload_warnings.extend(_warnings)
     except Exception as exc:  # noqa: BLE001 — the rows are already committed
         reload_warnings.append(

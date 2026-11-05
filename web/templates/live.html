@@ -66,8 +66,10 @@
     {% else %}
     <p class="meta">No registrations cached.</p>
     {% endif %}
-    <div class="meta">regcache has no per-key TTL in the current edge config — entries persist
-      until the phone re-registers or the home is parked (plan §3.8).</div>
+    <div class="meta">regcache entries expire at the registration TTL (plus the
+      configured grace, capped by the 7200 s autoexpire), on unregister, or when
+      the home is parked. The raw expiry is shown for diagnostics; no countdown
+      is rendered.</div>
   </section>
 
   <section class="panel" aria-labelledby="live-dispatchers-title">

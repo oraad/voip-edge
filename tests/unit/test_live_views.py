@@ -78,8 +78,8 @@ def test_regcache_keeps_flow_and_raw_expires_but_adds_no_countdown():
 
     garden = rows["garden@sip.beta.home.example.net"]
     assert garden["flow"] == "sip:198.51.100.21:43774;transport=tcp"
-    # The raw value is available for diagnostics, but regcache has no reaper:
-    # the view must not invent a countdown/remaining-TTL field.
+    # The raw value is available for diagnostics; expiry is enforced by
+    # $shtex/autoexpire, and the view must not invent a countdown field.
     assert garden["expires"] == 1740
     assert "expires_in" not in garden
     assert "countdown" not in garden

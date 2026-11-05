@@ -916,7 +916,9 @@ def _require_purge_capability(worker: Any) -> None:
             "cannot prove htable.delete (no RPC client) — park/destroy refused"
         )
     try:
-        caps = capabilities.probe(rpc)
+        # Destructive operation: never trust a cached success from up to a
+        # minute ago.  A fresh probe is mandatory when enforcement is on.
+        caps = capabilities.probe(rpc, ttl=0)
     except BaseException as exc:
         raise KamailioUnavailable(
             f"cannot prove htable.delete (probe failed: {exc}) — park/destroy refused"

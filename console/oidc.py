@@ -170,6 +170,11 @@ async def load_discovery(force: bool = False) -> dict:
     if not force and _discovery_cache and now - _discovery_at < _DISCOVERY_TTL:
         return _discovery_cache
     async with _lock("discovery"):
+        # Re-check inside the lock: waiters that queued before the first
+        # failure must observe the new cooldown rather than each issuing
+        # another provider request.
+        if not force and _discovery_fail_until > time.monotonic():
+            raise RuntimeError("identity provider discovery is in failure cooldown")
         if not force and _discovery_cache and time.monotonic() - _discovery_at < _DISCOVERY_TTL:
             return _discovery_cache
         return await _load_discovery_locked(force)

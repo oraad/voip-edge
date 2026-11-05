@@ -54,7 +54,7 @@ refuses writes for a table whose declared version does not match the DB.
    .venv/bin/python -m pytest -q
    .venv/bin/python -m compileall console
    ```
-   The current baseline is **735 passed, 1 deselected**. Run the privacy guard
+   The current baseline is **739 passed, 1 deselected**. Run the privacy guard
    (`tools/check-privacy.sh --all`) and, before a deployment, the live gate
    (`tests/live/run-live.sh`).
 4. **Build once** from a clean checkout:

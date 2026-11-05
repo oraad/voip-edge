@@ -31,7 +31,7 @@ machinery. Token login stays as **break-glass** behind an env switch.
 | UserInfo | Optional; if used, its `sub` MUST equal the ID-token `sub`. |
 | Local authorization | Env allowlist: `OIDC_ALLOWED_GROUPS` (any-of) and/or `OIDC_ALLOWED_EMAIL_DOMAINS`. Denied → 403 page naming the missing requirement (not "access denied" alone). |
 | Sessions | Issue a **fresh** session on login (fixation defence); store only `sub`, `iss`, `email`, `csrf`, `exp` — **never** tokens. 12 h absolute expiry (implemented). Idle expiry (30 min) is an optional follow-up: it requires rotating the cookie on activity, which is deferred to keep the first version's session semantics simple. |
-| Logout | Local session clear **first**, then RP-initiated logout (`end_session_endpoint`, `id_token_hint`, registered `post_logout_redirect_uri`, `state`). No GET logout (CSRF); POST with existing CSRF check. Back-channel logout: out of scope for a single-instance console — documented as a known gap. |
+| Logout | Local session clear **first**, then RP-initiated logout (`end_session_endpoint`, `client_id`, registered `post_logout_redirect_uri`, `state`). No `id_token_hint`: tokens are never stored, so the provider may show a confirmation. No GET logout (CSRF); POST with existing CSRF check. Back-channel logout: out of scope for a single-instance console — documented as a known gap. |
 | Errors | Typed states: `idp_unreachable`, `invalid_state`, `token_rejected`, `claims_denied`, `clock_skew`, `callback_mismatch` — each renders a distinct operator-facing message with the correlation id, never a stack trace. |
 | Transport | Discovery/JWKS fetched with `httpx` (timeouts, TLS verified), cached (discovery 1 h, JWKS until `kid` miss + 5 min floor); **never** fetch a URL supplied by a token. |
 | Break-glass | `CONSOLE_AUTH_MODE=oidc|token|both` (default `both`): `token` keeps today's flow; `oidc` hides the token form. Documented as incident access. |
@@ -50,7 +50,7 @@ POST /auth/logout                   -> clear session, then 303 to IdP end-sessio
 
 - `OIDCSettings` in `console/settings.py`: issuer, client_id, client_secret,
   scopes (default `openid profile email groups`), allowed groups/domains,
-  redirect URI (derived from a configurable public base URL — never from
+  redirect URI (read directly from `OIDC_REDIRECT_URI`; never derived from
   `Host`), post-logout URI, auth mode.
 - Discovery at startup (non-blocking, like the capability probe) + on
   demand; store in `app.state.oidc` with health surfaced in the status strip.
@@ -112,7 +112,8 @@ POST /auth/logout                   -> clear session, then 303 to IdP end-sessio
 7. `next=//evil.example` or absolute URL → dropped, lands on `/homes`.
 8. IdP discovery down → login page shows `idp_unreachable`; health still 200.
 9. Logout: POST only; session cleared before redirect; IdP end-session called
-   with `id_token_hint`; CSRF-less POST → 403.
+   with `client_id`/`state` (no `id_token_hint`; tokens are never stored);
+   CSRF-less POST → 403.
 10. Auth mode `token` hides `/auth/*`; `oidc` hides token form; `both` works.
 11. Session fixation: pre-login cookie value cannot access pages after login
     (cookie rotated).

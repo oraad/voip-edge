@@ -69,6 +69,8 @@ def _reset_oidc_caches():
     oidc._discovery_fail_until = 0.0
     oidc._jwks_cache = None
     oidc._jwks_at = 0.0
+    oidc._discovery_lock = None
+    oidc._jwks_lock = None
     yield
 
 
@@ -446,3 +448,37 @@ def test_crafted_state_is_rejected_without_a_cookie_name_error(
 
 def test_flow_token_with_non_ascii_signature_is_rejected():
     assert oidc.verify_flow("abc.\u00e9") is None
+
+
+def test_discovery_cooldown_covers_queued_waiters(oidc_settings, monkeypatch):
+    import asyncio
+
+    oidc_settings()
+    oidc._discovery_lock = None
+    oidc._discovery_fail_until = 0.0
+    calls = 0
+
+    class FailingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url):
+            nonlocal calls
+            calls += 1
+            raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(
+        oidc.httpx, "AsyncClient", lambda *args, **kwargs: FailingClient()
+    )
+
+    async def scenario():
+        return await asyncio.gather(
+            *[oidc.load_discovery() for _ in range(6)], return_exceptions=True
+        )
+
+    results = asyncio.run(scenario())
+    assert calls == 1
+    assert all(isinstance(result, Exception) for result in results)

@@ -160,7 +160,7 @@
       <table><thead><tr><th>AOR</th><th>Flow</th><th>Transport</th></tr></thead>
         <tbody><tr><td class="mono">mobile1@sip.alpha.home.example.net</td><td class="mono">198.51.100.20:2416</td><td>TLS</td></tr></tbody>
       </table>
-      <div class="meta">regcache has no per-key TTL in the current edge config — entries persist until the phone re-registers (see plan §3.8 follow-up).</div>
+      <div class="meta">regcache entries expire at the registration TTL (plus grace, capped by autoexpire=7200), on unregister, or when the home is parked.</div>
     </div>
 
     <!-- 3 EDIT WITH ERRORS -->

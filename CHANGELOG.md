@@ -122,6 +122,41 @@ First multi-lens review round.
 - Privacy guard checks staged blobs and blocks `.env.*`, keys and databases;
   deploy docs drop the nonexistent `dgram_max_size`.
 
+## [0.1.7] - 2026-11-05
+
+- OIDC sign-in: authorization code + PKCE, issuer-bound JWKS, allowlist,
+  session rotation, logout, and the fake-provider negative matrix.
+
+## [0.1.6] - 2026-11-05
+
+- OIDC design and UX states: login/denied/expired/account chip, threat model,
+  dependency decision and the T11 task breakdown.
+
+## [0.1.5] - 2026-11-05
+
+- Repository renamed to `voip-edge`; image/container remains
+  `voip-edge-console`.
+
+## [0.1.4] - 2026-11-05
+
+- ACME/TLS deployment scripts: DNS-01 issue/renew, staged promotion, atomic
+  release layout and the certificate reload watcher.
+
+## [0.1.3] - 2026-11-05
+
+- Neutralized example numbering data in docs/fixtures (alpha/beta/gamma and
+  the documented landline range).
+
+## [0.1.2] - 2026-11-05
+
+- Removed seeded country-specific number profiles; number rules are
+  configured through the console/UI.
+
+## [0.1.1] - 2026-11-05
+
+- Privacy hardening: sanitized configs/docs, pre-commit guard, `.gitignore`
+  coverage, and the first history purge.
+
 ## [0.1.0] - 2026-11-05
 
 ### Added

@@ -225,3 +225,19 @@ def test_readonly_empty_homes_hides_onboarding_cta(
     assert response.status_code == 200
     assert 'href="/wizard"' not in response.text
     assert "read-only mode" in response.text.lower()
+
+
+def test_table_list_with_missing_edge_db_is_first_use(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(
+            settings_module.settings,
+            db_path=str(tmp_path / "does-not-exist.sqlite"),
+            sweeper_interval=0,
+        ),
+    )
+    login(client)
+    response = client.get("/tables/dispatcher")
+    assert response.status_code == 200
+    assert "No rows in" in response.text

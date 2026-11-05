@@ -111,6 +111,7 @@ def table_list(
 
     rows: list[dict] = []
     has_rows = False
+    corrupt = 0
     if conn is not None:
         try:
             key_name = db.key_column(conn, table)
@@ -120,7 +121,6 @@ def table_list(
             raw_rows = []
             key_name = None
         has_rows = bool(raw_rows)
-        corrupt = 0
         for raw in raw_rows:
             try:
                 values = descriptors.unpack_row(descriptor, raw)

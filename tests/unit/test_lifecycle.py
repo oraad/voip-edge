@@ -849,3 +849,27 @@ def test_restore_resumes_after_committed_rows_lost_their_transition(env, monkeyp
     )
     assert summary["completed"] == 1
     assert env.sidecar.latest_intent("restore", DOMAIN_A)["state"] == "DONE"
+
+
+def test_capability_gate_does_not_trust_a_stale_cached_success(env, monkeypatch):
+    from dataclasses import replace
+
+    from console import capabilities
+    from console import settings as settings_module
+    from console.errors import KamailioUnavailable
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, enforce_capabilities=True),
+    )
+    capabilities.clear_cache()
+    env.fake.script("htable.delete", 1)
+    assert capabilities.probe(env.fake)["htable.delete"] is True
+
+    # The edge loses the capability after the cache was primed.
+    env.fake.fault("htable.delete", -32601, "Method not found")
+    before = edge_signature(env.edge)
+    with pytest.raises(KamailioUnavailable):
+        park(env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups)
+    assert edge_signature(env.edge) == before

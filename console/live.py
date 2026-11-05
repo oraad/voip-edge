@@ -3,9 +3,9 @@
 The dashboard is deliberately thin:
 
 * :func:`build_regcache_view` turns a raw ``htable.dump`` result into rows for
-  the registered-phones panel.  ``regcache`` has **no reaper** in the current
-  edge config (plan §3.8), so the view keeps the raw ``expires`` value at most
-  and never renders a countdown.
+  the registered-phones panel.  Entries carry the registration TTL (plus
+  grace, capped by ``autoexpire=7200``), but the view keeps only the raw
+  ``expires`` value and never renders a countdown.
 * :func:`build_dispatcher_view` normalises ``dispatcher.list`` (structured
   JSON or the plain-text form) into rows with the plan §3.5 flag tokens:
   ``A`` active, ``T`` trying, ``I`` inactive, ``D`` disabled, plus ``P``
@@ -99,7 +99,8 @@ def build_regcache_view(dump: Any) -> list[dict[str, Any]]:
 
     Each row has ``aor``, ``user``, ``domain``, ``domain_prefix``, ``suffix``,
     ``flow``, ``transport`` and the raw ``expires`` (or ``None``).  There is
-    intentionally no ``expires_in``/countdown: regcache has no autoexpire.
+    intentionally no ``expires_in``/countdown; regcache expiry is enforced by
+    ``$shtex`` + ``autoexpire``, not displayed as a timer.
     """
     flat = flatten_htable_dump(dump)
     rows: list[dict[str, Any]] = []
