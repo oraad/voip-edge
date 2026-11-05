@@ -82,8 +82,8 @@ How to read this:
 | `V-DP-SUBST-IDENTITY` | `subst_exp` is locked to the identity `^(.*)$` ("match-only by design") | invariant | TODO | TODO | T4.7 |
 | `V-DP-REPL-IDENTITY` | `repl_exp` is locked to the identity `\1` ("match-only by design") | invariant | TODO | TODO | T4.7 |
 | `V-DP-TRANSLATE-PROOF` | Optional sample after save is proven through `dialplan.translate` and shown in the toast | info | TODO | TODO | T4.7 |
-| `V-DP-PRESET-COUNTRY` | "Country profile" preset behaves like the dpid 10 partition | info | TODO | TODO | T4.7 |
-| `V-DP-PRESET-BLOCK` | "Block partition" preset behaves like dpid 90 | info | TODO | TODO | T4.7 |
+| `V-DP-PRESET-COUNTRY` | "Country profile" preset creates an operator-chosen emergency partition (none seeded) | info | TODO | TODO | T4.7 |
+| `V-DP-PRESET-BLOCK` | "Block partition" preset creates an operator-chosen block partition (none seeded) | info | TODO | TODO | T4.7 |
 
 ## trusted
 

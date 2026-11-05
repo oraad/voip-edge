@@ -58,20 +58,21 @@ router = APIRouter()
 
 NO_STORE = {"Cache-Control": "no-store"}
 
-#: Emergency partition and call policy used by the onboarding convention
-#: (README onboarding step 3: dpid 10 = country emergency profile,
-#: dpid 90 = premium audiotex block, inter-home and PSTN fallback on).
-DEFAULT_DPID = 10
-DEFAULT_FLAGS = "1+1+90"
+#: Onboarding defaults: no emergency profile and no premium block until the
+#: operator creates them in Number rules (dialplan CRUD).  0 means "none";
+#: inter-home calling and PSTN fallback are on.
+DEFAULT_DPID = 0
+DEFAULT_FLAGS = "1+1"
 
 
 def effective_flags(has_pstn: bool) -> str:
     """Call-policy flags derived from the trunk checkbox.
 
-    ``ih_on+pstn_on+block_dpid``: inter-home on and the premium block stay on;
-    ``pstn_on`` is only meaningful when the home actually has a PSTN set.
+    ``ih_on+pstn_on[+block_dpid]``: inter-home stays on; ``pstn_on`` is only
+    meaningful when the home actually has a PSTN set; no block partition is
+    assumed (create one in Number rules and reference it per home).
     """
-    return DEFAULT_FLAGS if has_pstn else "1+0+90"
+    return DEFAULT_FLAGS if has_pstn else "1+0"
 
 
 DEFAULT_SIP_PORT = 5060

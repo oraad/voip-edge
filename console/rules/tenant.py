@@ -374,13 +374,15 @@ def pstn_set_exists_or_zero(
 def dpid_exists(
     value: Any, context: ValidationContext
 ) -> tuple[list[str], list[str]]:
-    """The emergency dialplan partition must exist."""
+    """The emergency dialplan partition must exist (0 = no profile)."""
     if _text(value) == "":
         return ([], [])
 
     number = _as_int(value)
     if number is None or number < 0:
         return (["Enter the dialplan partition id as a whole number."], [])
+    if number == 0:
+        return ([], [])
 
     exists = _exists(context.conn, "dialplan", "dpid", number)
     if exists is False:

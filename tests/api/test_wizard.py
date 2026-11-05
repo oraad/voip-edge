@@ -154,7 +154,7 @@ def test_wizard_happy_path_writes_five_rows_backs_up_and_reloads(
         (IDENTITY["domain"],),
     )
     assert len(registry) == 1
-    assert registry[0]["tvalue"] == "T4,14,34,04444444,Home example,10,1+1+90"
+    assert registry[0]["tvalue"] == "T4,14,34,04444444,Home example,0,1+1"
 
     landline = _fetch(
         seeded_db,
@@ -238,7 +238,7 @@ def test_wizard_no_trunk_writes_four_rows_and_skips_pstn_set(
         "SELECT tvalue FROM tenant_registry WHERE tprefix = ?",
         (IDENTITY["domain"],),
     )
-    assert registry[0]["tvalue"] == "T4,14,0,04444444,Home example,10,1+0+90"
+    assert registry[0]["tvalue"] == "T4,14,0,04444444,Home example,0,1+0"
 
     assert _fetch(
         seeded_db, "SELECT 1 FROM dispatcher WHERE setid = 34"

@@ -46,7 +46,7 @@ def test_plan_writes_with_trunk_returns_five_rows_in_wire_order():
 
     registry = writes[0][1]
     assert registry["tprefix"] == "sip.delta.home.example.net"
-    assert registry["tvalue"] == "T4,14,34,04444444,Home example,10,1+1+90"
+    assert registry["tvalue"] == "T4,14,34,04444444,Home example,0,1+1"
 
     landline = writes[1][1]
     assert landline["tprefix"] == "04444444"
@@ -87,7 +87,7 @@ def test_plan_writes_without_trunk_returns_four_rows_and_skips_pstn_set():
         "dispatcher",
         "trusted",
     ]
-    assert writes[0][1]["tvalue"] == "T4,14,0,04444444,Home example,10,1+0+90"
+    assert writes[0][1]["tvalue"] == "T4,14,0,04444444,Home example,0,1+0"
     assert writes[2][1]["setid"] == 14
     assert all(row["setid"] != 34 for table, row in writes if table == "dispatcher")
 

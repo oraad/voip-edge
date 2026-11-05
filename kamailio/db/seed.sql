@@ -148,9 +148,9 @@ CREATE TABLE IF NOT EXISTS trusted (
 
 -- tenant alpha (client 1): landline 01111111, ring group "home".
 -- Label = the landline itself (that's what the other end should see).
--- flags = ih_on+pstn_on+block_dpid  ->  Example premium/audiotex blocked (dpid 90)
+-- flags = ih_on+pstn_on[+block_dpid] -> 1+1 = inter-home + PSTN, no block partition
 INSERT OR REPLACE INTO tenant_registry (tprefix, tvalue) VALUES
-	('sip.alpha.home.example.net', 'T1,11,31,01111111,01111111,10,1+1+90');
+	('sip.alpha.home.example.net', 'T1,11,31,01111111,01111111,0,1+1');
 
 INSERT OR REPLACE INTO tenant_landline (tprefix, tvalue) VALUES
 	('01111111', 'T1,home,11,1');
@@ -167,21 +167,15 @@ VALUES
 	(11, 'sip:10.0.0.10:5060;transport=tcp', 0, 0, '', 'alpha voip-stack (HA host LAN IP, native routing)'),
 	(31, 'sip:10.0.0.10:5060;transport=tcp', 0, 0, '', 'alpha PSTN via voip-stack (HT813 trunk, LAN-only)');
 
--- emergency patterns, dpid 10 — Example: 112 police (ISF), 125 civil defense,
--- 175 fire brigade, 140 Red Cross ambulance. Adjust rows, never the script.
--- Other countries: another dpid, point the registry row at it.
--- dpid 90 — premium/audiotex BLOCKLIST (Example 0900 range; these can never
--- leave via a trunk): extend with local premium ranges as rows.
-INSERT INTO dialplan (dpid, pr, match_op, match_exp, attrs)
-VALUES
-	(10, 1, 1, '^(112|911|999)$',         'emergency Example (ISF/CivDef/Fire/RedCross)'),
-	(90, 1, 1, '^0900[0-9]{6}$',             'premium Example 0900 audiotex — blocked, CONFIRM range');
+-- No emergency or premium patterns are seeded: numbering is deployment-
+-- specific.  Create them per country in the console's "Number rules" page
+-- (dialplan CRUD), then point tenant_registry.dpid / block_dpid at them.
 
 -- tenant beta (client 2): landline 02222222, ring group "home"
 -- tenant gamma (client 3): landline 03333333, ring group "home"
 INSERT OR REPLACE INTO tenant_registry (tprefix, tvalue) VALUES
-	('sip.beta.home.example.net', 'T2,12,32,02222222,02222222,10,1+1+90'),
-	('sip.gamma.home.example.net', 'T3,13,33,03333333,03333333,10,1+1+90');
+	('sip.beta.home.example.net', 'T2,12,32,02222222,02222222,0,1+1'),
+	('sip.gamma.home.example.net', 'T3,13,33,03333333,03333333,0,1+1');
 INSERT OR REPLACE INTO tenant_landline (tprefix, tvalue) VALUES
 	('02222222', 'T2,home,12,1'),
 	('03333333', 'T3,home,13,1');
