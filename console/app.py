@@ -137,10 +137,14 @@ def create_app() -> FastAPI:
 
     # ------------------------------------------------------------------
     # T3 routers: /homes landing + generic read-only table browser
+    # T4.1: descriptor-driven create/edit forms.  Include forms_ui *before*
+    # tables_ui so GET /tables/{table}/new is not captured by the detail
+    # route /tables/{table}/{key}.
     # ------------------------------------------------------------------
-    from . import homes_ui, tables_ui
+    from . import forms_ui, homes_ui, tables_ui
 
     app.include_router(homes_ui.router)
+    app.include_router(forms_ui.router)
     app.include_router(tables_ui.router)
 
     # ------------------------------------------------------------------
@@ -165,6 +169,33 @@ def create_app() -> FastAPI:
         return app.state.rpc
 
     app.include_router(build_live_router(_get_rpc))
+
+    # ------------------------------------------------------------------
+    # T4.1: one lazy reload worker shared by the write forms.  Tests may
+    # pre-inject app.state.worker with a recorder; the factory is only used
+    # when nothing was injected.  Throttles come from the descriptors so a
+    # later family cannot drift from tables.yaml.
+    # ------------------------------------------------------------------
+    from . import descriptors as descriptors_module
+    from .reloads import ReloadWorker
+
+    def _default_worker() -> ReloadWorker:
+        tableset = descriptors_module.load()
+        throttles = {
+            descriptor.table: descriptor.reload.throttle_seconds
+            for descriptor in tableset.tables.values()
+        }
+        return ReloadWorker(_get_rpc(), throttles)
+
+    app.state.worker = None
+    app.state.worker_factory = _default_worker
+
+    def _get_worker():
+        if app.state.worker is None:
+            app.state.worker = app.state.worker_factory()
+        return app.state.worker
+
+    app.state.get_worker = _get_worker
 
     return app
 

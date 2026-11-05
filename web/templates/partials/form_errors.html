@@ -1,0 +1,27 @@
+{% if error_count %}
+{# Focused summary (plan §6): programmatically focusable, links to fields.
+   Rendered inside #form-shell so an htmx re-render keeps the swap small. #}
+<div class="errsummary" tabindex="-1" role="alert"
+     aria-labelledby="errsummary-title">
+  <b id="errsummary-title">{{ error_count }} thing{{ "" if error_count == 1 else "s" }}
+    need{{ "s" if error_count == 1 else "" }} fixing before this can save</b>
+  <ul style="margin:7px 0 0 17px; padding:0">
+    {% for item in summary %}
+    <li><a href="#field-{{ item.field }}">{{ item.label }} — {{ item.message }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% if warning_count %}
+{# Warnings never block the save; this summary appears only on a re-render
+   (for example after fixing a separate error). Toast output carries them
+   after a successful save. #}
+<div class="warnsummary" role="status" aria-live="polite">
+  <span class="badge b-warn">Warning</span>
+  {{ warning_count }} warning{{ "" if warning_count == 1 else "s" }} — this row
+  can still save.
+  <ul style="margin:7px 0 0 17px; padding:0">
+    {% for message in warnings %}<li>{{ message }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}

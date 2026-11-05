@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ form_title }} — VoIP Edge Console{% endblock %}
+{% block content %}
+<style>
+  /* Form vocabulary from the wireframe (§6): labels above, one-line help,
+     imperative inline errors, a focused summary, and warning badges that do
+     not imply failure. Kept local so every family reuses one look. */
+  .fieldset { border:1px solid var(--border); border-radius:10px;
+              padding:6px 16px 14px; margin:0 0 16px; }
+  .fieldset legend { font-size:.8em; font-weight:700; letter-spacing:.04em;
+                     text-transform:uppercase; color:var(--muted-foreground);
+                     padding:0 6px; }
+  .field { margin:0 0 6px; }
+  .hint { font-size:.8em; color:var(--muted-foreground); margin-top:4px; }
+  .hint.create-only { color:var(--info); }
+  .errtxt { font-size:.82em; color:var(--destructive); margin-top:4px;
+            font-weight:600; }
+  .warntxt { font-size:.82em; color:var(--warning); margin-top:4px;
+             display:flex; gap:7px; align-items:flex-start; }
+  .badge { display:inline-block; font-size:.75em; font-weight:600;
+           padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .b-warn { background:color-mix(in srgb, var(--warning) 18%, transparent);
+            color:var(--warning); }
+  .b-info { background:color-mix(in srgb, var(--info) 16%, transparent);
+            color:var(--info); }
+  .warnsummary { border:1px solid var(--warning); border-left-width:4px;
+                 border-radius:8px; padding:10px 14px; font-size:.88em;
+                 margin-bottom:14px; }
+  form .field input, form .field select, form .field textarea,
+  form .field input[type=password] { width:100%; padding:9px 10px;
+      border:1px solid var(--border); border-radius:6px; font:inherit;
+      min-height:32px; background:#fff; color:#1b1f27; }
+  form .field textarea { min-height:84px; resize:vertical; }
+  form .field input[type=checkbox] { width:auto; min-height:0; }
+  form .field input[aria-invalid="true"], form .field select[aria-invalid="true"],
+  form .field textarea[aria-invalid="true"] { border-color:var(--destructive); }
+  form .field input:disabled, form .field select:disabled,
+  form .field textarea:disabled { background:var(--muted); color:#4a5260; }
+  .checkboxline { display:flex; gap:8px; align-items:center; }
+  .checkboxline label { margin:0; }
+</style>
+<section id="form-shell">
+  <div class="pagehead">
+    <div>
+      <h1>{{ form_title }}</h1>
+      <div class="sub">Values are validated against every table before writing.
+        Errors block the save; warnings are shown and the save proceeds.</div>
+    </div>
+    <span class="meta">{{ table_label }}</span>
+  </div>
+
+  {% include "partials/form_errors.html" %}
+
+  <form method="post" action="{{ action }}" hx-post="{{ action }}"
+        hx-target="#form-shell" hx-swap="outerHTML"
+        hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'
+        hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+        novalidate>
+    {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    <fieldset class="fieldset">
+      <legend>Details</legend>
+      {% for f in fields %}
+      <div class="field">
+        <label for="field-{{ f.name }}">{{ f.label }}</label>
+
+        {% if f.disabled %}
+          {# Disabled controls are not submitted; carry the authoritative
+             value in a hidden input (key immutability / locked / derived). #}
+          <input type="hidden" name="{{ f.name }}" value="{{ f.value }}">
+        {% endif %}
+
+        {% if f.widget == "select" %}
+          <select id="field-{{ f.name }}"
+                  {% if f.disabled %}disabled aria-disabled="true"{% else %}name="{{ f.name }}"{% endif %}
+                  {% if f.aria_invalid %}aria-invalid="true"{% endif %}
+                  {% if f.describedby %}aria-describedby="{{ f.describedby }}"{% endif %}
+                  {% if f.required and not f.disabled %}required{% endif %}>
+            {% for option in f.options %}
+            <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        {% elif f.widget == "checkbox" %}
+          <div class="checkboxline">
+            <input type="checkbox" id="field-{{ f.name }}" value="1"
+                   {% if f.disabled %}disabled aria-disabled="true"{% else %}name="{{ f.name }}"{% endif %}
+                   {% if f.checked %}checked{% endif %}
+                   {% if f.aria_invalid %}aria-invalid="true"{% endif %}
+                   {% if f.describedby %}aria-describedby="{{ f.describedby }}"{% endif %}>
+          </div>
+        {% elif f.widget == "textarea" %}
+          <textarea id="field-{{ f.name }}" rows="4"
+                    {% if f.disabled %}disabled aria-disabled="true"{% else %}name="{{ f.name }}"{% endif %}
+                    {% if f.aria_invalid %}aria-invalid="true"{% endif %}
+                    {% if f.describedby %}aria-describedby="{{ f.describedby }}"{% endif %}
+                    {% if f.required and not f.disabled %}required{% endif %}>{{ f.value }}</textarea>
+        {% else %}
+          <input id="field-{{ f.name }}"
+                 type="{{ 'number' if f.widget == 'number' else 'text' }}"
+                 value="{{ f.value }}"
+                 {% if f.disabled %}disabled aria-disabled="true"{% else %}name="{{ f.name }}"{% endif %}
+                 {% if f.mono %}class="mono"{% endif %}
+                 {% if f.widget == 'number' %}step="1" inputmode="numeric"{% elif f.type == 'digits' %}inputmode="numeric"{% endif %}
+                 {% if f.aria_invalid %}aria-invalid="true"{% endif %}
+                 {% if f.describedby %}aria-describedby="{{ f.describedby }}"{% endif %}
+                 {% if f.required and not f.disabled %}required{% endif %}
+                 autocomplete="off" spellcheck="false">
+        {% endif %}
+
+        {% if f.help %}<div class="hint" id="help-{{ f.name }}">{{ f.help }}</div>{% endif %}
+        {% if f.extra_hint %}
+        <div class="hint{% if f.key_locked %} create-only{% endif %}">{{ f.extra_hint }}</div>
+        {% endif %}
+        {% for message in f.errors %}
+        <div class="errtxt" id="err-{{ f.name }}-{{ loop.index }}">{{ message }}</div>
+        {% endfor %}
+        {% for message in f.warnings %}
+        <div class="warntxt" id="warn-{{ f.name }}-{{ loop.index }}">
+          <span class="badge b-warn">Warning</span><span>{{ message }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </fieldset>
+
+    <div class="formbar">
+      <button class="btn pri" type="submit">{{ submit_label }}</button>
+      <a class="btn" href="{{ cancel_url }}">Discard</a>
+      <span class="meta">Saved first, then Kamailio reloads — the toast says
+        which table was queued, not that it is verified.</span>
+    </div>
+  </form>
+</section>
+{% endblock %}

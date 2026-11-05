@@ -1,0 +1,34 @@
+<style>
+  /* Self-contained so a toast also works as a standalone htmx fragment. */
+  .toast { border:1px solid var(--border, #d7dbe3);
+           border-left:4px solid var(--info, #1f6aa5);
+           background:var(--muted, #f3f5f8); border-radius:8px;
+           padding:10px 14px; font-size:.9em; margin-bottom:14px;
+           display:flex; justify-content:space-between; gap:12px;
+           align-items:flex-start; flex-wrap:wrap; }
+  .toast.ok { border-left-color:var(--success, #1f7a45); }
+  .toast.error { border-left-color:var(--destructive, #b3261e); }
+  .toast .badge { display:inline-block; font-size:.75em; font-weight:600;
+                  padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .toast .b-warn { background:color-mix(in srgb, var(--warning, #8a6100) 18%, transparent);
+                   color:var(--warning, #8a6100); }
+  .toast ul { margin:6px 0 0 16px; padding:0; font-size:.94em; }
+  .toast a { color:inherit; }
+</style>
+<div class="toast {{ 'ok' if tone == 'success' else ('error' if tone == 'error' else '') }}"
+     role="{{ 'alert' if tone == 'error' else 'status' }}"
+     aria-live="{{ 'assertive' if tone == 'error' else 'polite' }}">
+  <div>
+    <div>{{ message }}</div>
+    {% if warnings %}
+    <ul>
+      {% for warning in warnings %}
+      <li><span class="badge b-warn">Warning</span> {{ warning }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% if table %}
+  <a class="meta" href="/tables/{{ table }}">View {{ table_label }} rows</a>
+  {% endif %}
+</div>
