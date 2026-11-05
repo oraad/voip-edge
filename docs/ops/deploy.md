@@ -159,7 +159,7 @@ by the current settings module; per-table throttles come from
 Plain Docker, with the host `console` GID baked in for the non-root option:
 
 ```bash
-cd /root/voip-edge-console
+cd /root/voip-edge
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
 docker build \
   --build-arg CONSOLE_GID="${CONSOLE_GID}" \
@@ -188,10 +188,10 @@ If the console is part of the existing stack, merge this service into
 
 ```yaml
   console:
-    # ... copy the console: service from /root/voip-edge-console/compose.yml
+    # ... copy the console: service from /root/voip-edge/compose.yml
 ```
 
-Otherwise deploy `/root/voip-edge-console/compose.yml` as its own Arcane stack
+Otherwise deploy `/root/voip-edge/compose.yml` as its own Arcane stack
 on the same host, with the same `EDGE_HOME` / `EDGE_RUN` values.
 
 The important properties of that service:
