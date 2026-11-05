@@ -83,12 +83,18 @@ def test_every_yaml_validator_is_registered_or_declared_pending():
 
 def test_is_known_distinguishes_pending_from_implemented():
     assert is_known("digits")
-    assert not is_known("tenantid_unique")
+    # Families land in parallel; pick whichever name is still pending rather
+    # than hard-coding one family's name (which would fail as soon as it lands).
+    pending_names = sorted(PENDING_VALIDATORS)
+    if pending_names:
+        assert not is_known(pending_names[0])
 
 
 def test_pending_rule_is_skipped_but_a_typo_blocks():
-    pending = Field(name="tenantid", validator="tenantid_unique")
-    assert validate_field(pending, "anything", ValidationContext()) == ([], [])
+    pending_names = sorted(PENDING_VALIDATORS)
+    if pending_names:
+        pending = Field(name="tenantid", validator=pending_names[0])
+        assert validate_field(pending, "anything", ValidationContext()) == ([], [])
 
     typo = Field(name="tenantid", validator="tenantid_unqie")
     errors, warnings = validate_field(typo, "T1", ValidationContext())

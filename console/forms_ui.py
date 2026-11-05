@@ -242,6 +242,14 @@ def _collect_values(
                     default = _default_for(descriptor, field, values)
                     if default is not None:
                         values[field.name] = default
+
+    # Non-descriptor form keys are carried through so a family validator can
+    # see an explicit acknowledgement that is not a table column (for example
+    # an ``override_public_ip`` checkbox).  Writes still use descriptor
+    # columns only, so these extras never reach SQL.
+    for name, posted in form.items():
+        if name not in values:
+            values[name] = posted[0] if posted else ""
     return values
 
 
@@ -304,6 +312,9 @@ def _coerce(
                 problems.append((field, "Enter a whole number."))
         else:
             coerced[field.name] = "" if value is None else str(value)
+    # Non-descriptor keys collected for family validators survive coercion.
+    for name, value in values.items():
+        coerced.setdefault(name, value)
     return coerced, problems
 
 
