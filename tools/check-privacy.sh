@@ -44,7 +44,7 @@ while IFS= read -r f; do
             echo "privacy: refusing secret/state path: $f" >&2; fail=1 ;;
         .env.example|*/.env.example)
             : ;;  # committed template: reviewed by the content gate below
-        .env|.env.*|*/.env|*/.env.*)
+        .env|.env.*|*.env|*/.env|*/.env.*)
             echo "privacy: refusing env file: $f" >&2; fail=1 ;;
     esac
 done < "$TMPLIST"

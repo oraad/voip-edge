@@ -23,8 +23,9 @@ Stamps include microseconds, so names sort chronologically even for backups
 taken in the same second. Tags look like `park:<domain>`,
 `restore:<domain>`, `destroy:<domain>` and `wizard-apply:<domain>`.
 
-A backup is taken **before every destructive lifecycle operation** and before
-wizard apply. A backup failure aborts the operation before any edge mutation:
+A backup is taken **before every edge-mutating lifecycle operation** (park,
+restore, active destroy) and before wizard apply. Destroying a parked snapshot
+only removes the sidecar row; it does not mutate the edge DB. A backup failure aborts the operation before any edge mutation:
 fix the path/permissions and retry; never proceed without a backup.
 
 ## Where the files live

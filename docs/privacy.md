@@ -20,7 +20,8 @@ tenant data. The rules below keep the two separate.
    (enable once with `git config core.hooksPath .githooks`):
    - refuses sensitive file types/paths,
    - greps staged files for literals from `tools/private-deny.txt`,
-   - refuses private-key blocks and DNS-01 credential assignments.
+   - refuses private-key blocks; DNS-01 credential *values* are caught only by
+     the local deny-list.
 3. Before publishing a clone, run `tools/check-privacy.sh --all` and also:
    ```sh
    git log -p --all | grep -iE '<your tenant domain>|<your landline>|BEGIN .*PRIVATE KEY'

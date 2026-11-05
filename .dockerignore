@@ -9,6 +9,7 @@
 *.sqlite-shm
 .env
 .env.*
+*.env
 !.env.example
 console-data
 backups

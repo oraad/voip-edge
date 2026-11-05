@@ -11,7 +11,7 @@
 1. One-time voip-edge restart to load `jsonrpcs` is approved (WITH_CONSOLE ifdef).
 2. Exposure: Pangolin resource with SSO in front; console in the same compose stack; `network_mode: host`, binds `100.64.0.9:8080`. Console token ON as a second factor regardless.
 3. Wire-IP remains a manual wizard step with inline guidance.
-4. Online DB backups (SQLite backup API, WAL-safe) before every destructive lifecycle op, rotate keep-5 (global across all backups, regardless of purpose tag).
+4. Online DB backups (SQLite backup API, WAL-safe) before every edge-mutating lifecycle op (park, restore, active destroy), rotate keep-5 (global across all backups, regardless of purpose tag). Parked destroy only removes the sidecar snapshot.
 
 ## 1. Goal & non-goals
 
@@ -113,7 +113,7 @@ Global: packed free-text fields reject `,`/`+`/whitespace-pads; keys are **creat
 
 ### 5.3 Tenant lifecycle (park/restore/destroy)
 
-**Park sequence (order reviewed & corrected):** intent STARTED → BACKED_UP → SNAPSHOTTED (JSON into `console_parked`, same console.sqlite txn as intent row) → ROWS_DELETED → **RELOADED (batch: tenantdom + landline + dispatcher + trusted — mtree tree-args single-form)** → PURGED (dump regcache → `htable.delete` every key ending `@<domain>` → dump-verify zero, bounded retry) → DONE. (Reload **before** purge: new registrations of the domain must be rejected at the mtree level before the purge runs — closes the re-register race. A REGISTER in flight during the mtree reload is the only residue; the sweeper's next purge+verify pass catches it.) Sidecar unreadable ⇒ refuse before touching edge.sqlite. Crash ⇒ sweeper (startup + every 30 s) resumes oldest non-DONE intent through the same orchestrator; failed step = persistent banner + Retry.
+**Park sequence (order reviewed & corrected):** intent STARTED → BACKED_UP → SNAPSHOTTED (JSON into `console_parked`, same console.sqlite txn as intent row) → ROWS_DELETED → **RELOADED (batch: tenantdom + landline + dispatcher + trusted — mtree tree-args single-form)** → PURGED (dump regcache → `htable.delete` every key ending `@<domain>` → dump-verify zero, bounded retry) → DONE. (Reload **before** purge: new registrations of the domain must be rejected at the mtree level before the purge runs — closes the re-register race. A REGISTER in flight during the mtree reload is the only residue; it ages out at its autoexpire TTL, with no delayed re-sweep.) Sidecar unreadable ⇒ refuse before touching edge.sqlite. Crash ⇒ sweeper (startup + every 30 s) resumes oldest non-DONE intent through the same orchestrator; a failed step records `last_error` and the sweeper retries (Audit shows it; no Retry button).
 
 **Restore:** BACKED_UP → COLLISION_CHECKED (domain / tenantid / landline digits / set ids / src_ip — each collision class blocks, naming the colliding row) → ROWS_INSERTED (guarded INSERT, never OR REPLACE) → RELOADED → coherence green → DONE.
 

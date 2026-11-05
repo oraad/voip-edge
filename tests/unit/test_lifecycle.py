@@ -934,3 +934,102 @@ def test_restore_collision_creates_no_blocking_intent(env):
         row for row in env.sidecar.audit_rows(domain=DOMAIN_A)
     ]
     assert all(row["op"] != "restore" for row in intents)
+
+
+def test_resume_park_after_edge_delete_commit_lost_its_transition(env, monkeypatch):
+    original = env.sidecar.record_transition
+
+    def lose_rows_deleted(intent_id, state, **kwargs):
+        if state == "ROWS_DELETED":
+            raise InjectedCrash("lost transition after edge commit")
+        return original(intent_id, state, **kwargs)
+
+    monkeypatch.setattr(env.sidecar, "record_transition", lose_rows_deleted)
+    with pytest.raises(InjectedCrash):
+        park(env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups)
+
+    assert env.sidecar.latest_intent("park", DOMAIN_A)["state"] == "SNAPSHOTTED"
+    assert (
+        count(
+            env.edge,
+            "SELECT count(*) FROM tenant_registry WHERE tprefix = ?",
+            (DOMAIN_A,),
+        )
+        == 0
+    )
+
+    monkeypatch.setattr(env.sidecar, "record_transition", original)
+    summary = resume_pending(
+        env.sidecar, env.edge, env.worker, backup_dir=env.backups
+    )
+    assert summary["completed"] == 1
+    assert env.sidecar.latest_intent("park", DOMAIN_A)["state"] == "DONE"
+
+
+def test_park_resume_refuses_an_identity_change_after_snapshot(env):
+    with pytest.raises(InjectedCrash):
+        park(
+            env.sidecar,
+            env.edge,
+            env.worker,
+            DOMAIN_A,
+            backup_dir=env.backups,
+            fail_after="SNAPSHOTTED",
+        )
+
+    # Point A at B's dispatcher sets: re-collecting would delete B's rows.
+    with sqlite3.connect(env.edge) as conn:
+        conn.execute(
+            "UPDATE tenant_registry SET tvalue = ? WHERE tprefix = ?",
+            ("T9,11,31,09999999,A,10,1+1", DOMAIN_A),
+        )
+        conn.commit()
+
+    summary = resume_pending(
+        env.sidecar, env.edge, env.worker, backup_dir=env.backups
+    )
+    assert summary["failed"] == 1
+    assert env.sidecar.latest_intent("park", DOMAIN_A)["state"] == "SNAPSHOTTED"
+    assert (
+        count(
+            env.edge,
+            "SELECT count(*) FROM dispatcher WHERE setid IN (11, 31)",
+        )
+        == 2
+    )
+    assert (
+        count(
+            env.edge,
+            "SELECT count(*) FROM tenant_registry WHERE tprefix = ?",
+            (DOMAIN_A,),
+        )
+        == 1
+    )
+
+
+def test_capability_gate_requires_both_dump_and_delete(env, monkeypatch):
+    from dataclasses import replace
+
+    from console import capabilities
+    from console import settings as settings_module
+    from console.errors import KamailioUnavailable
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, enforce_capabilities=True),
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "probe",
+        lambda rpc, **kwargs: {
+            "reachable": True,
+            "unknown": False,
+            "htable.dump": False,
+            "htable.delete": True,
+        },
+    )
+    before = edge_signature(env.edge)
+    with pytest.raises(KamailioUnavailable):
+        park(env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups)
+    assert edge_signature(env.edge) == before

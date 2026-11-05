@@ -51,3 +51,18 @@ def test_staged_plain_file_passes(tmp_path):
         ["sh", "tools/check-privacy.sh"], cwd=repo, capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_named_env_file_in_a_subdirectory_is_refused(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "deploy").mkdir()
+    (repo / "deploy" / "acme.env").write_text("Technitium_Token=secret\n")
+    subprocess.run(
+        ["git", "add", "-f", "deploy/acme.env"], cwd=repo, check=True
+    )
+
+    result = subprocess.run(
+        ["sh", "tools/check-privacy.sh"], cwd=repo, capture_output=True, text=True
+    )
+    assert result.returncode != 0
+    assert "refusing env file" in result.stderr

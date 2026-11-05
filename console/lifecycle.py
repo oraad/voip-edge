@@ -792,20 +792,52 @@ class _Run:
         # console write lock so an edit made after the crash is preserved in a
         # refreshed snapshot (restore must not silently lose it).
         with db_module.write_lock:
-            current = _collect_snapshot(self.edge, self.domain, self.tableset)
-            if current != snapshot:
-                with self.sidecar.transaction() as conn:
-                    self.sidecar.save_snapshot(
-                        self.domain,
-                        current,
-                        tenantid=str(current.get("tenantid") or ""),
-                        intent_id=self.intent_id,
-                        conn=conn,
+            if _tenant_row(self.edge, self.domain) is None:
+                # A prior attempt committed the edge delete but lost the
+                # sidecar transition.  Do not re-derive a scope from a
+                # registry row that a new home may already have reused.
+                counts = {
+                    "tenant_registry": 0,
+                    "tenant_landline": 0,
+                    "dispatcher": 0,
+                    "trusted": 0,
+                }
+            else:
+                current = _collect_snapshot(self.edge, self.domain, self.tableset)
+                # Identity changes would widen the destructive scope (a new
+                # tenantid/set id can point at another home's rows).  Refuse;
+                # benign edits (label/target/new landline) refresh instead.
+                old_landlines = {
+                    str(row.get("tprefix"))
+                    for row in snapshot.get("tenant_landline") or []
+                }
+                current_landlines = {
+                    str(row.get("tprefix"))
+                    for row in current.get("tenant_landline") or []
+                }
+                if (
+                    current.get("tenantid") != snapshot.get("tenantid")
+                    or current.get("ds_setids") != snapshot.get("ds_setids")
+                    or not old_landlines <= current_landlines
+                ):
+                    raise LifecycleError(
+                        "home identity (tenantid, dispatcher set ids or "
+                        "landline keys) changed after the snapshot; refusing "
+                        "to widen the park/destroy scope"
                     )
-                snapshot = current
-                self.snapshot = current
-            with _edge_transaction(self.edge) as conn:
-                counts = _delete_edge_rows(conn, snapshot)
+                if current != snapshot:
+                    with self.sidecar.transaction() as conn:
+                        self.sidecar.save_snapshot(
+                            self.domain,
+                            current,
+                            tenantid=str(current.get("tenantid") or ""),
+                            intent_id=self.intent_id,
+                            conn=conn,
+                        )
+                    snapshot = current
+                    self.snapshot = current
+                with _edge_transaction(self.edge) as conn:
+                    counts = _delete_edge_rows(conn, snapshot)
         self._transition(
             "ROWS_DELETED",
             "deleted: "
@@ -955,8 +987,10 @@ def _require_purge_capability(worker: Any) -> None:
         raise KamailioUnavailable(
             f"cannot prove htable.delete (probe failed: {exc}) — park/destroy refused"
         ) from exc
-    # Raises when the capability is False, unknown, unreachable or absent.
-    capabilities.require_capability("htable.delete", caps)
+    # The purge is dump -> delete -> dump-verify; both primitives must be
+    # proven.  Raises when either is False, unknown, unreachable or absent.
+    for capability in ("htable.dump", "htable.delete"):
+        capabilities.require_capability(capability, caps)
 
 
 def _sequence_for(op: str, mode: str) -> tuple[str, ...]:

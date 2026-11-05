@@ -56,7 +56,8 @@ a file copy of a running database. Each backup is `edge-<UTC>-<tag>.sqlite`
 with a sibling `.console.sqlite.bak` (WAL-safe sidecar copy, including parked
 snapshots) and a readable `.parked.json` dump. Rotation keeps the newest **5
 globally** and removes all three companions together. A backup is taken before
-every destructive lifecycle operation and before wizard apply.
+every edge-mutating lifecycle operation (park, restore, active destroy) and
+before wizard apply; parked destroy only removes the sidecar snapshot.
 
 Backups live in the configured backup directory (the deployment convention is
 `${CONSOLE_SIDECAR_DIR}/backups`). The `.parked.json` file is disaster-recovery
@@ -92,7 +93,8 @@ proceed without a backup.
 All lifecycle work is durable and resumable. Each operation writes an intent
 row in `console.sqlite`; the process sweeper resumes the oldest unfinished
 intent at startup and every 30 s. A failed step keeps its last committed state
-and shows a persistent banner with Retry.
+and records `last_error`; the sweeper retries it and the Audit page shows the
+error. There is no separate Retry button.
 
 ### Park (active home)
 
@@ -102,7 +104,8 @@ Sequence: backup → snapshot into `console_parked` → delete that home's regis
 landline, dispatcher and trusted rows → reload all four tables → purge every
 regcache key ending `@<domain>` → dump-verify zero → done. Reload runs **before**
 purge so new registrations are rejected at the mtree level before cleanup. A
-residual in-flight REGISTER is accepted; the next park/reload or an explicit purge catches it (no delayed re-sweep is scheduled).
+residual in-flight REGISTER is accepted; it ages out at its autoexpire TTL and
+no delayed re-sweep is scheduled.
 
 Operator expectation, verified manually in the lab: calls already in progress
 finish; new requests receive 403/404. Do not promise this from console tests.
