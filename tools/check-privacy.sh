@@ -36,19 +36,19 @@ trap 'rm -f "$TMPLIST"' EXIT
 printf '%s\n' "$FILES" > "$TMPLIST"
 while IFS= read -r f; do
     case "$f" in
-        *.sqlite|*.sqlite-wal|*.sqlite-shm|*.sqlite-journal|*.sqlite-mj*|*.sqlite3*|*.db|*.db-wal|*.db-shm|*.db-journal|*.db3*)
-            echo "privacy: refusing database file: $f" >&2; fail=1 ;;
         *.console.sqlite.bak|*.parked.json)
             echo "privacy: refusing backup/snapshot companion: $f" >&2; fail=1 ;;
         *.sqlite.tmp|*.console.sqlite.bak.tmp|*.parked.json.tmp)
             echo "privacy: refusing partial backup: $f" >&2; fail=1 ;;
-        *.key|*.pem|*.crt|*.cer|*privkey*|*fullchain*)
+        *.sqlite*|*.db*)
+            echo "privacy: refusing database file: $f" >&2; fail=1 ;;
+        *.key|*.pem|*.crt|*.cer|*.p12|*.pfx|*.jks|*.keystore|*privkey*|*fullchain*)
             echo "privacy: refusing key/cert material: $f" >&2; fail=1 ;;
         *tsig*|*TSIG*|*/tls/*|tls/*|acme/*|*/acme/data/*|*/certs/*|certs/*|*console-data/*|*/backups/*|backups/*)
             echo "privacy: refusing secret/state path: $f" >&2; fail=1 ;;
         .env.example|*/.env.example)
             : ;;  # committed template: reviewed by the content gate below
-        .env|.env.*|*.env|*/.env|*/.env.*)
+        .env|.env.*|*.env|*/.env|*/.env.*|.envrc|*/.envrc)
             echo "privacy: refusing env file: $f" >&2; fail=1 ;;
     esac
 done < "$TMPLIST"

@@ -274,7 +274,14 @@ def test_edit_post_cannot_rename_a_packed_key(seeded_db, auth_client, app):
     app.state.worker = worker
     domain = "sip.alpha.home.example.net"
     payload = dict(
-        VALID_TENANT, tprefix="sip.renamed.home.example.net", force="1"
+        VALID_TENANT,
+        tprefix="sip.renamed.home.example.net",
+        tenantid="T1",
+        ds_onnet="11",
+        ds_pstn="31",
+        cli="01111111",
+        label="alpha",
+        force="1",
     )
 
     response = auth_client.post(
@@ -325,3 +332,22 @@ def test_forms_router_contains_no_table_specific_code():
     source = Path(forms_ui.__file__).read_text(encoding="utf-8")
     for table in seeddb.TABLE_NAMES:
         assert table not in source, table
+
+
+def test_edit_rejects_tenantid_or_ds_onnet_changes(seeded_db, auth_client):
+    domain = "sip.alpha.home.example.net"
+    payload = dict(
+        VALID_TENANT,
+        tprefix=domain,
+        tenantid="T9",
+        ds_onnet="11",
+        ds_pstn="31",
+        cli="01111111",
+        label="alpha",
+        force="1",
+    )
+    response = auth_client.post(
+        f"/tables/tenant_registry/{domain}/edit", data=payload
+    )
+    assert response.status_code == 422
+    assert "create-only" in response.text

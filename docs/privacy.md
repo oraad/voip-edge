@@ -22,7 +22,10 @@ tenant data. The rules below keep the two separate.
    - greps staged files for literals from `tools/private-deny.txt`,
    - refuses private-key blocks; DNS-01 credential *values* are caught only by
      the local deny-list.
-3. Before publishing a clone, run `tools/check-privacy.sh --all` and also:
+3. Before publishing a clone, run `tools/check-privacy.sh --all` and also
+   manually inspect ignored artifacts (`git status --ignored`, `.env`, keys,
+   database copies): `--all` deliberately scans only tracked + untracked
+   non-ignored files.
    ```sh
    git log -p --all | grep -iE '<your tenant domain>|<your landline>|BEGIN .*PRIVATE KEY'
    ```

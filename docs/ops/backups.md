@@ -110,10 +110,15 @@ Never overwrite the current file without a copy aside. Move the whole SQLite
 set to a quarantine directory (same filesystem, so `mv` is atomic):
 
 ```bash
+set -e
 cd "${EDGE_HOME}/kamailio/db"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "quarantine-${STAMP}"
-mv edge.sqlite edge.sqlite-wal edge.sqlite-shm "quarantine-${STAMP}/" 2>/dev/null || true
+mv edge.sqlite "quarantine-${STAMP}/"
+for extra in edge.sqlite-wal edge.sqlite-shm edge.sqlite-journal \
+             edge.sqlite-mj*; do
+  [ -e "$extra" ] && mv "$extra" "quarantine-${STAMP}/"
+done
 ```
 
 The old `-wal` and `-shm` files belong to the old database and must **not** be
@@ -145,9 +150,13 @@ docker start voip-edge-console
 ```
 
 Starting Kamailio first ensures the DB is opened and cached by the edge before
-the console begins serving. The console's startup sweeper then re-issues any
-pending reload whose intent survived in `console.sqlite` (unless read-only or a
-schema mismatch keeps the sweeper paused).
+the console begins serving. Start the console with `CONSOLE_READONLY=1` and
+`CONSOLE_SWEEPER_INTERVAL=0` first: the restored sidecar may still contain a
+non-DONE lifecycle intent from the failed operation that produced the backup.
+Inspect `/system/audit` and `console_intent`; either resume it intentionally or
+mark/clear it after verifying the recovered rows. Only then enable writes and
+the normal sweeper. Pending reloads are re-issued by the sweeper on its next
+pass once writes are enabled.
 
 ### 6. Verify
 
@@ -174,9 +183,14 @@ If `console.sqlite` is corrupt or missing:
    backup. The sidecar runs in WAL mode, so quarantine **all three** files
    together — never pair a restored `console.sqlite` with the old `-wal`/`-shm`:
    ```bash
+   set -e
    cd "${EDGE_HOME}/console"
    mkdir -p console.sqlite.broken
-   mv console.sqlite console.sqlite-wal console.sqlite-shm console.sqlite.broken/ 2>/dev/null || true
+   mv console.sqlite console.sqlite.broken/
+   for extra in console.sqlite-wal console.sqlite-shm console.sqlite-journal \
+                console.sqlite-mj*; do
+     [ -e "$extra" ] && mv "$extra" console.sqlite.broken/
+   done
    cp "backups/edge-<UTC>-<tag>.sqlite.console.sqlite.bak" console.sqlite
    ```
    The console applies forward migrations on startup. It **refuses** a sidecar

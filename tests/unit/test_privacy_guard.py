@@ -141,3 +141,17 @@ def test_database_journals_and_alternate_suffixes_are_refused(tmp_path):
         )
         assert result.returncode != 0, name
         assert "refusing database file" in result.stderr
+
+
+def test_database_copies_and_key_containers_are_refused(tmp_path):
+    repo = _repo(tmp_path)
+    for name in ("edge.sqlite.bak", "edge.sqlite.old", "server.p12", "prod.env.bak", ".envrc"):
+        (repo / name).write_bytes(b"secret tenant data")
+        subprocess.run(["git", "add", "-f", name], cwd=repo, check=True)
+        result = subprocess.run(
+            ["sh", "tools/check-privacy.sh"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0, name

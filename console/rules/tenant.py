@@ -499,3 +499,32 @@ def check_lifecycle_conflict(
 
 
 FORM_CHECKS = (check_lifecycle_conflict,)
+
+
+def check_identity_immutable(
+    descriptor: Any,
+    values: Mapping[str, Any],
+    *,
+    conn: sqlite3.Connection | None,
+    mode: str,
+    existing: Mapping[str, Any],
+    key: Any,
+) -> dict[str, Any] | None:
+    """``tenantid``/``ds_onnet`` are create-only: landlines pack them.
+
+    Editing either in place would desynchronise ``tenant_landline`` rows and
+    can make a later park snapshot/delete another home's landline.
+    """
+    if getattr(descriptor, "table", "") != "tenant_registry" or mode != "edit":
+        return None
+    errors: dict[str, list[str]] = {}
+    for field in ("tenantid", "ds_onnet"):
+        if str(values.get(field, "")) != str(existing.get(field, "")):
+            errors[field] = [
+                f"{field} is create-only (landline rows depend on it); "
+                "create a new home instead."
+            ]
+    return {"errors": errors} if errors else None
+
+
+FORM_CHECKS = (check_lifecycle_conflict, check_identity_immutable)
