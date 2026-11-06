@@ -61,7 +61,7 @@ Arcane stack (host networking):
       │ reads+reloads edge.sqlite (WAL)
  voip-edge-console ── sqlite3 rw on edge.sqlite · rw on run dir (datagram client)
       FastAPI/uvicorn (workers=1), Jinja2, htmx, PicoCSS
-      bind 100.64.0.9:8080 · Pangolin SSO in front · token second factor
+      bind 100.64.0.9:8080 · Pangolin SSO in front · token break-glass (second factor without console OIDC)
 ```
 
 Modules (`webui/console/`):
@@ -105,7 +105,7 @@ Global: packed free-text fields reject `,`/`+`/whitespace-pads; keys are **creat
 
 - **tenant_registry** — tprefix: domain chars (letters/digits/dot/dash — must also be within mtree char_list), allowed suffix list, unique; tenantid `[A-Z0-9]+` unique; ds_onnet must exist in dispatcher (**error**) — convention-nudge 10+N as warn; ds_pstn exists or 0 (**error**); cli digits, exact-collision with another tenant's landline (**error**), prefix-overlap (**warn**); label no `,`/`+`; dpid must exist in dialplan (**error**); flags `ih_on+pstn_on` ∈{0,1} (+ block_dpid int that exists in dialplan — **error**; absent allowed). Delete action hidden — lifecycle only (§5.5).
 - **tenant_landline** — digits ≥3; longest-prefix conflict: cross-tenant shadowing (**error**, interruption page naming both rows), same-tenant shadowing allowed with explicit checkbox; tenantid must exist (**error**); ds_onnet **derived** read-only from tenant; target identifier chars; ih_on enum01.
-- **dispatcher** — destination sip_uri: **literal IPv4 host required** (FQDN rejected with hint "use the voip-stack host's LAN IP"), port int, `transport=` mandatory ∈ tcp/udp (default tcp); **warn if udp**: text must say *"OPTIONS pings stay green while INVITEs fragment and die in the tunnel"*; never infer REGISTER behavior from this param (relay forces UDP anyway); setid referenced by tenant ⇒ info badge; delete of referenced set ⇒ **error** naming tenants.
+- **dispatcher** — destination sip_uri: **literal IPv4 host required** (FQDN rejected with hint "use the voip-stack host's LAN IP"), port int, `transport=` optional ∈ tcp/udp (omitted means TCP with a warning); **warn if udp**: text must say *"OPTIONS pings stay green while INVITEs fragment and die in the tunnel"*; never infer REGISTER behavior from this param (relay forces UDP anyway); setid referenced by tenant ⇒ info badge; delete of referenced set ⇒ **error** naming tenants.
 - **dialplan** — match_exp compiles in Python re (**error**); PCRE-only constructs ⇒ **warn** "approximate check"; match_op locked 1; subst/repl locked identity (display: "match-only by design"); post-reload behavioral proof: optional sample → `dialplan.translate` result in toast. Presets: "country profile" and "block partition" (operator-chosen partition ids; no patterns are seeded).
 - **trusted** — src_ip ipv4; non-CGNAT/private ⇒ **error with explicit override** (documented generic non-tunnel path must stay possible); utility-alias-shaped (100.96.128.0/24 heuristic) ⇒ **warn** "use the wire-observed native IP"; proto locked `any`; tag = select from existing tenant domains (**options_query**); duplicate src_ip across tags ⇒ **error**.
 

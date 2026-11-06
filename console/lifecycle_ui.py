@@ -143,10 +143,9 @@ def destroy_confirm(request: Request, domain: str):
     if not active:
         try:
             sc = Sidecar(sidecar_path)
-            parked = sc.load_snapshot(domain) is not None and (
-                lifecycle._snapshot_is_parked(sc, domain)
-                if not Path(edge_path).is_file()
-                else True
+            parked = (
+                sc.load_snapshot(domain) is not None
+                and lifecycle._snapshot_is_parked(sc, domain)
             )
         except Exception:
             parked = False

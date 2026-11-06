@@ -103,3 +103,20 @@ def test_partial_backup_tmps_are_refused(tmp_path):
         )
         assert result.returncode != 0, name
         assert "partial backup" in result.stderr
+
+
+def test_top_level_secret_paths_are_refused(tmp_path):
+    repo = _repo(tmp_path)
+    for name in ("tls/notes.txt", "tsig-key.conf", "acme/account.json"):
+        target = repo / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("secret material")
+        subprocess.run(["git", "add", "-f", name], cwd=repo, check=True)
+        result = subprocess.run(
+            ["sh", "tools/check-privacy.sh"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0, name
+        assert "secret/state path" in result.stderr

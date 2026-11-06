@@ -404,3 +404,10 @@ def test_startup_db_lock_is_deferred_not_a_schema_mismatch(seeded_db, monkeypatc
     with TestClient(app):
         assert app.state.descriptor_problems == []
         assert app.state.schema_check_deferred is True
+
+
+def test_failed_token_login_still_renders_the_token_form(client):
+    response = client.post("/login", data={"token": "wrong"})
+    assert response.status_code == 401
+    assert 'action="/login"' in response.text
+    assert "Console token" in response.text

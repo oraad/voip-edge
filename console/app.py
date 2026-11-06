@@ -441,10 +441,21 @@ def create_app() -> FastAPI:
             observability.log_auth_failure(
                 reason="invalid_token", client=client_ip, path="/login"
             )
+            from . import oidc
+
             return templates.TemplateResponse(
                 request,
                 "login.html",
-                {"show_chrome": False, "error": "Invalid token — try again."},
+                {
+                    "show_chrome": False,
+                    "error": "Invalid token — try again.",
+                    "oidc_enabled": oidc.oidc_enabled(),
+                    "token_enabled": oidc.token_enabled(),
+                    "provider_name": settings_module.settings.oidc_provider_name,
+                    "next_path": oidc.safe_return_to(
+                        request.query_params.get("next")
+                    ),
+                },
                 status_code=401,
                 headers=NO_STORE,
             )

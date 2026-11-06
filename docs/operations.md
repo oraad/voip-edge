@@ -19,7 +19,7 @@ from plan §2.
 
 | Variable | Default | Purpose / production note |
 |---|---|---|
-| `CONSOLE_TOKEN` | random per process | Shared login token. **Set a strong value in production.** If unset/blank a random token is generated, so no one can sign in. The token is a second factor in front of Pangolin SSO, not a replacement for it. |
+| `CONSOLE_TOKEN` | random per process | Shared login token. **Set a strong value in production.** If unset/blank a random token is generated, so no one can sign in. The token is a second factor in front of Pangolin SSO only when console OIDC is not enabled; with OIDC on it is the break-glass alternative (and only in `both` mode). |
 | `CONSOLE_SECRET` | random per process | Session/flow cookie signing secret. **Set an explicit random value.** It is never derived from the token; a generated secret invalidates sessions on restart. |
 | `CONSOLE_BIND` | `127.0.0.1` | Production: `100.64.0.9` (host-networked container, reachable only through Pangolin). |
 | `CONSOLE_PORT` | `8080` | Pangolin resource target port. |

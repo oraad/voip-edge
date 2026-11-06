@@ -197,7 +197,7 @@ def test_wizard_happy_path_writes_five_rows_backs_up_and_reloads(
     assert verify.status_code == 200
     assert _full_page(verify.text)
     green = html.unescape(verify.text)
-    assert "all four coherence checks are green" in green
+    assert "all coherence checks are green" in green
     assert "Home registered in the routing table" in green
     assert "Route sets present in the dispatcher" in green
     assert "Trusted source mapped to this home" in green
@@ -262,7 +262,7 @@ def test_wizard_no_trunk_writes_four_rows_and_skips_pstn_set(
     _assert_four_reloads(worker)
 
     verify = auth_client.get(f"/wizard/verify/{IDENTITY['domain']}")
-    assert "all four coherence checks are green" in html.unescape(verify.text)
+    assert "all coherence checks are green" in html.unescape(verify.text)
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +443,7 @@ def test_wizard_every_step_is_a_fragment_for_htmx(
     )
     assert applied.status_code == 200
     assert _fragment_only(applied.text)
-    assert "all four coherence checks are green" in html.unescape(applied.text)
+    assert "all coherence checks are green" in html.unescape(applied.text)
 
 
 # ---------------------------------------------------------------------------

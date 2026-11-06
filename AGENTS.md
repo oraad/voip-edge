@@ -59,7 +59,7 @@ Use the repo virtualenv; there is no network or install step in this workspace.
 .venv/bin/python -m pytest -q
 ```
 
-Current baseline: **770 passed, 1 deselected**. Focused runs are fine while
+Current baseline: **772 passed, 1 deselected**. Focused runs are fine while
 developing:
 
 ```bash
@@ -128,8 +128,9 @@ descriptor/SQLite/reload rules.
   rebuild and a new version tag (`docs/ops/releases.md`), not a restart.
 - **Host networking.** `compose.yml` uses `network_mode: host` and no `ports:`;
   the console binds `${CONSOLE_BIND}:${CONSOLE_PORT}` (`100.64.0.9:8080` in
-  production) and is exposed only through Pangolin SSO. The token stays on as a
-  second factor.
+  production) and is exposed only through Pangolin SSO. The token is a second
+  factor only when console OIDC is not enabled; otherwise it is break-glass
+  (and only in `both` mode).
 - **Mounts.** DB `rw` (in-place SQLite + WAL/SHM), `${EDGE_RUN}` `rw` (unix
   datagram client needs write on the socket path), `${EDGE_HOME}/console` `rw`
   (sidecar + backups). Never point `CONSOLE_DB_PATH` at a copy, and never
@@ -150,7 +151,7 @@ descriptor/SQLite/reload rules.
   `CONSOLE_THROTTLE_TENANTDOM` is reserved but not read yet; throttles come from
   `console/tables.yaml`. Restart after changing env values (read at import).
 - **Testing a packaging change.** Run `.venv/bin/python -m pytest` (baseline
-  **770 passed, 1 deselected**), `.venv/bin/python -m compileall console`
+  **772 passed, 1 deselected**), `.venv/bin/python -m compileall console`
   (offline smoke), and `./tools/check-privacy.sh --all`. Do not put `pytest` or
   test doubles in the image, and do not claim `docker build` succeeded unless
   it actually ran on a network-enabled host.

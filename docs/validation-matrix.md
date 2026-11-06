@@ -66,7 +66,7 @@ How to read this:
 |---|---|---|---|---|---|
 | `V-DISP-DEST-IPV4` | Destination host is a literal IPv4 address; an FQDN is rejected with the "use the voip-stack host's LAN IP" hint | error | TODO | TODO | T4.5 |
 | `V-DISP-DEST-PORT` | Destination port is an integer | error | TODO | TODO | T4.5 |
-| `V-DISP-TRANSPORT` | Destination carries `transport=` in `tcp`/`udp`; omitted means `tcp` | error | TODO | TODO | T4.5 |
+| `V-DISP-TRANSPORT` | Destination carries `transport=` in `tcp`/`udp`; omitted is accepted as TCP with a warning | warn | TODO | TODO | T4.5 |
 | `V-DISP-UDP-WARN` | UDP transport warns with the MTU text: "OPTIONS pings stay green while INVITEs fragment and die in the tunnel" | warn | TODO | TODO | T4.5 |
 | `V-DISP-NO-REGISTER-INFER` | Never infer REGISTER transport from the destination transport; the relay forces UDP anyway | invariant | TODO | TODO | T4.5 |
 | `V-DISP-SETID-IN-USE` | A `setid` referenced by a home shows an info badge | info | TODO | TODO | T4.5 |

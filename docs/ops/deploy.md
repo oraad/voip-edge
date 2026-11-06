@@ -249,8 +249,8 @@ Pangolin UI labels vary by version; this is the same resource pattern used in
    account(s).
 7. Terminate TLS at Pangolin and set `CONSOLE_SECURE_COOKIE=1` in `.env`.
 8. Do **not** create a public TCP port-forward for `8080`, and do not add a
-   bypass rule for the UI. The console token is a second factor, not a reason
-   to skip SSO.
+   bypass rule for the UI. The console token is a second factor when console
+   OIDC is off (break-glass only in `both`), not a reason to skip SSO.
 9. If (and only if) your Pangolin health checking needs it, add a path rule
    that bypasses SSO for exactly `/health`. The Docker healthcheck runs inside
    the container and does not need this.
@@ -259,7 +259,8 @@ Smoke test from outside the tunnel:
 
 - an unauthenticated request must land on the Pangolin/IdP login, not on the
   console login form;
-- after SSO, the console login form appears and `CONSOLE_TOKEN` is required;
+- after SSO, the console is usable without a second token prompt when console
+  OIDC is enabled; token-only (`token`/`both`) deployments show the token form;
 - `/health` reveals only `{"status":"ok"}`.
 
 ### 7.2 Healthcheck semantics

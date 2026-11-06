@@ -568,118 +568,118 @@ def _check_collisions(
     landline_desc = _descriptor(tableset, "tenant_landline")
     collisions: list[str] = []
 
-    with _edge_read(edge) as conn:
-        # 1. domain
-        row = conn.execute(
-            "SELECT tprefix, tvalue FROM tenant_registry WHERE tprefix = ?",
-            (domain,),
-        ).fetchone()
-        if row is not None:
-            collisions.append(
-                f"domain: tenant_registry.tprefix={domain!r} already exists"
-            )
+    # 1. domain
+    row = conn.execute(
+        "SELECT tprefix, tvalue FROM tenant_registry WHERE tprefix = ?",
+        (domain,),
+    ).fetchone()
+    if row is not None:
+        collisions.append(
+            f"domain: tenant_registry.tprefix={domain!r} already exists"
+        )
 
-        # 2. tenantid
+    # 2. tenantid
+    for candidate in conn.execute(
+        "SELECT tprefix, tvalue FROM tenant_registry ORDER BY tprefix"
+    ):
+        row_dict = dict(candidate)
+        try:
+            unpacked = unpack_row(registry_desc, row_dict)
+        except (KeyError, ValueError):
+            continue
+        if str(unpacked.get("tenantid") or "") == tenantid:
+            collisions.append(
+                "tenantid: tenant_registry.tenantid="
+                f"{tenantid!r} already used by tprefix={row_dict.get('tprefix')!r}"
+            )
+            break
+
+    # 3. landline prefix digits
+    if landline_prefixes:
         for candidate in conn.execute(
-            "SELECT tprefix, tvalue FROM tenant_registry ORDER BY tprefix"
+            "SELECT tprefix, tvalue FROM tenant_landline ORDER BY tprefix"
         ):
             row_dict = dict(candidate)
-            try:
-                unpacked = unpack_row(registry_desc, row_dict)
-            except (KeyError, ValueError):
-                continue
-            if str(unpacked.get("tenantid") or "") == tenantid:
+            if str(row_dict.get("tprefix")) in landline_prefixes:
+                try:
+                    owner = unpack_row(landline_desc, row_dict).get("tenantid")
+                except (KeyError, ValueError):
+                    owner = "?"
                 collisions.append(
-                    "tenantid: tenant_registry.tenantid="
-                    f"{tenantid!r} already used by tprefix={row_dict.get('tprefix')!r}"
+                    "landline: tenant_landline.tprefix="
+                    f"{row_dict.get('tprefix')!r} already exists "
+                    f"(tenantid={owner!r})"
                 )
                 break
 
-        # 3. landline prefix digits
-        if landline_prefixes:
-            for candidate in conn.execute(
-                "SELECT tprefix, tvalue FROM tenant_landline ORDER BY tprefix"
+        # Longest-prefix shadowing is a different collision class: an
+        # exact key check is not enough (1001 vs 1001999).
+        for candidate in conn.execute(
+            "SELECT tprefix, tvalue FROM tenant_landline ORDER BY tprefix"
+        ):
+            row_dict = dict(candidate)
+            other = str(row_dict.get("tprefix") or "")
+            if not other or other in landline_prefixes:
+                continue
+            try:
+                owner = str(
+                    unpack_row(landline_desc, row_dict).get("tenantid") or ""
+                )
+            except (KeyError, ValueError):
+                continue
+            if owner == tenantid:
+                continue
+            if any(
+                prefix
+                and (other.startswith(prefix) or prefix.startswith(other))
+                for prefix in landline_prefixes
             ):
-                row_dict = dict(candidate)
-                if str(row_dict.get("tprefix")) in landline_prefixes:
-                    try:
-                        owner = unpack_row(landline_desc, row_dict).get("tenantid")
-                    except (KeyError, ValueError):
-                        owner = "?"
-                    collisions.append(
-                        "landline: tenant_landline.tprefix="
-                        f"{row_dict.get('tprefix')!r} already exists "
-                        f"(tenantid={owner!r})"
-                    )
-                    break
+                collisions.append(
+                    "landline: snapshot prefix(es) "
+                    + ", ".join(sorted(landline_prefixes))
+                    + f" overlap {other!r} owned by {owner!r}"
+                )
+                break
 
-            # Longest-prefix shadowing is a different collision class: an
-            # exact key check is not enough (1001 vs 1001999).
-            for candidate in conn.execute(
-                "SELECT tprefix, tvalue FROM tenant_landline ORDER BY tprefix"
-            ):
-                row_dict = dict(candidate)
-                other = str(row_dict.get("tprefix") or "")
-                if not other or other in landline_prefixes:
-                    continue
-                try:
-                    owner = str(
-                        unpack_row(landline_desc, row_dict).get("tenantid") or ""
-                    )
-                except (KeyError, ValueError):
-                    continue
-                if owner == tenantid:
-                    continue
-                if any(
-                    other.startswith(prefix) or prefix.startswith(other)
-                    for prefix in landline_prefixes
-                ):
-                    collisions.append(
-                        "landline: snapshot prefix(es) "
-                        + ", ".join(sorted(landline_prefixes))
-                        + f" overlap {other!r} owned by {owner!r}"
-                    )
-                    break
-
-        # 4. dispatcher set ids (also refuse sets shared with another home)
-        if setids:
-            shared = _other_home_set_references(
-                conn, domain, setids, tableset
+    # 4. dispatcher set ids (also refuse sets shared with another home)
+    if setids:
+        shared = _other_home_set_references(
+            conn, domain, setids, tableset
+        )
+        if shared:
+            collisions.append(
+                "dispatcher: set(s) "
+                + ", ".join(str(value) for value in setids)
+                + " also used by "
+                + ", ".join(shared)
             )
-            if shared:
-                collisions.append(
-                    "dispatcher: set(s) "
-                    + ", ".join(str(value) for value in setids)
-                    + " also used by "
-                    + ", ".join(shared)
-                )
-            placeholders = ", ".join("?" for _ in setids)
-            candidate = conn.execute(
-                "SELECT id, setid, destination FROM dispatcher "
-                f"WHERE setid IN ({placeholders}) ORDER BY setid, id LIMIT 1",
-                tuple(setids),
-            ).fetchone()
-            if candidate is not None:
-                collisions.append(
-                    "dispatcher: dispatcher row "
-                    f"id={candidate['id']} setid={candidate['setid']} "
-                    f"destination={candidate['destination']!r} already exists"
-                )
+        placeholders = ", ".join("?" for _ in setids)
+        candidate = conn.execute(
+            "SELECT id, setid, destination FROM dispatcher "
+            f"WHERE setid IN ({placeholders}) ORDER BY setid, id LIMIT 1",
+            tuple(setids),
+        ).fetchone()
+        if candidate is not None:
+            collisions.append(
+                "dispatcher: dispatcher row "
+                f"id={candidate['id']} setid={candidate['setid']} "
+                f"destination={candidate['destination']!r} already exists"
+            )
 
-        # 5. trusted src_ip
-        if src_ips:
-            placeholders = ", ".join("?" for _ in src_ips)
-            candidate = conn.execute(
-                "SELECT id, src_ip, tag FROM trusted "
-                f"WHERE src_ip IN ({placeholders}) ORDER BY src_ip, id LIMIT 1",
-                tuple(sorted(src_ips)),
-            ).fetchone()
-            if candidate is not None:
-                collisions.append(
-                    "trusted: trusted row "
-                    f"id={candidate['id']} src_ip={candidate['src_ip']!r} "
-                    f"tag={candidate['tag']!r} already exists"
-                )
+    # 5. trusted src_ip
+    if src_ips:
+        placeholders = ", ".join("?" for _ in src_ips)
+        candidate = conn.execute(
+            "SELECT id, src_ip, tag FROM trusted "
+            f"WHERE src_ip IN ({placeholders}) ORDER BY src_ip, id LIMIT 1",
+            tuple(sorted(src_ips)),
+        ).fetchone()
+        if candidate is not None:
+            collisions.append(
+                "trusted: trusted row "
+                f"id={candidate['id']} src_ip={candidate['src_ip']!r} "
+                f"tag={candidate['tag']!r} already exists"
+            )
 
     if collisions:
         raise CollisionError(collisions)
@@ -1265,14 +1265,13 @@ def _destroy(
         edge_path = _edge_path(edge)
         active = _tenant_row(edge_path, domain) is not None
     parked = sc.get_parked(domain) is not None
-    if not edge_path.is_file():
-        if not parked:
-            raise LifecycleError(f"home {domain!r} has no sidecar snapshot")
-        if not _snapshot_is_parked(sc, domain):
-            raise LifecycleError(
-                "edge database is missing and the newest completed intent "
-                "was not a park; refusing to delete the retained snapshot"
-            )
+    if not active and not parked:
+        raise LifecycleError(f"home {domain!r} has no sidecar snapshot")
+    if not active and parked and not _snapshot_is_parked(sc, domain):
+        raise LifecycleError(
+            "no active registry row and the newest completed intent was not "
+            "a park; refusing to delete the retained snapshot"
+        )
     if not active and not parked:
         raise LifecycleError(f"home {domain!r} is neither active nor parked")
 

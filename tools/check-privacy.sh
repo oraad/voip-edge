@@ -44,7 +44,7 @@ while IFS= read -r f; do
             echo "privacy: refusing partial backup: $f" >&2; fail=1 ;;
         *.key|*.pem|*.crt|*.cer|*privkey*|*fullchain*)
             echo "privacy: refusing key/cert material: $f" >&2; fail=1 ;;
-        *technitium_tsig*|*/tls/*|/acme/*|*/acme/data/*|*console-data/*|*/backups/*)
+        *tsig*|*TSIG*|*/tls/*|tls/*|acme/*|*/acme/data/*|*/certs/*|certs/*|*console-data/*|*/backups/*|backups/*)
             echo "privacy: refusing secret/state path: $f" >&2; fail=1 ;;
         .env.example|*/.env.example)
             : ;;  # committed template: reviewed by the content gate below

@@ -931,6 +931,27 @@ def verify_checklist(
         }
     )
 
+    dpid = _int_or_none(values.get("dpid"))
+    dpid_ok = True
+    dpid_detail = "no emergency dialplan partition"
+    if conn is not None and dpid not in (None, 0):
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM dialplan WHERE dpid = ? LIMIT 1", (dpid,)
+            ).fetchone()
+        except sqlite3.Error:
+            row = None
+        dpid_ok = row is not None
+        dpid_detail = f"dpid {dpid}" + ("" if dpid_ok else " not in dialplan")
+    items.append(
+        {
+            "key": "dpid",
+            "label": "Emergency dialplan partition exists",
+            "ok": dpid_ok,
+            "detail": dpid_detail,
+        }
+    )
+
     return {
         "items": items,
         "all_green": all(item["ok"] for item in items),
@@ -1116,6 +1137,9 @@ def _assert_apply_conflicts(
     and refuse the batch (the transaction rolls back).
     """
     errors, _ = validate_step(1, draft, conn, tableset)
+    network_errors, _ = validate_step(2, draft, conn, tableset)
+    for name, messages in network_errors.items():
+        errors.setdefault(name, []).extend(messages)
     if errors:
         raise ValidationError(
             summary="The home changed while you were reviewing: "
