@@ -70,7 +70,9 @@ fi
 
 # generic high-risk patterns that must never appear in tracked text
 gen=$(printf '%s\n' "$FILES" | while IFS= read -r f; do
-    read_file "$f" 2>/dev/null | grep -qE 'BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY' && echo "$f"
+    # The checker itself contains the literal patterns below; never flag it.
+    case "$f" in tools/check-privacy.sh) continue ;; esac
+    read_file "$f" 2>/dev/null | grep -qE 'BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA |PGP )?PRIVATE KEY|BEGIN PGP PRIVATE KEY BLOCK' && echo "$f"
     # DNS-01 key *values* are caught by the private deny-list; matching the
     # variable names here produced false positives in documentation.
 done | sort -u | tr '\n' ' ')

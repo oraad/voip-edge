@@ -171,3 +171,24 @@ def test_uppercase_db_and_unreviewed_env_template_are_refused(tmp_path):
             text=True,
         )
         assert result.returncode != 0, name
+
+
+def test_dsa_and_pgp_private_key_blocks_are_refused(tmp_path):
+    repo = _repo(tmp_path)
+    start = "-----" + "BEGIN"
+    endings = {
+        "notes.txt": "DSA PRIVATE KEY",
+        "key.asc": "PGP PRIVATE KEY BLOCK",
+    }
+    for name, kind in endings.items():
+        subprocess.run(["git", "reset", "-q"], cwd=repo, check=False)
+        body = f"{start} {kind}-----\nsecret\n-----END {kind}-----\n"
+        (repo / name).write_text(body)
+        subprocess.run(["git", "reset", "-q"], cwd=repo, check=False)
+        (repo / name).write_text(body)
+        subprocess.run(["git", "add", "-f", name], cwd=repo, check=True)
+        result = subprocess.run(
+            ["sh", "tools/check-privacy.sh"], cwd=repo, capture_output=True, text=True
+        )
+        assert result.returncode != 0, name
+        assert "private key" in result.stderr
