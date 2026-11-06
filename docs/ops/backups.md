@@ -144,10 +144,13 @@ re-asserts `journal_mode=WAL` and `busy_timeout` at startup.
 ### 5. Start Kamailio first, then the console
 
 ```bash
-# Arcane: start voip-edge, wait for it to be healthy, then voip-edge-console.
+# Arcane: start voip-edge and wait for it to be healthy.
 docker start voip-edge
-docker start voip-edge-console
+# Set CONSOLE_READONLY=1 and CONSOLE_SWEEPER_INTERVAL=0 in .env, then
+# recreate the console so the new environment is actually loaded.
+docker compose up -d --force-recreate voip-edge-console
 ```
+`docker start` alone does **not** reload `.env`; a recreate is required.
 
 Starting Kamailio first ensures the DB is opened and cached by the edge before
 the console begins serving. Start the console with `CONSOLE_READONLY=1` and

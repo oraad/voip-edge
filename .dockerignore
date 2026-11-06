@@ -13,6 +13,8 @@
 *.parked.json.tmp
 .env
 .env.*
+*.env
+*.env.*
 *tsig*
 *TSIG*
 *.p12
