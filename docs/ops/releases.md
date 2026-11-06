@@ -12,13 +12,14 @@ tag is the unit of release and rollback.
 ```toml
 [project]
 name = "voip-edge"
-version = "0.1.10"
+version = "0.1.11"
 ```
 
 The Python project is `voip-edge`; the image keeps the service name and must
-carry the same version: `voip-edge-console:0.1.10`. Use an immutable version
-tag (optionally pinned by digest in production), never `latest` for a
-deployment that needs rollback.
+carry the same version: `voip-edge-console:0.1.11`. The same version is
+published to GHCR as `ghcr.io/<owner>/voip-edge-console:0.1.11`; see
+[GitHub Packages](packages.md). Use an immutable version tag (optionally pinned
+by digest in production), never `latest` for a deployment that needs rollback.
 
 ## What requires a rebuild
 
@@ -28,7 +29,7 @@ change:
 - `console/*.py`, `console/rules/*` or any other Python module;
 - `console/tables.yaml` (descriptor grammar, validators, reloads, help text);
 - `web/templates/*` or `web/static/*` (including newly vendored htmx/PicoCSS);
-- `pyproject.toml`, the Dockerfile or the pinned dependency versions.
+- `pyproject.toml`, `Dockerfile.console` or the pinned dependency versions.
 
 Not part of the image and safe to change without a rebuild:
 
@@ -59,11 +60,11 @@ refuses all writes (reads remain available) until it is fixed.
    (`tests/live/run-live.sh`).
 4. **Build once** from a clean checkout:
    ```bash
-   docker build \
+   docker build -f Dockerfile.console \
      --build-arg CONSOLE_GID="$(getent group console | cut -d: -f3)" \
      -t voip-edge-console:<version> .
    ```
-   Or use Arcane → Images → Build with the same Dockerfile and tag. Tag
+   Or use Arcane → Images → Build with the same `Dockerfile.console` and tag. Tag
    `voip-edge-console:<version>`; keep the previous tag on the host for
    rollback.
 5. **Update `compose.yml`** `image:` to the new tag (and optionally pin the

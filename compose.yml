@@ -17,10 +17,10 @@
 
 services:
   console:
-    image: voip-edge-console:0.1.10
+    image: ${CONSOLE_IMAGE:-voip-edge-console:0.1.11}
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.console
       args:
         CONSOLE_UID: ${CONSOLE_UID:-10001}
         CONSOLE_GID: ${CONSOLE_GID:-10001}

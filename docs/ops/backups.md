@@ -81,7 +81,7 @@ image already contains Python + sqlite3, so no host tooling is required:
 
 ```bash
 docker run --rm -v "${EDGE_HOME}/console/backups:/b:ro" \
-  --entrypoint python voip-edge-console:0.1.10 -c \
+  --entrypoint python voip-edge-console:0.1.11 -c \
   'import sqlite3,sys; c=sqlite3.connect("file:/b/<file>.sqlite?mode=ro", uri=True); print(c.execute("PRAGMA integrity_check").fetchone()[0])'
 ```
 

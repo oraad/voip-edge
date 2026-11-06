@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# VoIP Edge Console — single-process image.
+# VoIP Edge Console — single-process image (Python 3.15).
 #
 # Runtime contract (plan §4/§10):
 #   * ONE uvicorn worker. Reload serialization, reload/queue state, the
@@ -13,7 +13,7 @@
 #     Kamailio is unreachable (see the HEALTHCHECK below).
 #
 # Build once, then deploy the pinned image tag:
-#   docker build -t voip-edge-console:0.1.10 \
+#   docker build -f Dockerfile.console -t voip-edge-console:0.1.11 \
 #     --build-arg CONSOLE_GID="$(getent group console | cut -d: -f3)" .
 #
 # The image defaults to the non-root "console" user. The stock edge stack runs
@@ -21,10 +21,48 @@
 # deliberately overrides the runtime user to 0:0; see docs/ops/deploy.md for
 # the non-root alternative (matching UID/GID plus ACL/umask work).
 
-FROM python:3.13-slim
+# Python dependencies are built in a disposable stage: PyYAML has no cp315
+# wheel yet, so it needs a compiler; the final image stays slim.
+FROM python:3.15-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get -o Acquire::Retries=10 update \
+ && apt-get -o Acquire::Retries=10 install -y --no-install-recommends \
+      build-essential libyaml-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Pinned to the versions verified in this repo's .venv where a 3.15-compatible
+# wheel exists. PyYAML 6.0.3 has no cp315 wheel, so it is built from source in
+# this stage. httpx/authlib/cryptography are runtime imports of console.oidc
+# (loaded by create_app even when OIDC is disabled).
+RUN pip install --no-cache-dir --retries 10 --timeout 60 \
+      "fastapi==0.162.0" \
+      "uvicorn==0.54.0" \
+      "jinja2==3.1.6" \
+      "MarkupSafe==3.0.4" \
+      "PyYAML==6.0.3" \
+      "httpx==0.28.1" \
+      "authlib==1.6.0" \
+      "cryptography==43.0.0"
+
+
+FROM python:3.15-slim
 
 ARG CONSOLE_UID=10001
 ARG CONSOLE_GID=10001
+ARG OCI_SOURCE=""
+ARG IMAGE_VERSION=""
+
+LABEL org.opencontainers.image.title="voip-edge-console" \
+      org.opencontainers.image.source="${OCI_SOURCE}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.description="VoIP edge operator console"
 
 # Safe standalone defaults; compose/.env supplies the production values.
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -34,26 +72,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CONSOLE_PORT=8080 \
     CONSOLE_DB_PATH=/data/edge.sqlite \
     CONSOLE_SIDECAR_DIR=/var/lib/console \
-    CONSOLE_RPC_SOCK=/run/kamailio/kamailio_rpc.sock
+    CONSOLE_RPC_SOCK=/run/kamailio/kamailio_rpc.sock \
+    PATH="/opt/venv/bin:$PATH"
 
-# curl is only for HEALTHCHECK. No compiler/toolchain is installed.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+# curl is only for HEALTHCHECK. libyaml is needed only if PyYAML linked it.
+RUN apt-get -o Acquire::Retries=10 update \
+ && apt-get -o Acquire::Retries=10 install -y --no-install-recommends \
+      curl libyaml-0-2 \
  && rm -rf /var/lib/apt/lists/*
 
-# Pinned to the versions verified in this repo's .venv. httpx/authlib/
-# cryptography are runtime imports of console.oidc (loaded by create_app even
-# when OIDC is disabled), so they belong in the image.
-# No test dependencies (pytest, selectolax) belong in the image.
-RUN pip install --no-cache-dir \
-      "fastapi==0.162.0" \
-      "uvicorn==0.54.0" \
-      "jinja2==3.1.6" \
-      "MarkupSafe==3.0.4" \
-      "PyYAML==6.0.3" \
-      "httpx==0.28.1" \
-      "authlib==1.6.0" \
-      "cryptography==43.0.0"
+COPY --from=builder /opt/venv /opt/venv
 
 # The group name matters: Kamailio creates the jsonrpcs datagram socket with
 # dgram_group "console" and mode 0660. For the non-root recipe the name must
@@ -67,8 +95,6 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY console ./console
 COPY web ./web
-# The build context is the repo root; drop editor/build noise without needing a
-# separate .dockerignore.
 RUN find /app -type d -name __pycache__ -prune -exec rm -rf {} + \
  && mkdir -p /var/lib/console /data \
  && chown -R "${CONSOLE_UID}:${CONSOLE_GID}" /app /var/lib/console

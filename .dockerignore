@@ -1,5 +1,6 @@
 .venv
 .git
+.github
 .gitignore
 .pytest_cache
 **/__pycache__

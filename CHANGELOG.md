@@ -7,6 +7,18 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While the project is pre-1.0, MINOR bumps carry feature sets and PATCH bumps
 carry fixes.
 
+## [0.1.11] - 2026-11-06
+
+### Changed
+
+- Console image is built from `Dockerfile.console` (renamed from `Dockerfile`)
+  and targets **Python 3.15** (`python:3.15-slim`). Dependencies are built in
+  a disposable stage because PyYAML 6.0.3 has no cp315 wheel yet.
+- Added GHCR publishing workflows for both images: `voip-edge-console` and
+  `voip-edge-rtpengine`. Compose image references are parameterized by
+  `CONSOLE_IMAGE` / `RTPENGINE_IMAGE` so deployments can pull from GitHub
+  Packages instead of building locally.
+
 ## [0.1.10] - 2026-11-05
 
 Third review round: closes the regressions found while verifying 0.1.9 and

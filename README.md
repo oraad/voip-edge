@@ -10,8 +10,8 @@ online backups.
 Implementation tasks T0–T10 are complete and have passed multiple independent
 review rounds. A few explicit documentation/coverage follow-ups remain: the
 validation matrix still has `TODO` rows, the Homes coherence column is a
-placeholder, and the image build has not been executed here. The current
-release is **0.1.10**.
+placeholder. The image has been built and smoke-tested locally. The current
+release is **0.1.11**.
 
 | Task | Scope | State |
 |---|---|---|
@@ -25,15 +25,16 @@ release is **0.1.10**.
 | T7 | Onboarding wizard | done |
 | T8 | Lifecycle park/restore/destroy + backups | done |
 | T9 | Hardening + observability | done |
-| T10 | Packaging + docs | done; image build not executed in this workspace |
+| T10 | Packaging + docs | done; image built and smoke-tested locally |
 
 Test baseline: **786 passed, 1 deselected** with
 `.venv/bin/python -m pytest`. The live Kamailio park/restore gate is
 `tests/live/run-live.sh` and is run separately (it binds SIP port 5060).
 
-The Docker image and compose service are authored and statically verified, but
-`docker build` was **not executed** in this workspace. Verify the image once
-before first deployment; see `docs/ops/deploy.md`.
+The Docker image was built and smoke-tested locally: `Dockerfile.console` on
+`python:3.15-slim` (Python 3.15.2) starts as the non-root `console` user,
+answers `/health` with 200, and reaches Docker health status `healthy`. Rebuild
+and re-verify on the deployment host; see `docs/ops/deploy.md`.
 
 ## Layout
 
@@ -77,7 +78,7 @@ docs/
   ops/releases.md            image versioning, bump and rollback
   wireframe.html             design artifact (do not edit during implementation)
   research-*.md              background research
-Dockerfile           single-process console image (workers=1)
+Dockerfile.console   single-process console image (Python 3.15, workers=1)
 compose.yml          host-networked service for the existing edge stack
 .env.example         plan §10 environment surface with safe defaults
 CHANGELOG.md         Keep a Changelog history
@@ -92,8 +93,9 @@ Pangolin SSO resource and healthcheck semantics, is `docs/ops/deploy.md`.
 ```bash
 # Build once, pinned to the code version (no test deps in the image).
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
-docker build --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.10 .
+docker build -f Dockerfile.console \
+  --build-arg CONSOLE_GID="${CONSOLE_GID}" \
+  -t voip-edge-console:0.1.11 .
 
 cp .env.example .env        # set token, secret, bind, read-only=1 first
 # Deploy compose.yml as its own Arcane stack with the same EDGE_HOME/EDGE_RUN.
@@ -117,6 +119,8 @@ console OIDC is not enabled; with OIDC on it is break-glass only in `both` mode.
   never hot-swap, stopped-stack recovery.
 - [Releases](docs/ops/releases.md) — image pinned to code, baked
   `tables.yaml`, bump and rollback.
+- [GitHub Packages](docs/ops/packages.md) — publishing/consuming the console
+  and rtpengine images on GHCR.
 - [Changelog](CHANGELOG.md) — release history and review-round fixes.
 - [Wireframe](docs/wireframe.html) — visual/IA reference.
 - [AGENTS.md](AGENTS.md) — module map, code conventions, deployment
@@ -125,8 +129,9 @@ console OIDC is not enabled; with OIDC on it is break-glass only in `both` mode.
 
 ## Not yet
 
-- **Image build** — the Dockerfile/compose pair has not been executed here;
-  the first build must happen on a host with pip/apt access.
+- **Image build** — `Dockerfile.console` builds on Python 3.15.2 and the
+  container passes its `/health` healthcheck; the compose pair still needs a
+  first run against a real edge host.
 - **Live/e2e coverage** — `tests/live/` contains the real Kamailio lifecycle
   journey; broader end-to-end browser coverage is still a follow-up.
 

@@ -54,6 +54,6 @@ and never use a `latest` URL.
 
 ## Docker
 
-The Dockerfile copies `web/static` into the image and serves it from
+`Dockerfile.console` copies `web/static` into the image and serves it from
 `/static`. A missing file is a 404, not a build failure; run a page smoke test
 after vendoring to confirm both assets return 200.

@@ -32,8 +32,9 @@ v0.1.10.
 
 ## Follow-ups (non-blocking)
 
-- The image build/compose pair has not been executed in this offline workspace;
-  run the first build from a clean checkout and verify the pinned image.
+- The image now builds and passes a local smoke test (Python 3.15.2, non-root,
+  `/health` 200, healthy); a full compose run against a real edge host is
+  still pending.
 - Browser end-to-end coverage is limited to API tests and the server-rendered
   page assertions; add Playwright coverage for htmx swaps and the readonly UI.
 - Certificate ownership for a non-root Kamailio is supported through
