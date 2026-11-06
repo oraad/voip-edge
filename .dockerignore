@@ -6,6 +6,9 @@
 *.pyc
 *.sqlite*
 *.db*
+*.SQLITE*
+*.DB*
+*.bak
 *.console.sqlite.bak
 *.parked.json
 *.sqlite.tmp

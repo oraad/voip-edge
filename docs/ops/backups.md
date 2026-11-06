@@ -148,7 +148,7 @@ re-asserts `journal_mode=WAL` and `busy_timeout` at startup.
 docker start voip-edge
 # Set CONSOLE_READONLY=1 and CONSOLE_SWEEPER_INTERVAL=0 in .env, then
 # recreate the console so the new environment is actually loaded.
-docker compose up -d --force-recreate voip-edge-console
+docker compose up -d --force-recreate console
 ```
 `docker start` alone does **not** reload `.env`; a recreate is required.
 

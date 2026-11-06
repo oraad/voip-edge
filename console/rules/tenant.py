@@ -527,4 +527,36 @@ def check_identity_immutable(
     return {"errors": errors} if errors else None
 
 
-FORM_CHECKS = (check_lifecycle_conflict, check_identity_immutable)
+def check_ih_on_immutable(
+    descriptor: Any,
+    values: Mapping[str, Any],
+    *,
+    conn: sqlite3.Connection | None,
+    mode: str,
+    existing: Mapping[str, Any],
+    key: Any,
+) -> dict[str, Any] | None:
+    """The inter-home bit is create-only; landline rows mirror it."""
+    if getattr(descriptor, "table", "") != "tenant_registry" or mode != "edit":
+        return None
+    old_ih, _old_pstn, _old_block = parse_flags(
+        str(existing.get("flags") or "")
+    )
+    new_ih, _new_pstn, _new_block = parse_flags(str(values.get("flags") or ""))
+    if old_ih != new_ih:
+        return {
+            "errors": {
+                "flags": [
+                    "Inter-home on/off is create-only (landline rows mirror "
+                    "it); create a new home instead."
+                ]
+            }
+        }
+    return None
+
+
+FORM_CHECKS = (
+    check_lifecycle_conflict,
+    check_identity_immutable,
+    check_ih_on_immutable,
+)

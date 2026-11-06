@@ -46,6 +46,6 @@ def test_indialog_and_phone_media_guards_are_present():
     invite = (ROOT / "kamailio" / "routes" / "invite.cfg").read_text()
     media = (ROOT / "kamailio" / "routes" / "media.cfg").read_text()
     assert "Unknown Dialog Source" in misc
-    assert "s.after,sip:" in misc
+    assert "s.substr,4,0" in misc
     assert "does not match regcache flow" in invite
     assert "direction=public direction=public" in media

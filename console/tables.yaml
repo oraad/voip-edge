@@ -167,7 +167,8 @@ tables:
         type: enum01
         validator: enum01
         severity: error
-        help: 1 = this landline accepts inter-home calls.
+        derived: tenant_ih_on
+        help: Mirrors the owning home's inter-home flag — read-only.
         widget: select
         show_in_list: true
         form_order: 4
