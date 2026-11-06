@@ -22,6 +22,8 @@
 .env
 .env.*
 *tsig*
+*TSIG*
+*.db
 *.env
 !.env.example
 console-data

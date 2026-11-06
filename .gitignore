@@ -34,6 +34,8 @@ backups/
 tools/private-deny.txt
 *technitium_tsig*
 *tsig*
+*TSIG*
+*.db
 .env
 .env.*
 *.env

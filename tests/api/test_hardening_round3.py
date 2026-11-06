@@ -439,3 +439,35 @@ def test_malformed_origin_does_not_500_the_login(client):
         headers={"origin": "http://["},
     )
     assert response.status_code == 401
+
+
+def test_rotating_cross_site_origins_share_one_bucket(client, monkeypatch):
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, login_rate_per_min=5),
+    )
+    for i in range(6):
+        response = client.post(
+            "/login",
+            data={"token": "wrong"},
+            headers={"origin": f"https://evil{i}.example"},
+        )
+        assert response.status_code == (401 if i < 5 else 429)
+    assert client.post("/login", data={"token": "wrong"}).status_code == 401
+
+
+def test_null_origin_is_cross_site(client, monkeypatch):
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, login_rate_per_min=5),
+    )
+    for _ in range(5):
+        assert client.post(
+            "/login", data={"token": "wrong"}, headers={"origin": "null"}
+        ).status_code == 401
+    assert client.post(
+        "/login", data={"token": "wrong"}, headers={"origin": "null"}
+    ).status_code == 429
+    assert client.post("/login", data={"token": "wrong"}).status_code == 401

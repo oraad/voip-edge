@@ -90,10 +90,12 @@ def _failure_key(request: Request, client_ip: str) -> str:
     try:
         host = urlparse(origin).netloc.lower()
     except ValueError:
-        host = "invalid-origin"
-    if host and host != request.url.netloc.lower():
-        return f"{client_ip}|{host}"
-    return client_ip
+        host = ""
+    if host and host == request.url.netloc.lower():
+        return client_ip
+    # One shared bucket for every cross-site/null/malformed origin, so the
+    # caller cannot mint fresh budgets by rotating the header.
+    return f"{client_ip}|cross-site"
 
 
 def _mono(value: object) -> Markup:
