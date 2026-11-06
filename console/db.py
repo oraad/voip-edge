@@ -198,8 +198,8 @@ def write_transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     single console writer in front of Kamailio's sqlite (plan §4).
     """
     with write_lock:
-        conn.execute("BEGIN IMMEDIATE")
         try:
+            conn.execute("BEGIN IMMEDIATE")
             yield conn
             conn.execute("COMMIT")
         except sqlite3.OperationalError as exc:

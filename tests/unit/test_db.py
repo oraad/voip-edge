@@ -7,6 +7,8 @@ import sqlite3
 import pytest
 
 from console import db
+from console.db import write_transaction
+from console.errors import DBBusy
 from tests.fixtures import seeddb
 
 DOMAIN = "sip.alpha.home.example.net"
@@ -118,3 +120,23 @@ def test_write_lock_helper_is_available():
     with db.write_lock:
         assert db.write_lock.locked()
     assert not db.write_lock.locked()
+
+
+def test_begin_lock_is_mapped_to_dbbusy(tmp_path):
+    """A busy/locked BEGIN IMMEDIATE surfaces as DBBusy, not raw sqlite."""
+    import sqlite3
+
+    path = tmp_path / "edge.sqlite"
+    conn1 = sqlite3.connect(str(path), timeout=0.0)
+    conn1.execute("CREATE TABLE t (x)")
+    conn1.commit()
+    conn1.execute("BEGIN IMMEDIATE")
+
+    conn2 = sqlite3.connect(str(path), timeout=0.0)
+    try:
+        with pytest.raises(DBBusy):
+            with write_transaction(conn2):
+                conn2.execute("INSERT INTO t VALUES (1)")
+    finally:
+        conn1.close()
+        conn2.close()
