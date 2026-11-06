@@ -27,7 +27,7 @@ release is **0.1.10**.
 | T9 | Hardening + observability | done |
 | T10 | Packaging + docs | done; image build not executed in this workspace |
 
-Test baseline: **772 passed, 1 deselected** with
+Test baseline: **775 passed, 1 deselected** with
 `.venv/bin/python -m pytest`. The live Kamailio park/restore gate is
 `tests/live/run-live.sh` and is run separately (it binds SIP port 5060).
 
@@ -101,7 +101,7 @@ cp .env.example .env        # set token, secret, bind, read-only=1 first
 
 The console binds `100.64.0.9:8080` on host networking and is exposed only
 through a Pangolin resource with SSO. The token is a second factor only when
-console OIDC is not enabled; with OIDC on it is the break-glass alternative.
+console OIDC is not enabled; with OIDC on it is break-glass only in `both` mode.
 `/health` is console liveness only and stays 200 when Kamailio is down.
 
 ## Docs
@@ -133,7 +133,7 @@ console OIDC is not enabled; with OIDC on it is the break-glass alternative.
 ## Dev
 
 ```bash
-.venv/bin/python -m pytest             # 772 passed, 1 deselected
+.venv/bin/python -m pytest             # 775 passed, 1 deselected
 .venv/bin/python -m compileall console # packaging smoke, no network
 ./tests/live/run-live.sh               # real Kamailio; run alone
 ```

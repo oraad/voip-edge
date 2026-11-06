@@ -97,7 +97,7 @@ descriptor:
   cross_refs: [{ field, ref: table.field, on_missing: error|warn }]
 version: 1
 ```
-Types (closed set): `str, int, enum01, ipv4, sip_uri, regex, digits, domain, label`. Validators: **named Python callables** referenced by string — never inline regex in YAML. Field order = list/form order defaults. At startup: `PRAGMA table_info` each declared table + check the `version` bookkeeping rows (dispatcher=4, dialplan=2, trusted=6) — mismatch ⇒ banner + writes refused for that table.
+Types (closed set): `str, int, enum01, ipv4, sip_uri, regex, digits, domain, label`. Validators: **named Python callables** referenced by string — never inline regex in YAML. Field order = list/form order defaults. At startup: `PRAGMA table_info` each declared table + check the `version` bookkeeping rows (dispatcher=4, dialplan=2, trusted=6) — mismatch ⇒ banner + all writes refused (reads remain available).
 
 ### 5.2 Validation matrix (rule → test traceability via §9 matrix; severities: **error** blocks save, **warn** saves with badge)
 
@@ -133,7 +133,7 @@ Steps: 1 Identity (domain, landline, ring group, label) → 2 Network (voip-stac
 
 ## 6. Feedback vocabulary & status surfaces (design contract)
 
-- Reload outcomes vocabulary: **scheduled / applied / verified / failed** — toasts name what: "Saved beta — reloaded & verified: homes, route sets." No naked "Success".
+- Reload outcomes vocabulary: **scheduled / applied (RPC accepted) / failed** — the form toast says "reload scheduled shortly"; live verification is manual via Live or `/wizard/verify`. No naked "Success".
 - **Global status region** (every page, above content): edge health (core.uptime — "edge reachable · uptime 6 d" vs "edge unreachable"), pending-reload count, read-only mode, sidecar failure, DB-busy retry, capability mismatch. Auto-refreshing fragments preserve scroll/focus; no per-refresh announcements (aria-live only on change).
 - Badge tokens normalized: dispatcher A=green, T/I=amber, D=red; probe suffix "· 38 ms" only when measured; "TX · no answer" is wrong wording → "last probe: no answer". Health shown in the status strip, not as a badge row.
 - Copy: primary noun is **Home** (tenant only in help/audit); dialplan jargon (`dpid`, `1+1+90`) never in primary labels — help text instead. Button labels action-shaped ("Apply and reload routing"), DB mechanics live in the consequence panel.

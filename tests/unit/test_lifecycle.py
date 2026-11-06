@@ -1146,3 +1146,44 @@ def test_parked_destroy_works_when_the_edge_db_is_absent(env):
     assert result.done is True
     assert env.sidecar.load_snapshot(DOMAIN_A) is None
     assert not missing.exists()
+
+
+def test_restore_resume_does_not_resurrect_an_edited_trusted_row(env, monkeypatch):
+    assert park(
+        env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+    ).done is True
+
+    original = env.sidecar.record_transition
+
+    def lose_rows_inserted(intent_id, state, **kwargs):
+        if state == "ROWS_INSERTED":
+            raise InjectedCrash("lost transition after edge commit")
+        return original(intent_id, state, **kwargs)
+
+    monkeypatch.setattr(env.sidecar, "record_transition", lose_rows_inserted)
+    with pytest.raises(InjectedCrash):
+        restore(
+            env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+        )
+
+    with sqlite3.connect(env.edge) as conn:
+        conn.execute(
+            "UPDATE trusted SET src_ip = ? WHERE tag = ?",
+            ("100.96.99.99", DOMAIN_A),
+        )
+        conn.commit()
+
+    monkeypatch.setattr(env.sidecar, "record_transition", original)
+    summary = resume_pending(
+        env.sidecar, env.edge, env.worker, backup_dir=env.backups
+    )
+    assert summary["failed"] == 1
+    with sqlite3.connect(env.edge) as conn:
+        rows = [
+            row[0]
+            for row in conn.execute(
+                "SELECT src_ip FROM trusted WHERE tag = ? ORDER BY src_ip",
+                (DOMAIN_A,),
+            )
+        ]
+    assert rows == ["100.96.99.99"]

@@ -994,7 +994,18 @@ class _Run:
                     _check_collisions(
                         self.edge, snapshot, self.tableset, conn=conn
                     )
-                counts = _insert_edge_rows(conn, snapshot)
+                    counts = _insert_edge_rows(conn, snapshot)
+                else:
+                    # The edge COMMIT already happened but the sidecar
+                    # transition was lost.  Do not re-insert: a row edited
+                    # since then could be resurrected as a duplicate.  Only
+                    # verify what is present.
+                    counts = {
+                        "tenant_registry": 0,
+                        "tenant_landline": 0,
+                        "dispatcher": 0,
+                        "trusted": 0,
+                    }
                 # Verify presence, not "newly inserted": a crash after the
                 # edge COMMIT but before the sidecar ROWS_INSERTED transition
                 # resumes here with every row already present and must succeed.

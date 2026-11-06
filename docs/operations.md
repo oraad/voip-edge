@@ -135,7 +135,8 @@ If the sidecar is unreadable, destructive operations are refused before
 
 ## Reload troubleshooting
 
-Reloads are **scheduled → applied → verified → failed**. A save commits to the
+Reloads are **scheduled → applied (RPC accepted) → failed**; live verification
+is manual via Live or `/wizard/verify/<domain>` (there is no verify RPC). A save commits to the
 database immediately; the reload is enqueued. Per-table windows coalesce saves;
 the window starts at the first save and is not extended by later saves. Exactly
 one RPC is sent per table per window, serialized by `ReloadWorker`.

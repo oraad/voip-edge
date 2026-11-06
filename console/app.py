@@ -11,7 +11,7 @@ import sqlite3
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -76,6 +76,18 @@ async def _read_capped_body(request: Request) -> bytes:
 
 # READONLY exemptions: authentication bootstrap and session teardown only.
 READONLY_EXEMPT_PATHS = frozenset({"/login", "/logout", "/auth/logout"})
+
+
+def _same_origin(request: Request) -> bool:
+    """True for same-origin/no-Origin requests; false for cross-site posts.
+
+    Used only to decide whether a failed attempt may consume the shared
+    per-IP login budget (a cross-site form must not lock the operator out).
+    """
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    if not origin:
+        return True
+    return urlparse(origin).netloc.lower() == request.url.netloc.lower()
 
 
 def _mono(value: object) -> Markup:
@@ -353,7 +365,7 @@ def create_app() -> FastAPI:
             supplied = None
             ctype = request.headers.get("content-type", "")
             if "application/x-www-form-urlencoded" in ctype:
-                from urllib.parse import parse_qs
+                from urllib.parse import parse_qs, urlparse
 
                 supplied = parse_qs(body.decode("utf-8", "replace")).get(
                     "csrf_token", [None]
@@ -437,7 +449,8 @@ def create_app() -> FastAPI:
         if not expected or not hmac.compare_digest(supplied, expected):
             from .security import record_login_failure
 
-            record_login_failure(client_ip)
+            if _same_origin(request):
+                record_login_failure(client_ip)
             observability.log_auth_failure(
                 reason="invalid_token", client=client_ip, path="/login"
             )

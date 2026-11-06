@@ -411,3 +411,15 @@ def test_failed_token_login_still_renders_the_token_form(client):
     assert response.status_code == 401
     assert 'action="/login"' in response.text
     assert "Console token" in response.text
+
+
+def test_cross_site_failed_login_does_not_consume_the_budget(client):
+    for _ in range(10):
+        response = client.post(
+            "/login",
+            data={"token": "wrong"},
+            headers={"origin": "https://evil.example"},
+        )
+        assert response.status_code == 401
+    response = client.post("/login", data={"token": "wrong"})
+    assert response.status_code == 401

@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from pathlib import Path
 from typing import Any, Mapping
 
 from .. import db, descriptors
@@ -443,3 +444,58 @@ RULES = {
 }
 
 PENDING = frozenset(RULES)
+
+
+def check_lifecycle_conflict(
+    descriptor: Any,
+    values: Mapping[str, Any],
+    *,
+    conn: sqlite3.Connection | None,
+    mode: str,
+    existing: Mapping[str, Any],
+    key: Any,
+) -> dict[str, Any] | None:
+    """Refuse a registry write while a lifecycle intent/snapshot is pending.
+
+    A parked snapshot still owns the domain/identity; re-onboarding it would
+    overwrite or later delete that recovery copy.
+    """
+    if getattr(descriptor, "table", "") != "tenant_registry":
+        return None
+    domain = str(values.get("tprefix") or "").strip()
+    if not domain:
+        return None
+    from .. import settings as settings_module
+    from ..sidecar import Sidecar
+
+    path = Path(settings_module.settings.sidecar_dir) / "console.sqlite"
+    if not path.is_file():
+        return None
+    try:
+        sc = Sidecar(path)
+        pending = sc.latest_intent_any(domain, include_done=False)
+        parked = sc.get_parked(domain)
+    except Exception as exc:  # fail closed
+        return {"errors": {"tprefix": [f"Cannot verify lifecycle state: {exc}"]}}
+    if pending is not None:
+        return {
+            "errors": {
+                "tprefix": [
+                    f"{domain} has an unfinished lifecycle operation "
+                    f"({pending['op']} at {pending['state']}); resume it first."
+                ]
+            }
+        }
+    if mode == "create" and parked is not None:
+        return {
+            "errors": {
+                "tprefix": [
+                    f"{domain} already has a parked snapshot; restore or "
+                    "destroy it before onboarding this domain."
+                ]
+            }
+        }
+    return None
+
+
+FORM_CHECKS = (check_lifecycle_conflict,)

@@ -136,3 +136,24 @@ def test_parked_destroy_with_missing_edge_removes_the_snapshot(lifecycle_env):
     assert not edge.exists()
     page = client.get("/homes")
     assert DOMAIN not in page.text
+
+
+def test_registry_create_refuses_a_parked_domain(lifecycle_env):
+    app, client, fake = lifecycle_env
+    assert client.post(f"/homes/{DOMAIN}/park").status_code == 303
+
+    response = client.post(
+        "/tables/tenant_registry/new",
+        data={
+            "tprefix": DOMAIN,
+            "tenantid": "T9",
+            "ds_onnet": "10",
+            "ds_pstn": "30",
+            "cli": "09999999",
+            "label": "Re-onboard",
+            "dpid": "10",
+            "flags": "1+1+90",
+        },
+    )
+    assert response.status_code == 422
+    assert "parked snapshot" in response.text.lower()

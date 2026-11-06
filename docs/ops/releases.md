@@ -39,8 +39,8 @@ Not part of the image and safe to change without a rebuild:
 
 `tables.yaml` is intentionally not a runtime mount: a descriptor edit that
 silently diverges from the code (or from the DB's `version` bookkeeping rows)
-is a deployment fault, not a config tweak. The startup consistency check
-refuses writes for a table whose declared version does not match the DB.
+is a deployment fault, not a config tweak. Any startup consistency mismatch
+refuses all writes (reads remain available) until it is fixed.
 
 ## Bump procedure
 
@@ -54,7 +54,7 @@ refuses writes for a table whose declared version does not match the DB.
    .venv/bin/python -m pytest -q
    .venv/bin/python -m compileall console
    ```
-   The current baseline is **772 passed, 1 deselected**. Run the privacy guard
+   The current baseline is **775 passed, 1 deselected**. Run the privacy guard
    (`tools/check-privacy.sh --all`) and, before a deployment, the live gate
    (`tests/live/run-live.sh`).
 4. **Build once** from a clean checkout:

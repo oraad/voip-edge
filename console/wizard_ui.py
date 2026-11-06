@@ -946,7 +946,11 @@ def verify_checklist(
     items.append(
         {
             "key": "dpid",
-            "label": "Emergency dialplan partition exists",
+            "label": (
+                "Emergency dialplan partition exists"
+                if dpid not in (None, 0)
+                else "Emergency dialplan partition (none configured — optional)"
+            ),
             "ok": dpid_ok,
             "detail": dpid_detail,
         }
@@ -1136,6 +1140,36 @@ def _assert_apply_conflicts(
     otherwise pick the same tenantid/set/landline.  Re-run the DB rules here
     and refuse the batch (the transaction rolls back).
     """
+    # A parked snapshot or unfinished lifecycle intent owns this domain; do
+    # not overwrite it by onboarding a second home with the same name.
+    from pathlib import Path
+
+    from . import settings as settings_module
+    from .sidecar import Sidecar
+
+    sidecar_path = (
+        Path(settings_module.settings.sidecar_dir) / "console.sqlite"
+    )
+    if sidecar_path.is_file():
+        try:
+            sc = Sidecar(sidecar_path)
+            pending = sc.latest_intent_any(draft.domain, include_done=False)
+            parked = sc.get_parked(draft.domain)
+        except Exception as exc:
+            raise ValidationError(
+                summary=f"Cannot verify lifecycle state: {exc}"
+            ) from exc
+        if pending is not None:
+            raise ValidationError(
+                summary=f"{draft.domain} has an unfinished lifecycle operation "
+                f"({pending['op']} at {pending['state']}); resume it first."
+            )
+        if parked is not None:
+            raise ValidationError(
+                summary=f"{draft.domain} already has a parked snapshot; "
+                "restore or destroy it first."
+            )
+
     errors, _ = validate_step(1, draft, conn, tableset)
     network_errors, _ = validate_step(2, draft, conn, tableset)
     for name, messages in network_errors.items():
