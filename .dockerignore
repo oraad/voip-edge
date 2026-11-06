@@ -35,3 +35,10 @@ docs
 deploy
 *.md
 !README.md
+*.pem
+*.key
+*.crt
+*.cer
+tls/
+acme/
+certs/

@@ -83,6 +83,12 @@ finishes the operations/docs alignment.
   an HTML banner instead of JSON.
 - Startup schema validation runs and refuses writes with a banner; transient
   database-lock errors are deferred instead of becoming a permanent mismatch.
+- Kamailio: keepalive pinger is now bound to `rtimer:exec` (the timer's route
+  was silent); in-dialog re-INVITE/UPDATE are re-anchored and their answers
+  armed; a retransmitted request no longer re-runs full routing; cached-flow
+  host/port transforms only run when a flow exists; `DBBusy` is raised for an
+  edge locked at write start; renaming a cross-referenced `setid`/`dpid` is
+  refused (not `force`-able by default); `.dockerignore` now covers keys/certs.
 - `.dockerignore`, pinned dependency list, compose "own stack" guidance,
   environment-variable table, OIDC dependency note, release examples and
   version metadata aligned to 0.1.10.

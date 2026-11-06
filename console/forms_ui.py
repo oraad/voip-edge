@@ -589,6 +589,49 @@ def scan_references(
     references.sort(key=lambda reference: (reference.table, reference.label))
     return references
 
+def _changed_reference_conflicts(
+    conn: sqlite3.Connection | None,
+    descriptor: descriptors.Descriptor,
+    key: Any,
+    existing: Mapping[str, Any],
+    values: Mapping[str, Any],
+) -> dict[str, list[Reference]]:
+    """References whose target fields are being renamed by this edit."""
+    if conn is None:
+        return {}
+    changed: set[str] = set()
+    for field in descriptor.fields:
+        if field.readonly or field.locked or field.derived:
+            continue
+        old = existing.get(field.name)
+        new = values.get(field.name)
+        if ("" if old is None else str(old)) != ("" if new is None else str(new)):
+            changed.add(field.name)
+    if not changed:
+        return {}
+
+    all_refs = scan_references(conn, descriptor, key)
+    out: dict[str, list[Reference]] = {}
+    for source in _tableset().tables.values():
+        for cross_ref in source.cross_refs:
+            try:
+                ref_table, ref_field = cross_ref.ref.split(".", 1)
+            except ValueError:
+                continue
+            if ref_table != descriptor.table:
+                continue
+            target_field = _target_field(descriptor, ref_field)
+            if target_field is None or target_field.name not in changed:
+                continue
+            matches = [
+                reference
+                for reference in all_refs
+                if reference.table == source.table and reference.field == cross_ref.field
+            ]
+            if matches:
+                out.setdefault(target_field.name, []).extend(matches)
+    return out
+
 
 def _object_view(
     descriptor: descriptors.Descriptor,
@@ -1559,6 +1602,20 @@ async def _submit(
         errors.setdefault(name, []).extend(messages)
     for name, messages in check_warnings.items():
         warnings.setdefault(name, []).extend(messages)
+
+    if mode == "edit":
+        # Renaming a value that other rows cross-reference (e.g. setid/dpid)
+        # would silently break routing/number profiles.  Block unless the
+        # operator explicitly forces it.
+        rename_conflicts = _changed_reference_conflicts(
+            conn, descriptor, key, existing, values
+        )
+        if rename_conflicts and not _truthy(_form_scalar(form, "force")):
+            for field_name, found in rename_conflicts.items():
+                labels = ", ".join(r.label for r in found[:3])
+                errors.setdefault(field_name, []).append(
+                    f"This value is used by {len(found)} row(s): {labels}."
+                )
 
     if interruption is not None:
         return _render_interruption(

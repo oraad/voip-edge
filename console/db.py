@@ -201,8 +201,15 @@ def write_transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         conn.execute("BEGIN IMMEDIATE")
         try:
             yield conn
+            conn.execute("COMMIT")
+        except sqlite3.OperationalError as exc:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            if "locked" in str(exc).lower() or "busy" in str(exc).lower():
+                raise DBBusy(f"edge database busy: {exc}") from exc
+            raise
         except BaseException:
             conn.execute("ROLLBACK")
             raise
-        else:
-            conn.execute("COMMIT")
