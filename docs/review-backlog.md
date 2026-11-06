@@ -1,9 +1,10 @@
 # Review notes: accepted risks and follow-ups (v0.1.10)
 
-Four independent review rounds (security, correctness, operations/UI, plus
-a final verification pass) were run against v0.1.8–v0.1.10. Their blockers and
-important findings are fixed; the entries below are **intentional** for this single-operator
-deployment or are non-blocking follow-ups.
+The final independent gates (security, correctness, SIP/config and
+operations/privacy) returned **GO** at 786 tests, with the live
+park/restore journey passing. The entries below are **intentional** for this
+single-operator deployment or are non-blocking follow-ups; nothing here blocks
+v0.1.10.
 
 ## Accepted risks
 
@@ -43,6 +44,3 @@ deployment or are non-blocking follow-ups.
   (`docs/tls.md` §Renewal visibility).
 - Optional OIDC features: back-channel logout, UserInfo enrichment, idle
   timeout (30 min) in addition to the absolute 12 h expiry.
-- `tests/live/run-live.sh` boots the sanitized `kamailio/kamailio.cfg` by
-  default and can target the deployed repo with `VOIP_EDGE_REPO=...`; run it
-  against the deployed repo after applying config changes there.

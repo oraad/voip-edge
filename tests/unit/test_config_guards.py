@@ -29,8 +29,8 @@ def test_tenant_suffix_gate_uses_a_substdef_not_a_define():
 def test_both_call_paths_reference_the_suffix_gate():
     invite = (ROOT / "kamailio" / "routes" / "invite.cfg").read_text()
     register = (ROOT / "kamailio" / "routes" / "register.cfg").read_text()
-    assert '=~ "TENANTSUFFIXRE"' in invite
-    assert '=~ "TENANTSUFFIXRE"' in register
+    assert '=~ "TENANTSUFFIXRE$"' in invite
+    assert '=~ "TENANTSUFFIXRE$"' in register
     # REGISTER must check the To domain before the mtree prefix match.
     assert register.index("TENANTSUFFIXRE") < register.index('mt_match("tenantdom"')
 
