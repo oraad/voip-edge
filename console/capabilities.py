@@ -109,7 +109,7 @@ def _blank_result() -> dict[str, bool]:
     return result
 
 
-def _run_probe(rpc: Any) -> dict[str, bool]:
+def _run_probe(rpc: Any, *, allow_delete: bool = True) -> dict[str, bool]:
     global _last_probe_at_value, _last_uptime_value
 
     checks = _checks()
@@ -125,6 +125,10 @@ def _run_probe(rpc: Any) -> dict[str, bool]:
     from .rpc_lock import RPC_LOCK
 
     for index, (method, params) in enumerate(checks):
+        if method == "htable.delete" and not allow_delete:
+            # Read-only/schema-mismatch modes must not send a write RPC.
+            results[method] = False
+            continue
         try:
             with RPC_LOCK:
                 reply = rpc.call(method, params)
@@ -169,6 +173,7 @@ def probe(
     *,
     ttl: float = DEFAULT_TTL,
     clock: Any = None,
+    allow_delete: bool = True,
 ) -> dict[str, bool]:
     """Return capability flags for *rpc*, reusing a cached result within *ttl*.
 
@@ -189,7 +194,7 @@ def probe(
         ):
             return dict(cached_result)
 
-    result = _run_probe(rpc)
+    result = _run_probe(rpc, allow_delete=allow_delete)
     _cache = (rpc_key, now, dict(result))
     return dict(result)
 

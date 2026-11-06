@@ -351,6 +351,40 @@ def _snapshot_detail(snapshot: dict[str, Any]) -> str:
     )
 
 
+def _other_home_set_references(
+    conn: sqlite3.Connection,
+    domain: str,
+    setids: list[Any],
+    tableset: TableSet,
+) -> list[str]:
+    """Other homes whose on-net/PSTN set intersects *setids*.
+
+    Dispatcher rows are keyed only by setid; deleting a shared set would remove
+    another home's routing.  The form validators allow sharing (with a warning),
+    so lifecycle must refuse the destructive scope explicitly.
+    """
+    wanted = {int(value) for value in setids if value}
+    if not wanted:
+        return []
+    registry = _descriptor(tableset, "tenant_registry")
+    hits: set[str] = set()
+    for row in conn.execute("SELECT tprefix, tvalue FROM tenant_registry"):
+        owner = str(row["tprefix"])
+        if owner == domain:
+            continue
+        try:
+            values = unpack_row(registry, dict(row))
+        except (KeyError, ValueError):
+            continue
+        used = {
+            _int(values.get("ds_onnet")),
+            _int(values.get("ds_pstn")),
+        }
+        if used & wanted:
+            hits.add(owner)
+    return sorted(hits)
+
+
 def _delete_edge_rows(
     conn: sqlite3.Connection, snapshot: dict[str, Any]
 ) -> dict[str, int]:
@@ -548,8 +582,18 @@ def _check_collisions(
                     )
                     break
 
-        # 4. dispatcher set ids
+        # 4. dispatcher set ids (also refuse sets shared with another home)
         if setids:
+            shared = _other_home_set_references(
+                conn, domain, setids, tableset
+            )
+            if shared:
+                collisions.append(
+                    "dispatcher: set(s) "
+                    + ", ".join(str(value) for value in setids)
+                    + " also used by "
+                    + ", ".join(shared)
+                )
             placeholders = ", ".join("?" for _ in setids)
             candidate = conn.execute(
                 "SELECT id, setid, destination FROM dispatcher "
@@ -831,6 +875,18 @@ class _Run:
                     snapshot = current
                     self.snapshot = current
                 with _edge_transaction(self.edge) as conn:
+                    shared = _other_home_set_references(
+                        conn,
+                        self.domain,
+                        snapshot.get("ds_setids") or [],
+                        self.tableset,
+                    )
+                    if shared:
+                        raise LifecycleError(
+                            "dispatcher set(s) also used by "
+                            + ", ".join(shared)
+                            + "; refusing to delete shared routing"
+                        )
                     counts = _delete_edge_rows(conn, snapshot)
         self._transition(
             "ROWS_DELETED",
@@ -1125,11 +1181,14 @@ def _destroy(
 ) -> LifecycleResult:
     """Destroy an active home (typed confirm) or a parked snapshot."""
     sc = open_sidecar(sidecar)
-    edge_path = _edge_path(edge)
+    edge_path = Path(edge)
     tables = tableset or descriptors.load()
 
     _ensure_no_pending(sc, "destroy", domain)
-    active = _tenant_row(edge_path, domain) is not None
+    active = False
+    if edge_path.is_file():
+        edge_path = _edge_path(edge)
+        active = _tenant_row(edge_path, domain) is not None
     parked = sc.get_parked(domain) is not None
     if not active and not parked:
         raise LifecycleError(f"home {domain!r} is neither active nor parked")
@@ -1188,7 +1247,7 @@ def _resume_pending(
     are still attempted.
     """
     sc = open_sidecar(sidecar)
-    edge_path = _edge_path(edge)
+    edge_input = Path(edge)
     tables = tableset or descriptors.load()
 
     intents = sc.list_intents(include_done=False)
@@ -1201,6 +1260,10 @@ def _resume_pending(
         run: _Run | None = None
         try:
             sequence = _sequence_for(op, mode)
+            needs_edge = op in {"park", "restore"} or (
+                op == "destroy" and mode != "parked"
+            )
+            edge_path = _edge_path(edge_input) if needs_edge else edge_input
             run = _Run(
                 sidecar=sc,
                 intent_id=intent_id,

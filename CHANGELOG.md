@@ -74,6 +74,14 @@ finishes the operations/docs alignment.
 
 ### Ops
 
+- Lifecycle safety: the sweeper pauses in read-only/schema-mismatch mode;
+  resumed park/active-destroy enforces the purge capability gate; lifecycle
+  reads use `mode=rw` so a confirmation cannot create an empty DB; park/destroy
+  refuses dispatcher sets shared with another home; reload faults persist their
+  detail in the pending row and structured log; lifecycle POST failures render
+  an HTML banner instead of JSON.
+- Startup schema validation runs and refuses writes with a banner; transient
+  database-lock errors are deferred instead of becoming a permanent mismatch.
 - `.dockerignore`, pinned dependency list, compose "own stack" guidance,
   environment-variable table, OIDC dependency note, release examples and
   version metadata aligned to 0.1.10.

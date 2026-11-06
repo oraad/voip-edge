@@ -146,7 +146,8 @@ docker start voip-edge-console
 
 Starting Kamailio first ensures the DB is opened and cached by the edge before
 the console begins serving. The console's startup sweeper then re-issues any
-pending reload whose intent survived in `console.sqlite`.
+pending reload whose intent survived in `console.sqlite` (unless read-only or a
+schema mismatch keeps the sweeper paused).
 
 ### 6. Verify
 

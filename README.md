@@ -27,7 +27,7 @@ release is **0.1.10**.
 | T9 | Hardening + observability | done |
 | T10 | Packaging + docs | done; image build not executed in this workspace |
 
-Test baseline: **762 passed, 1 deselected** with
+Test baseline: **769 passed, 1 deselected** with
 `.venv/bin/python -m pytest`. The live Kamailio park/restore gate is
 `tests/live/run-live.sh` and is run separately (it binds SIP port 5060).
 
@@ -132,7 +132,7 @@ through a Pangolin resource with SSO; the token remains a second factor.
 ## Dev
 
 ```bash
-.venv/bin/python -m pytest             # 762 passed, 1 deselected
+.venv/bin/python -m pytest             # 769 passed, 1 deselected
 .venv/bin/python -m compileall console # packaging smoke, no network
 ./tests/live/run-live.sh               # real Kamailio; run alone
 ```

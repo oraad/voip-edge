@@ -113,3 +113,26 @@ def test_destroy_page_uses_typed_confirm_for_an_active_home_after_restore(
     active_page = client.get(f"/homes/{DOMAIN}/destroy")
     assert 'name="confirm"' in active_page.text
     assert "parked snapshot" not in active_page.text.lower()
+
+
+def test_restore_with_missing_edge_returns_html_503(lifecycle_env):
+    app, client, fake = lifecycle_env
+    assert client.post(f"/homes/{DOMAIN}/park").status_code == 303
+    Path(settings_module.settings.db_path).unlink()
+
+    response = client.post(f"/homes/{DOMAIN}/restore")
+    assert response.status_code == 503
+    assert "Lifecycle operation failed" in response.text
+
+
+def test_parked_destroy_with_missing_edge_removes_the_snapshot(lifecycle_env):
+    app, client, fake = lifecycle_env
+    assert client.post(f"/homes/{DOMAIN}/park").status_code == 303
+    edge = Path(settings_module.settings.db_path)
+    edge.unlink()
+
+    response = client.post(f"/homes/{DOMAIN}/destroy")
+    assert response.status_code == 303
+    assert not edge.exists()
+    page = client.get("/homes")
+    assert DOMAIN not in page.text

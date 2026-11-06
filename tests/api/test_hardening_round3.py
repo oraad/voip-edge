@@ -383,3 +383,23 @@ def test_sweeper_skips_mutations_in_readonly_mode(monkeypatch, tmp_path):
     with TestClient(app):
         time.sleep(1.3)
     assert calls == []
+
+
+def test_startup_db_lock_is_deferred_not_a_schema_mismatch(seeded_db, monkeypatch):
+    import sqlite3
+
+    from console import db as db_module
+
+    real_connect = db_module.connect
+    first = {"called": False}
+
+    def flaky_connect(path):
+        if not first["called"]:
+            first["called"] = True
+            raise sqlite3.OperationalError("database is locked")
+        return real_connect(path)
+
+    monkeypatch.setattr(db_module, "connect", flaky_connect)
+    app = create_app()
+    with TestClient(app):
+        assert app.state.descriptor_problems == []

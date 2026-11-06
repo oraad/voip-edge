@@ -75,7 +75,7 @@ Modules (`webui/console/`):
 - `audit.py` + sidecar ownership: `sidecar.py` owns `console.sqlite` — idempotent `CREATE TABLE IF NOT EXISTS` + `user_version` pragma migrations at startup (bump + function per change; no external tool).
 - `web/` — routes + templates. **Invariant:** zero table-specific logic in `web/`; everything table-shaped is expressible in the descriptor.
 
-**Error taxonomy (exception → HTTP → surface):** `ValidationError` → 422 → inline form errors; `ConflictError` → 409 → banner with Keep-mine/Load-latest; `KamailioUnavailable` → pending-reload intent + persistent banner; `SidecarUnavailable` → read-only banner + destructive ops refused; `DBBusy` → retry indicator; `ReloadError` (RPC fault) → toast naming the failed table + verbatim message. Uniform FastAPI exception handlers; UI routes return only HTML; JSON routes never HTML; no `response_model` on UI routes.
+**Error taxonomy (exception → HTTP → surface):** `ValidationError` → 422 → inline form errors; `ConflictError` → 409 → banner with Keep-mine/Load-latest; `KamailioUnavailable` → pending-reload intent + persistent banner; `SidecarUnavailable` → read-only banner + destructive ops refused; `DBBusy` → retry indicator; `ReloadError` (RPC fault) → pending-reload row/log detail naming the failed table (no per-save fault toast). Uniform FastAPI exception handlers; UI routes return only HTML; JSON routes never HTML; no `response_model` on UI routes.
 
 **Concurrency (final):** sync `def` endpoints in the threadpool; no asyncio in the request path; writes hold the module-level `threading.Lock` per transaction; reload/RPC background thread never touches edge.sqlite.
 
@@ -109,15 +109,15 @@ Global: packed free-text fields reject `,`/`+`/whitespace-pads; keys are **creat
 - **dialplan** — match_exp compiles in Python re (**error**); PCRE-only constructs ⇒ **warn** "approximate check"; match_op locked 1; subst/repl locked identity (display: "match-only by design"); post-reload behavioral proof: optional sample → `dialplan.translate` result in toast. Presets: "country profile" and "block partition" (operator-chosen partition ids; no patterns are seeded).
 - **trusted** — src_ip ipv4; non-CGNAT/private ⇒ **error with explicit override** (documented generic non-tunnel path must stay possible); utility-alias-shaped (100.96.128.0/24 heuristic) ⇒ **warn** "use the wire-observed native IP"; proto locked `any`; tag = select from existing tenant domains (**options_query**); duplicate src_ip across tags ⇒ **error**.
 
-**Coherence check** (DB-only on list page; RPC-checked on tenant detail — no N+1 polling): registry ⇄ sets exist ⇄ dpid exists ⇄ trusted tag exists ⇄ landline target → badge green / amber named-missing on list; full checklist panel on detail.
+**Coherence check** (design): registry ⇄ sets exist ⇄ dpid exists ⇄ trusted tag exists ⇄ landline target → badge green / amber named-missing on list; full checklist panel on detail. As-built: the Homes coherence column is still a placeholder; `/wizard/verify/<domain>` provides the DB checklist.
 
 ### 5.3 Tenant lifecycle (park/restore/destroy)
 
 **Park sequence (order reviewed & corrected):** intent STARTED → BACKED_UP → SNAPSHOTTED (JSON into `console_parked`, same console.sqlite txn as intent row) → ROWS_DELETED → **RELOADED (batch: tenantdom + landline + dispatcher + trusted — mtree tree-args single-form)** → PURGED (dump regcache → `htable.delete` every key ending `@<domain>` → dump-verify zero, bounded retry) → DONE. (Reload **before** purge: new registrations of the domain must be rejected at the mtree level before the purge runs — closes the re-register race. A REGISTER in flight during the mtree reload is the only residue; it ages out at its autoexpire TTL, with no delayed re-sweep.) Sidecar unreadable ⇒ refuse before touching edge.sqlite. Crash ⇒ sweeper (startup + every 30 s) resumes oldest non-DONE intent through the same orchestrator; a failed step records `last_error` and the sweeper retries (Audit shows it; no Retry button).
 
-**Restore:** BACKED_UP → COLLISION_CHECKED (domain / tenantid / landline digits / set ids / src_ip — each collision class blocks, naming the colliding row) → ROWS_INSERTED (guarded INSERT, never OR REPLACE) → RELOADED → coherence green → DONE.
+**Restore:** BACKED_UP → COLLISION_CHECKED (domain / tenantid / landline digits / set ids / src_ip — each collision class blocks, naming the colliding row) → ROWS_INSERTED (guarded INSERT, never OR REPLACE) → RELOADED → DONE. The optional `/wizard/verify/<domain>` checklist can be used as a manual post-restore check.
 
-**Destroy:** active tenant ⇒ same sequence as park (incl. regcache purge) but **typed confirmation** (type the full domain) + snapshot discarded on success; parked ⇒ normal consequence-naming confirm, deletes snapshot only. Shared dialplan dpids never deleted; info line if the dpid is now unreferenced. List UI: Status badge (Active/Parked textual+colored), Parked section separate columns (Domain, Parked on, Landline, Snapshot size, Actions Restore/Destroy).
+**Destroy:** active tenant ⇒ same sequence as park (incl. regcache purge) but **typed confirmation** (type the full domain) + snapshot discarded on success; parked ⇒ normal consequence-naming confirm, deletes snapshot only. Shared dialplan dpids never deleted; no post-destroy unreferenced-partition info line is implemented. List UI: Status badge (Active/Parked textual+colored), Parked section separate columns (Domain, Parked on, Landline, Snapshot size, Actions Restore/Destroy).
 
 ### 5.4 Lifecycle copy nuance (acceptance text): park/destroy notices say "calls already in progress finish; new requests get 403/404" — verified **manually in the lab** (call up, park, call completes), not by console tests.
 
@@ -129,7 +129,7 @@ Steps: 1 Identity (domain, landline, ring group, label) → 2 Network (voip-stac
 
 ## 5.7 Durable intent state machines: as §5.3 (states enumerated per op; every transition an idempotent step; intent id = uuid idempotency key; fault-injection test points: between every consecutive state pair).
 
-## 5.8 Reload throttle state machine: per table — writes land in DB immediately; reload **enqueued**; the throttle timer starts at the **first** save in a window; later saves coalesce but do NOT extend the timer; the worker fires at t≥measured delta (N writes in window ⇒ exactly 1 RPC per table). Deferred ⇒ toast "reload scheduled shortly"; fault ⇒ toast with verbatim Kamailio message; verify mismatch ⇒ warning banner.
+## 5.8 Reload throttle state machine: per table — writes land in DB immediately; reload **enqueued**; the throttle timer starts at the **first** save in a window; later saves coalesce but do NOT extend the timer; the worker fires at t≥measured delta (N writes in window ⇒ exactly 1 RPC per table). Deferred ⇒ toast "reload scheduled shortly"; fault ⇒ pending-reload row/log detail with the verbatim message (no per-save toast); verify mismatch ⇒ warning banner.
 
 ## 6. Feedback vocabulary & status surfaces (design contract)
 
@@ -201,7 +201,7 @@ Steps: 1 Identity (domain, landline, ring group, label) → 2 Network (voip-stac
 4. Durable-intent resume — fault injection between every state pair
 5. Restore + 5 collision classes
 6. Destroy gates (typed confirm for active; normal confirm when parked) + shared-dpid survival
-7. Real-Kamailio lab journey (uac phone → park → REGISTER 403 + INVITE 404 → OPTIONS ping count drops to zero within settle window → restore → coherence green)
+7. Real-Kamailio lab journey (uac phone → park → REGISTER 403 + INVITE 404 → OPTIONS ping count drops to zero within settle window → restore → row/route checks; optional `/wizard/verify` checklist)
 
 ### Test surface (QA-approved layout)
 ```

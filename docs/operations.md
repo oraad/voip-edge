@@ -94,7 +94,9 @@ All lifecycle work is durable and resumable. Each operation writes an intent
 row in `console.sqlite`; the process sweeper resumes the oldest unfinished
 intent at startup and every 30 s. A failed step keeps its last committed state
 and records `last_error`; the sweeper retries it and the Audit page shows the
-error. There is no separate Retry button.
+error. There is no separate Retry button. In read-only mode or while the schema
+check has flagged a mismatch, the sweeper pauses lifecycle resumes and reload
+reissues; re-enable writes (or fix the schema) and restart/wait to resume.
 
 ### Park (active home)
 
@@ -115,7 +117,9 @@ finish; new requests receive 403/404. Do not promise this from console tests.
 UI: Parked section → **Restore**. Collision check blocks on any of the five
 classes: domain, tenantid, landline digits, dispatcher set ids, trusted
 `src_ip`; the error names the colliding row. Then a backup, guarded inserts
-(never `OR REPLACE`), reload, and the coherence checklist must go green.
+(never `OR REPLACE`) and reloads. Optionally run `/wizard/verify/<domain>` as
+a DB-only post-restore checklist; the Homes coherence column is still a
+placeholder.
 
 ### Destroy
 
@@ -142,8 +146,9 @@ one RPC is sent per table per window, serialized by `ReloadWorker`.
   `enqueued_at` while Kamailio is unreachable. A console restart loses nothing.
 - The sweeper re-derives the RPC and params from the descriptor and re-issues
   the reload on its next pass.
-- Symptom: global banner shows a pending count, writes still work. Fix the edge
-  or socket, then wait for the sweep (or restart the console).
+- Symptom: the status strip shows a pending count, writes still work. Fix the
+  edge or socket, then wait for the sweep (or restart the console). The sweeper
+  is paused in read-only/schema-mismatch mode (see Tenant lifecycle).
 - A JSON-RPC reload fault is recorded in the worker's pending-reload error and
   the structured logs; the status strip shows the pending count. There is no
   per-save toast. Old data remains active — fix the data/RPC and save again.

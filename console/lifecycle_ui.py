@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 from . import lifecycle, settings as settings_module
+from .errors import ConsoleError, ValidationError
 from .security import is_authenticated
 from .sidecar import Sidecar
 
@@ -52,6 +53,23 @@ def _flash(domain: str, action: str) -> str:
     return f"/homes?flash={action}%20{domain}&tone=applied"
 
 
+def _error_page(exc: ConsoleError) -> HTMLResponse:
+    from markupsafe import escape
+
+    status = 422 if isinstance(exc, ValidationError) else 503
+    detail = getattr(exc, "summary", "") or str(exc)
+    return HTMLResponse(
+        '<div class="banner err" role="alert">'
+        "<strong>Lifecycle operation failed</strong>"
+        f"<p>{escape(detail)}</p>"
+        "<p>The last committed state is preserved; fix the cause and retry "
+        "(the sweeper also retries unfinished intents).</p>"
+        "</div>",
+        status_code=status,
+        headers=NO_STORE,
+    )
+
+
 @router.get("/homes/{domain}/park", response_class=HTMLResponse)
 def park_confirm(request: Request, domain: str):
     denied = _require_auth(request)
@@ -66,10 +84,13 @@ async def park_submit(request: Request, domain: str):
     if denied:
         return denied
     sidecar_path, edge_path, backup_dir = _paths()
-    await run_in_threadpool(
-        lifecycle.park, sidecar_path, edge_path, _worker(request), domain,
-        backup_dir=backup_dir,
-    )
+    try:
+        await run_in_threadpool(
+            lifecycle.park, sidecar_path, edge_path, _worker(request), domain,
+            backup_dir=backup_dir,
+        )
+    except ConsoleError as exc:
+        return _error_page(exc)
     return RedirectResponse(_flash(domain, "Parked"), status_code=303, headers=NO_STORE)
 
 
@@ -97,6 +118,8 @@ async def restore_submit(request: Request, domain: str):
             status_code=409,
             headers=NO_STORE,
         )
+    except ConsoleError as exc:
+        return _error_page(exc)
     return RedirectResponse(_flash(domain, "Restored"), status_code=303, headers=NO_STORE)
 
 
@@ -134,8 +157,11 @@ async def destroy_submit(request: Request, domain: str):
     from urllib.parse import parse_qs
 
     confirm = parse_qs(body.decode("utf-8", "replace")).get("confirm", [""])[0]
-    await run_in_threadpool(
-        lifecycle.destroy, sidecar_path, edge_path, _worker(request), domain,
-        confirm=confirm, backup_dir=backup_dir,
-    )
+    try:
+        await run_in_threadpool(
+            lifecycle.destroy, sidecar_path, edge_path, _worker(request), domain,
+            confirm=confirm, backup_dir=backup_dir,
+        )
+    except ConsoleError as exc:
+        return _error_page(exc)
     return RedirectResponse(_flash(domain, "Destroyed"), status_code=303, headers=NO_STORE)

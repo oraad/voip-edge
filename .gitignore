@@ -4,6 +4,8 @@ __pycache__/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+*.console.sqlite.bak
+*.parked.json
 console-data/
 .pytest_cache/
 

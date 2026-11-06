@@ -66,3 +66,21 @@ def test_named_env_file_in_a_subdirectory_is_refused(tmp_path):
     )
     assert result.returncode != 0
     assert "refusing env file" in result.stderr
+
+
+def test_backup_companions_are_refused(tmp_path):
+    repo = _repo(tmp_path)
+    for name in (
+        "edge-20260101.sqlite.console.sqlite.bak",
+        "edge-20260101.sqlite.parked.json",
+    ):
+        (repo / name).write_text("tenant snapshot")
+        subprocess.run(["git", "add", "-f", name], cwd=repo, check=True)
+        result = subprocess.run(
+            ["sh", "tools/check-privacy.sh"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0, name
+        assert "backup/snapshot companion" in result.stderr

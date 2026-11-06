@@ -1112,3 +1112,37 @@ def test_resume_park_enforces_the_purge_capability_gate(env, monkeypatch):
         )
         == 1
     )
+
+
+def test_park_refuses_a_dispatcher_set_shared_with_another_home(env):
+    with sqlite3.connect(env.edge) as conn:
+        tvalue = conn.execute(
+            "SELECT tvalue FROM tenant_registry WHERE tprefix = ?", (DOMAIN_B,)
+        ).fetchone()[0]
+        fields = tvalue.split(",")
+        fields[1] = "10"  # B now points at A's on-net set
+        conn.execute(
+            "UPDATE tenant_registry SET tvalue = ? WHERE tprefix = ?",
+            (",".join(fields), DOMAIN_B),
+        )
+        conn.commit()
+
+    before = edge_signature(env.edge)
+    with pytest.raises(LifecycleError):
+        park(env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups)
+    assert edge_signature(env.edge) == before
+
+
+def test_parked_destroy_works_when_the_edge_db_is_absent(env):
+    assert park(
+        env.sidecar, env.edge, env.worker, DOMAIN_A, backup_dir=env.backups
+    ).done is True
+    missing = env.edge.with_name("missing-edge.sqlite")
+    env.edge.unlink()
+
+    result = destroy(
+        env.sidecar, missing, env.worker, DOMAIN_A, confirm=""
+    )
+    assert result.done is True
+    assert env.sidecar.load_snapshot(DOMAIN_A) is None
+    assert not missing.exists()

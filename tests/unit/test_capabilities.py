@@ -166,3 +166,10 @@ def test_probe_never_invokes_reload_rpcs(fake):
     probe(fake)
     for method in RELOAD_METHODS:
         assert fake.calls_for(method) == []
+
+
+def test_probe_can_skip_the_destructive_delete_check(fake):
+    script_healthy(fake)
+    result = probe(fake, allow_delete=False)
+    assert fake.calls_for("htable.delete") == []
+    assert result["htable.delete"] is False

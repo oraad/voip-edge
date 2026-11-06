@@ -7,6 +7,7 @@ with T3; ``web/`` must contain zero table logic (plan §4).
 from __future__ import annotations
 
 import hmac
+import sqlite3
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -143,6 +144,19 @@ def create_app() -> FastAPI:
                     )
                 finally:
                     conn.close()
+            except sqlite3.OperationalError as exc:
+                text = str(exc).lower()
+                if "locked" in text or "busy" in text:
+                    # Transient startup lock (e.g. WAL switch): do not turn
+                    # it into a permanent "schema mismatch" and block writes.
+                    observability.log_event(
+                        "schema.check.deferred", error=str(exc)[:200]
+                    )
+                    app.state.descriptor_problems = []
+                else:
+                    app.state.descriptor_problems = [
+                        f"schema consistency check failed: {exc}"
+                    ]
             except BaseException as exc:
                 app.state.descriptor_problems = [
                     f"schema consistency check failed: {exc}"
@@ -186,7 +200,11 @@ def create_app() -> FastAPI:
                             sc, worker, descriptors_module.load()
                         )
                     if Path(cfg.rpc_sock).exists():
-                        app.state.capabilities = capabilities.probe(_get_rpc())
+                        app.state.capabilities = capabilities.probe(
+                            _get_rpc(),
+                            allow_delete=not settings_module.settings.readonly
+                            and not app.state.descriptor_problems,
+                        )
                     else:
                         # Kamailio may have removed the socket: do not keep a
                         # stale "reachable" result in the status strip.
@@ -491,7 +509,11 @@ def create_app() -> FastAPI:
                 # Missing socket: leave capabilities unknown ("not wired yet")
                 # instead of burning a timeout per method.
                 return
-            result = capabilities.probe(_get_rpc())
+            result = capabilities.probe(
+                _get_rpc(),
+                allow_delete=not settings_module.settings.readonly
+                and not app.state.descriptor_problems,
+            )
             app.state.capabilities = result
         except BaseException:
             # A probe must never take the console down.
