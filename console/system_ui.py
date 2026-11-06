@@ -306,14 +306,23 @@ def _capability_banner(caps: Mapping[str, Any] | None) -> dict[str, Any] | None:
     missing = capabilities.missing_capabilities(caps)
     if not missing:
         return None
+    from . import settings as settings_module
+
+    enforced = settings_module.settings.enforce_capabilities
     if "htable.delete" in missing:
-        message = "htable.delete unavailable — park and destroy are refused"
+        if enforced:
+            message = "htable.delete unavailable — park and destroy are refused"
+            detail = "The console refuses operations it cannot verify end to end."
+        else:
+            message = "htable.delete unavailable — capability gate is disabled"
+            detail = "Set CONSOLE_ENFORCE_CAPABILITIES=1 to refuse park/destroy."
     else:
         message = "capability mismatch: " + ", ".join(missing)
+        detail = "The console refuses operations it cannot verify end to end."
     return {
-        "tone": "err" if "htable.delete" in missing else "warn",
+        "tone": "err" if "htable.delete" in missing and enforced else "warn",
         "message": message,
-        "detail": "The console refuses operations it cannot verify end to end.",
+        "detail": detail,
     }
 
 

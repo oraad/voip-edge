@@ -78,16 +78,22 @@ async def _read_capped_body(request: Request) -> bytes:
 READONLY_EXEMPT_PATHS = frozenset({"/login", "/logout", "/auth/logout"})
 
 
-def _same_origin(request: Request) -> bool:
-    """True for same-origin/no-Origin requests; false for cross-site posts.
+def _failure_key(request: Request, client_ip: str) -> str:
+    """Rate-limit key: per-IP for same-origin, per-origin for cross-site.
 
-    Used only to decide whether a failed attempt may consume the shared
-    per-IP login budget (a cross-site form must not lock the operator out).
+    A malicious cross-site form must not drain the operator's IP bucket, but
+    its own origin still gets a bounded number of failures.
     """
     origin = request.headers.get("origin") or request.headers.get("referer")
     if not origin:
-        return True
-    return urlparse(origin).netloc.lower() == request.url.netloc.lower()
+        return client_ip
+    try:
+        host = urlparse(origin).netloc.lower()
+    except ValueError:
+        host = "invalid-origin"
+    if host and host != request.url.netloc.lower():
+        return f"{client_ip}|{host}"
+    return client_ip
 
 
 def _mono(value: object) -> Markup:
@@ -429,7 +435,8 @@ def create_app() -> FastAPI:
                 "Token sign-in is disabled (SSO only).", status_code=403, headers=NO_STORE
             )
         client_ip = request.client.host if request.client else "unknown"
-        if login_rate_exceeded(client_ip):
+        rate_key = _failure_key(request, client_ip)
+        if login_rate_exceeded(rate_key):
             observability.log_auth_failure(
                 reason="rate_limited", client=client_ip, path="/login"
             )
@@ -449,8 +456,7 @@ def create_app() -> FastAPI:
         if not expected or not hmac.compare_digest(supplied, expected):
             from .security import record_login_failure
 
-            if _same_origin(request):
-                record_login_failure(client_ip)
+            record_login_failure(rate_key)
             observability.log_auth_failure(
                 reason="invalid_token", client=client_ip, path="/login"
             )
@@ -621,6 +627,8 @@ def create_app() -> FastAPI:
                 exc = worker.errors.get(table)
                 if exc is not None:
                     detail = str(exc)[:200]
+            if status != "done" and detail:
+                outcome = "failed"
             try:
                 from .sidecar import Sidecar
 

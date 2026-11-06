@@ -120,3 +120,24 @@ def test_top_level_secret_paths_are_refused(tmp_path):
         )
         assert result.returncode != 0, name
         assert "secret/state path" in result.stderr
+
+
+def test_database_journals_and_alternate_suffixes_are_refused(tmp_path):
+    repo = _repo(tmp_path)
+    for name in (
+        "edge.sqlite-journal",
+        "edge.db-wal",
+        "edge.db-shm",
+        "edge.db-journal",
+        "edge.sqlite3",
+    ):
+        (repo / name).write_bytes(b"tenant database pages")
+        subprocess.run(["git", "add", "-f", name], cwd=repo, check=True)
+        result = subprocess.run(
+            ["sh", "tools/check-privacy.sh"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0, name
+        assert "refusing database file" in result.stderr

@@ -1,8 +1,9 @@
 # Validation matrix (plan §5.2 → §9)
 
-Status: **scaffold**. T4 owns this document's completion. `TODO` means the test
-does not exist yet; test names shown are the current traceability, not a claim
-that the whole rule is covered.
+Status: **scaffold**. T4 owns this document's completion. `TODO` means the
+traceability cell has not been filled in yet; several rules are covered by
+tests whose ids have not been mapped here. Treat the matrix as an index, not
+as proof that a rule is untested.
 
 How to read this:
 
@@ -43,7 +44,7 @@ How to read this:
 | `V-REG-CLI-COLLIDE` | `cli` exactly collides with another home's landline | error | TODO | TODO | T4.4 |
 | `V-REG-CLI-PREFIX-OVERLAP` | `cli` prefix-overlaps another home's landline | warn | TODO | TODO | T4.4 |
 | `V-REG-LABEL-PACK-SAFE` | `label` contains no `,` or `+` | error | `tests/unit/test_descriptors.py::test_pack_packed_row_rejects_separators` (comma label; validator-level test TODO) | TODO | T4.1 |
-| `V-REG-DPID-EXISTS` | `dpid` exists in `dialplan.dpid` | error | TODO | TODO | T4.3 |
+| `V-REG-DPID-EXISTS` | `dpid` is `0` (none) or exists in `dialplan.dpid` | error | TODO | TODO | T4.3 |
 | `V-REG-FLAGS-BITS` | `flags` carries `ih_on` + `pstn_on`, each exactly `0` or `1` | error | `tests/unit/test_pack.py::test_parse_flags_rejects_malformed`, `::test_flags_round_trip` (codec only; validator-level test TODO) | TODO | T4.1 |
 | `V-REG-BLOCK-DPID-EXISTS` | Optional third flags segment `block_dpid` is an integer that exists in `dialplan.dpid`; absent is allowed | error | TODO | TODO | T4.3 |
 | `V-REG-DELETE-LIFECYCLE` | Registry rows have no Delete action; removal is lifecycle-only | invariant | `tests/unit/test_descriptors.py::test_storage_keys_and_reloads` (delete policy only) | TODO | T5 / T8.1 |

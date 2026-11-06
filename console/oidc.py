@@ -416,22 +416,14 @@ async def auth_callback(request: Request, code: str = "", state: str = ""):
     )
     flow = verify_flow(request.cookies.get(flow_cookie) if flow_cookie else None)
 
-    from urllib.parse import urlparse
-
     from .security import record_login_failure
-
-    def same_origin() -> bool:
-        origin = request.headers.get("origin") or request.headers.get("referer")
-        if not origin:
-            return True
-        return urlparse(origin).netloc.lower() == request.url.netloc.lower()
 
     def fail(
         reason: str, status: int = 303, *, count: bool = False
     ) -> HTMLResponse | RedirectResponse:
-        # Do not let an unauthenticated cross-site callback or a denied IdP
-        # user burn the shared per-IP login budget.
-        if count and same_origin():
+        # Only a verified flow's token failure consumes the budget; an
+        # unauthenticated invalid-state callback or a denied IdP user does not.
+        if count:
             record_login_failure(client_ip)
         observability.log_event("oidc_login", outcome=reason, client=client_ip)
         if reason == "claims_denied":
@@ -474,6 +466,8 @@ async def auth_callback(request: Request, code: str = "", state: str = ""):
 
 @router.post("/auth/logout")
 async def auth_logout(request: Request):
+    if not oidc_enabled():
+        return _unavailable()
     from . import observability
 
     session = read_session(request)

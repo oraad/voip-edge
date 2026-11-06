@@ -413,13 +413,29 @@ def test_failed_token_login_still_renders_the_token_form(client):
     assert "Console token" in response.text
 
 
-def test_cross_site_failed_login_does_not_consume_the_budget(client):
-    for _ in range(10):
+def test_cross_site_failed_login_has_its_own_budget(client):
+    for _ in range(5):
         response = client.post(
             "/login",
             data={"token": "wrong"},
             headers={"origin": "https://evil.example"},
         )
         assert response.status_code == 401
+    blocked = client.post(
+        "/login",
+        data={"token": "wrong"},
+        headers={"origin": "https://evil.example"},
+    )
+    assert blocked.status_code == 429
+    # The operator's same-origin bucket was not drained.
     response = client.post("/login", data={"token": "wrong"})
+    assert response.status_code == 401
+
+
+def test_malformed_origin_does_not_500_the_login(client):
+    response = client.post(
+        "/login",
+        data={"token": "wrong"},
+        headers={"origin": "http://["},
+    )
     assert response.status_code == 401

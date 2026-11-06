@@ -151,6 +151,11 @@ def test_capability_banner_reports_htable_delete_and_refusal(
     auth_client, system_env, monkeypatch
 ):
     monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, enforce_capabilities=True),
+    )
+    monkeypatch.setattr(
         capabilities,
         "cached",
         lambda **kwargs: {

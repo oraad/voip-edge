@@ -45,7 +45,8 @@ finishes the operations/docs alignment.
   runbook documents the sidecar path and schema-version refusal.
 - Lifecycle: the startup/sweeper calls use the real signatures, `resume_pending`
   takes the global operation lock, active destroy checks `htable.delete` before
-  touching data, and restore verifies row *presence* inside its transaction so
+  touching data when `CONSOLE_ENFORCE_CAPABILITIES=1` (enabled in the shipped
+  example), and restore verifies row *presence* inside its transaction so
   a crash after the edge COMMIT but before the sidecar transition resumes
   cleanly. `CONSOLE_ENFORCE_CAPABILITIES=1` is fail-closed on an unreachable
   probe, and capability probes share the reload RPC lock.

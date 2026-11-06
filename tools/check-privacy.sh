@@ -36,7 +36,7 @@ trap 'rm -f "$TMPLIST"' EXIT
 printf '%s\n' "$FILES" > "$TMPLIST"
 while IFS= read -r f; do
     case "$f" in
-        *.sqlite|*.sqlite-wal|*.sqlite-shm|*.db)
+        *.sqlite|*.sqlite-wal|*.sqlite-shm|*.sqlite-journal|*.sqlite-mj*|*.sqlite3*|*.db|*.db-wal|*.db-shm|*.db-journal|*.db3*)
             echo "privacy: refusing database file: $f" >&2; fail=1 ;;
         *.console.sqlite.bak|*.parked.json)
             echo "privacy: refusing backup/snapshot companion: $f" >&2; fail=1 ;;

@@ -137,6 +137,7 @@ the Arcane stack editor). At minimum change:
 | `CONSOLE_PORT` | `8080` |
 | `CONSOLE_SECURE_COOKIE` | `1` when Pangolin terminates HTTPS |
 | `CONSOLE_READONLY` | `1` for the first session, then `0` |
+| `CONSOLE_ENFORCE_CAPABILITIES` | `1` (refuses park/destroy when the purge primitives cannot be proven) |
 
 `compose.yml` pins the in-container paths (`/data/edge.sqlite`,
 `/var/lib/console`, `/run/kamailio/kamailio_rpc.sock`) so the host locations
