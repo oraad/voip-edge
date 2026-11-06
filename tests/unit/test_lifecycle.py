@@ -1066,3 +1066,49 @@ def test_park_resume_allows_a_landline_removal_after_snapshot(env):
         )
         == 0
     )
+
+
+def test_resume_park_enforces_the_purge_capability_gate(env, monkeypatch):
+    from dataclasses import replace
+
+    from console import capabilities
+    from console import settings as settings_module
+
+    with pytest.raises(InjectedCrash):
+        park(
+            env.sidecar,
+            env.edge,
+            env.worker,
+            DOMAIN_A,
+            backup_dir=env.backups,
+            fail_after="SNAPSHOTTED",
+        )
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, enforce_capabilities=True),
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "probe",
+        lambda rpc, **kwargs: {
+            "reachable": False,
+            "unknown": True,
+            "htable.dump": False,
+            "htable.delete": False,
+        },
+    )
+    summary = resume_pending(
+        env.sidecar, env.edge, env.worker, backup_dir=env.backups
+    )
+    assert summary["failed"] == 1
+    assert env.sidecar.latest_intent("park", DOMAIN_A)["state"] == "SNAPSHOTTED"
+    assert (
+        count(
+            env.edge,
+            "SELECT count(*) FROM tenant_registry WHERE tprefix = ?",
+            (DOMAIN_A,),
+        )
+        == 1
+    )

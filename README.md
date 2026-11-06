@@ -7,8 +7,11 @@ online backups.
 
 ## Status
 
-All tasks T0–T10 are complete, including three independent review rounds. The
-current release is **0.1.10**.
+Implementation tasks T0–T10 are complete and have passed multiple independent
+review rounds. A few explicit documentation/coverage follow-ups remain: the
+validation matrix still has `TODO` rows, the Homes coherence column is a
+placeholder, and the image build has not been executed here. The current
+release is **0.1.10**.
 
 | Task | Scope | State |
 |---|---|---|
@@ -16,15 +19,15 @@ current release is **0.1.10**.
 | T1 | RPC client + serialized reload worker + capability probes | done |
 | T2 | App skeleton, auth/CSRF, health, host-lab harness | done |
 | T3 | Read-only table browser and Homes landing | done |
-| T4 | Create/edit + validation families (T4.1–T4.8) | done |
+| T4 | Create/edit + validation families (T4.1–T4.8) | done; matrix TODOs tracked |
 | T5 | Row delete + reference guards | done |
-| T6 | Live dashboard (registered phones, route-set probes, health) | done |
+| T6 | Live dashboard (registered phones, route-set probes, health) | done; Homes coherence placeholder |
 | T7 | Onboarding wizard | done |
 | T8 | Lifecycle park/restore/destroy + backups | done |
 | T9 | Hardening + observability | done |
 | T10 | Packaging + docs | done; image build not executed in this workspace |
 
-Test baseline: **759 passed, 1 deselected** with
+Test baseline: **762 passed, 1 deselected** with
 `.venv/bin/python -m pytest`. The live Kamailio park/restore gate is
 `tests/live/run-live.sh` and is run separately (it binds SIP port 5060).
 
@@ -129,7 +132,7 @@ through a Pangolin resource with SSO; the token remains a second factor.
 ## Dev
 
 ```bash
-.venv/bin/python -m pytest             # 759 passed, 1 deselected
+.venv/bin/python -m pytest             # 762 passed, 1 deselected
 .venv/bin/python -m compileall console # packaging smoke, no network
 ./tests/live/run-live.sh               # real Kamailio; run alone
 ```

@@ -166,15 +166,31 @@ def create_app() -> FastAPI:
             cfg = settings_module.settings
             while not sweeper_stop.is_set():
                 try:
-                    sc = Sidecar(Path(cfg.sidecar_dir) / "console.sqlite")
-                    worker = _get_worker()
-                    resume_pending(
-                        sc, cfg.db_path, worker,
-                        backup_dir=Path(cfg.sidecar_dir) / "backups",
-                    )
-                    reissue_pending_reloads(sc, worker, descriptors_module.load())
+                    if (
+                        settings_module.settings.readonly
+                        or app.state.descriptor_problems
+                    ):
+                        observability.log_event(
+                            "sweeper.skipped",
+                            reason="readonly" if settings_module.settings.readonly
+                            else "schema_mismatch",
+                        )
+                    else:
+                        sc = Sidecar(Path(cfg.sidecar_dir) / "console.sqlite")
+                        worker = _get_worker()
+                        resume_pending(
+                            sc, cfg.db_path, worker,
+                            backup_dir=Path(cfg.sidecar_dir) / "backups",
+                        )
+                        reissue_pending_reloads(
+                            sc, worker, descriptors_module.load()
+                        )
                     if Path(cfg.rpc_sock).exists():
                         app.state.capabilities = capabilities.probe(_get_rpc())
+                    else:
+                        # Kamailio may have removed the socket: do not keep a
+                        # stale "reachable" result in the status strip.
+                        app.state.capabilities = capabilities.probe(None)
                 except BaseException as exc:
                     observability.log_event("sweeper.error", error=str(exc)[:200])
                 if sweeper_stop.wait(max(0.0, float(interval))):
@@ -503,11 +519,18 @@ def create_app() -> FastAPI:
             if descriptor.storage == "packed" and descriptor.reload.params:
                 throttles[str(descriptor.reload.params[0])] = throttle
 
+        worker: ReloadWorker | None = None
+
         def _store(status: str, table: str, rpc_name: str, params: list) -> None:
             # Persist pending reloads so a console restart never loses them
             # (plan §5.6); clear on success.  Never let sidecar trouble take
             # the worker down.
             outcome = {"done": "applied", "pending": "scheduled"}.get(status, status)
+            detail = None
+            if status != "done" and worker is not None:
+                exc = worker.errors.get(table)
+                if exc is not None:
+                    detail = str(exc)[:200]
             try:
                 from .sidecar import Sidecar
 
@@ -515,11 +538,11 @@ def create_app() -> FastAPI:
                 if status == "done":
                     sc.clear_pending_reload(table)
                 else:
-                    sc.record_pending_reload(table, last_error=None)
+                    sc.record_pending_reload(table, last_error=detail)
             except BaseException:
                 pass
             observability.log_reload_outcome(
-                table=table, status=outcome, rpc=rpc_name
+                table=table, status=outcome, rpc=rpc_name, detail=detail
             )
 
         def _on_enqueue(table: str, rpc_name: str, params: list) -> None:
@@ -535,9 +558,10 @@ def create_app() -> FastAPI:
             except BaseException:
                 pass
 
-        return ReloadWorker(
+        worker = ReloadWorker(
             _get_rpc(), throttles, store=_store, on_enqueue=_on_enqueue
         )
+        return worker
 
     app.state.worker = None
     app.state.worker_factory = _default_worker

@@ -192,7 +192,10 @@ def _edge_path(edge: str | Path) -> Path:
 
 
 def _edge_connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path), timeout=2.0)
+    # mode=rw: reads (e.g. the destroy confirmation page) must never create a
+    # zero-byte edge.sqlite that later trips the schema consistency gate.
+    uri = path.resolve().as_uri() + "?mode=rw"
+    conn = sqlite3.connect(uri, uri=True, timeout=2.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout = 2000")
     return conn
@@ -1211,6 +1214,15 @@ def _resume_pending(
                 purge_max_attempts=purge_max_attempts,
                 reload_timeout=reload_timeout,
             )
+            # A resumed park/active-destroy still deletes rows and purges;
+            # enforce the fail-closed gate before advancing.  States past the
+            # destructive work only have DONE/SNAPSHOT_DISCARDED left.
+            state = str(intent.get("state") or "")
+            if (
+                (op == "park" or (op == "destroy" and mode != "parked"))
+                and state not in {"PURGED", "SNAPSHOT_DISCARDED"}
+            ):
+                _require_purge_capability(worker)
             run.advance(fail_after)
         except BaseException as exc:  # one broken intent never blocks the rest
             if run is not None:

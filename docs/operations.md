@@ -123,8 +123,8 @@ classes: domain, tenantid, landline digits, dispatcher set ids, trusted
   (including regcache purge), then discards the snapshot on success.
 - **Parked home:** normal consequence-naming confirmation; deletes the snapshot
   only.
-- Shared dialplan partitions (for example 10 and 90) are never deleted. The UI
-  shows an info line if a partition becomes unreferenced.
+- Shared dialplan partitions (for example 10 and 90) are never deleted; the
+  console does not add a post-destroy “unreferenced partition” indicator.
 
 If the sidecar is unreadable, destructive operations are refused before
 `edge.sqlite` is touched; browsing continues.

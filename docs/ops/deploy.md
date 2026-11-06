@@ -369,4 +369,4 @@ procedure: `docs/ops/backups.md`.
 | healthcheck fails but the UI works | `CONSOLE_BIND` is probably `0.0.0.0`; bind the tunnel IP or override the healthcheck URL |
 | SSO login works, console rejects the token | `CONSOLE_TOKEN` mismatch/typo, or `.env` not reloaded (restart the container) |
 | parked homes disappeared after a container rebuild | the `${EDGE_HOME}/console` volume is missing or was not preserved; restore the sidecar per `docs/ops/backups.md` |
-| save says reload failed | expected when Kamailio is down: intent is persisted, banner remains; fix the edge/socket and wait for the sweeper or restart the console |
+| pending-reload banner after a save | expected when Kamailio is down: the intent is persisted and the status strip shows the pending count; the fault detail is in the logs/pending row. Fix the edge/socket and wait for the sweeper or restart the console |

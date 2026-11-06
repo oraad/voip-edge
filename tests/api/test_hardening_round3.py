@@ -338,3 +338,48 @@ def test_audit_page_shows_failed_intent_last_error(
     assert response.status_code == 200
     assert "Lifecycle errors" in response.text
     assert "refusing to widen" in response.text
+
+
+def test_destroy_confirm_does_not_create_a_missing_edge_db(
+    client, monkeypatch, tmp_path
+):
+    db_path = tmp_path / "absent.sqlite"
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(
+            settings_module.settings,
+            db_path=str(db_path),
+            sidecar_dir=str(tmp_path / "console"),
+            sweeper_interval=0,
+        ),
+    )
+    login(client)
+    response = client.get("/homes/sip.alpha.home.example.net/destroy")
+    assert response.status_code == 200
+    assert not db_path.exists()
+
+
+def test_sweeper_skips_mutations_in_readonly_mode(monkeypatch, tmp_path):
+    from console import lifecycle
+
+    (tmp_path / "state").mkdir()
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(
+            settings_module.settings,
+            readonly=True,
+            sweeper_interval=1,
+            sidecar_dir=str(tmp_path / "state"),
+            db_path=str(tmp_path / "edge.sqlite"),
+        ),
+    )
+    calls: list = []
+    monkeypatch.setattr(
+        lifecycle, "resume_pending", lambda *args, **kwargs: calls.append(args)
+    )
+    app = create_app()
+    with TestClient(app):
+        time.sleep(1.3)
+    assert calls == []
