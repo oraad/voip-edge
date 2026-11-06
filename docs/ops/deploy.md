@@ -13,7 +13,8 @@ The console is a **single-process** FastAPI container. It:
 - stores its own state (`console.sqlite`, backups) under
   `${EDGE_HOME}/console`;
 - is exposed only through a **Pangolin resource with SSO**; the console token
-  stays on as a second factor.
+  stays available as break-glass (a second factor only when console OIDC is
+  not enabled).
 
 `workers=1` is a hard requirement: reload serialization, the coalescing
 throttle queue, the transaction write-lock and session state are process-local.

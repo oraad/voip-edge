@@ -303,6 +303,14 @@ class _StaleEdit(Exception):
         super().__init__("stale edit")
 
 
+class _RecheckFailed(Exception):
+    """A DB-backed rule changed between validation and the write lock."""
+
+    def __init__(self, errors: dict[str, list[str]]):
+        self.errors = errors
+        super().__init__("recheck failed")
+
+
 def _submit_label(mode: str) -> str:
     return "Create & reload routing" if mode == "create" else "Save & reload routing"
 
@@ -1596,6 +1604,29 @@ async def _submit(
                 )
                 if current_raw is None or submitted_hash != _row_hash(descriptor, current):
                     raise _StaleEdit(current)
+            # Re-run DB-backed field/family rules under the write lock: a
+            # concurrent create could otherwise take the same tenantid,
+            # set/prefix between validation and this insert.
+            re_errors, _ = _validate(
+                descriptor, values, conn=conn, mode=mode, key=key
+            )
+            re_checks, _, re_interruption = _run_form_checks(
+                descriptor,
+                values,
+                conn=conn,
+                mode=mode,
+                key=key,
+                existing=existing,
+            )
+            combined = dict(re_errors)
+            for name, messages in re_checks.items():
+                combined.setdefault(name, []).extend(messages)
+            if re_interruption is not None and not combined:
+                combined["tprefix"] = [
+                    "Another row changed while saving; reload and retry."
+                ]
+            if combined:
+                raise _RecheckFailed(combined)
             if mode == "create":
                 inserted_key = _insert(conn, descriptor, values)
             else:
@@ -1607,6 +1638,21 @@ async def _submit(
             key=key,
             submitted=values,
             current=exc.current or existing,
+        )
+    except _RecheckFailed as exc:
+        for name, messages in exc.errors.items():
+            errors.setdefault(name, []).extend(messages)
+        return _render(
+            request,
+            descriptor,
+            mode=mode,
+            key=key,
+            values=values,
+            conn=conn,
+            errors=errors,
+            warnings=warnings,
+            status_code=422,
+            row_hash=submitted_hash,
         )
     except sqlite3.IntegrityError:
         key_field = _key_field(descriptor)

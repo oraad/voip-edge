@@ -403,3 +403,4 @@ def test_startup_db_lock_is_deferred_not_a_schema_mismatch(seeded_db, monkeypatc
     app = create_app()
     with TestClient(app):
         assert app.state.descriptor_problems == []
+        assert app.state.schema_check_deferred is True

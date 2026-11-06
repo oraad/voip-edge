@@ -215,7 +215,14 @@ def _edge_transaction(path: Path) -> Iterator[sqlite3.Connection]:
     """One short ``BEGIN IMMEDIATE`` … ``COMMIT``/``ROLLBACK`` on edge.sqlite."""
     conn = _edge_connect(path)
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.Error as exc:
+            conn.close()
+            message = str(exc).lower()
+            if "locked" in message or "busy" in message:
+                raise DBBusy(f"edge database busy: {exc}") from exc
+            raise LifecycleError(f"edge transaction could not start: {exc}") from exc
         try:
             yield conn
             conn.execute("COMMIT")
@@ -257,6 +264,21 @@ def _tenant_row(path: Path, domain: str) -> dict[str, Any] | None:
 def _require_tenant(path: Path, domain: str) -> None:
     if _tenant_row(path, domain) is None:
         raise LifecycleError(f"home {domain!r} is not active")
+
+
+def _snapshot_is_parked(sc: Sidecar, domain: str) -> bool:
+    """True only when the newest completed intent for *domain* was a park.
+
+    Snapshot existence alone is not proof: restore deliberately keeps the
+    snapshot.  Used when the edge DB is absent/unreadable and the registry
+    cannot tell active from parked.
+    """
+    latest = sc.latest_intent_any(domain, include_done=True)
+    return bool(
+        latest
+        and str(latest.get("op")) == "park"
+        and str(latest.get("state")) == "DONE"
+    )
 
 
 def _descriptor(tableset: TableSet, table: str) -> Descriptor:
@@ -517,8 +539,17 @@ def _insert_edge_rows(
 # restore collision checks (five classes)
 # ---------------------------------------------------------------------------
 def _check_collisions(
-    edge: Path, snapshot: dict[str, Any], tableset: TableSet
+    edge: Path,
+    snapshot: dict[str, Any],
+    tableset: TableSet,
+    *,
+    conn: sqlite3.Connection | None = None,
 ) -> None:
+    if conn is None:
+        with _edge_read(edge) as owned:
+            return _check_collisions(
+                edge, snapshot, tableset, conn=owned
+            )
     domain = str(snapshot["domain"])
     tenantid = str(snapshot.get("tenantid") or "")
     landline_prefixes = {
@@ -579,6 +610,34 @@ def _check_collisions(
                         "landline: tenant_landline.tprefix="
                         f"{row_dict.get('tprefix')!r} already exists "
                         f"(tenantid={owner!r})"
+                    )
+                    break
+
+            # Longest-prefix shadowing is a different collision class: an
+            # exact key check is not enough (1001 vs 1001999).
+            for candidate in conn.execute(
+                "SELECT tprefix, tvalue FROM tenant_landline ORDER BY tprefix"
+            ):
+                row_dict = dict(candidate)
+                other = str(row_dict.get("tprefix") or "")
+                if not other or other in landline_prefixes:
+                    continue
+                try:
+                    owner = str(
+                        unpack_row(landline_desc, row_dict).get("tenantid") or ""
+                    )
+                except (KeyError, ValueError):
+                    continue
+                if owner == tenantid:
+                    continue
+                if any(
+                    other.startswith(prefix) or prefix.startswith(other)
+                    for prefix in landline_prefixes
+                ):
+                    collisions.append(
+                        "landline: snapshot prefix(es) "
+                        + ", ".join(sorted(landline_prefixes))
+                        + f" overlap {other!r} owned by {owner!r}"
                     )
                     break
 
@@ -919,19 +978,35 @@ class _Run:
         self._transition("COLLISION_CHECKED", "no restore collisions")
 
     def _step_rows_inserted(self) -> None:
+        from . import db as db_module
+
         snapshot = self._load_snapshot()
-        with _edge_transaction(self.edge) as conn:
-            counts = _insert_edge_rows(conn, snapshot)
-            # Verify presence, not "newly inserted": a crash after the edge
-            # COMMIT but before the sidecar ROWS_INSERTED transition resumes
-            # here with every row already present and must still succeed.
-            missing = _missing_rows(conn, snapshot)
-            if missing:
-                raise LifecycleError(
-                    "restore rows are missing or differ from the snapshot "
-                    "(concurrent write?): "
-                    + ", ".join(f"{table}={count}" for table, count in missing.items())
-                )
+        with db_module.write_lock:
+            with _edge_transaction(self.edge) as conn:
+                already = conn.execute(
+                    "SELECT 1 FROM tenant_registry WHERE tprefix = ?",
+                    (str(snapshot.get("domain") or ""),),
+                ).fetchone()
+                if already is None:
+                    # Re-check collisions in the write transaction: a crash
+                    # after COLLISION_CHECKED can resume into this step after
+                    # another home took the tenantid/set/prefix.
+                    _check_collisions(
+                        self.edge, snapshot, self.tableset, conn=conn
+                    )
+                counts = _insert_edge_rows(conn, snapshot)
+                # Verify presence, not "newly inserted": a crash after the
+                # edge COMMIT but before the sidecar ROWS_INSERTED transition
+                # resumes here with every row already present and must succeed.
+                missing = _missing_rows(conn, snapshot)
+                if missing:
+                    raise LifecycleError(
+                        "restore rows are missing or differ from the snapshot "
+                        "(concurrent write?): "
+                        + ", ".join(
+                            f"{table}={count}" for table, count in missing.items()
+                        )
+                    )
         self._transition(
             "ROWS_INSERTED",
             "verified: "
@@ -1190,6 +1265,14 @@ def _destroy(
         edge_path = _edge_path(edge)
         active = _tenant_row(edge_path, domain) is not None
     parked = sc.get_parked(domain) is not None
+    if not edge_path.is_file():
+        if not parked:
+            raise LifecycleError(f"home {domain!r} has no sidecar snapshot")
+        if not _snapshot_is_parked(sc, domain):
+            raise LifecycleError(
+                "edge database is missing and the newest completed intent "
+                "was not a park; refusing to delete the retained snapshot"
+            )
     if not active and not parked:
         raise LifecycleError(f"home {domain!r} is neither active nor parked")
 
@@ -1290,6 +1373,13 @@ def _resume_pending(
         except BaseException as exc:  # one broken intent never blocks the rest
             if run is not None:
                 _record_failure(run, exc)
+            else:
+                try:
+                    sc.fail_intent(intent_id, str(exc))
+                except (SidecarUnavailable, KeyError):
+                    pass
+                except Exception:
+                    pass
             current = sc.get_intent(intent_id) or {}
             results.append(
                 LifecycleResult(

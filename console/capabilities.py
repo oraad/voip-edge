@@ -102,6 +102,7 @@ def _blank_result() -> dict[str, bool]:
             "jsonrpcs": False,
             "reachable": False,
             "unknown": True,
+            "skipped": [],
             "ok": False,
             "aggregate": False,
         }
@@ -124,10 +125,12 @@ def _run_probe(rpc: Any, *, allow_delete: bool = True) -> dict[str, bool]:
 
     from .rpc_lock import RPC_LOCK
 
+    skipped: set[str] = set()
     for index, (method, params) in enumerate(checks):
         if method == "htable.delete" and not allow_delete:
             # Read-only/schema-mismatch modes must not send a write RPC.
             results[method] = False
+            skipped.add(method)
             continue
         try:
             with RPC_LOCK:
@@ -157,8 +160,11 @@ def _run_probe(rpc: Any, *, allow_delete: bool = True) -> dict[str, bool]:
         results.setdefault(method, False)
 
     ok = reachable and all(
-        value for method, value in results.items() if method not in {"jsonrpcs"}
+        value
+        for method, value in results.items()
+        if method not in {"jsonrpcs"} and method not in skipped
     )
+    results["skipped"] = sorted(skipped)
     results["jsonrpcs"] = reachable
     results["reachable"] = reachable
     results["unknown"] = not reachable
@@ -232,10 +238,11 @@ def missing_capabilities(result: Mapping[str, Any] | None) -> list[str]:
     """Names of individual capabilities that are not ``True`` in *result*."""
     if not result:
         return list(CAPABILITY_KEYS)
+    skipped = set(result.get("skipped") or [])
     return [
         name
         for name in CAPABILITY_KEYS
-        if result.get(name) is not True
+        if name not in skipped and result.get(name) is not True
     ]
 
 

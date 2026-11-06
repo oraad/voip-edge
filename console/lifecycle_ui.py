@@ -7,6 +7,7 @@ because lifecycle performs blocking sqlite + RPC work.
 """
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
@@ -14,7 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 from . import lifecycle, settings as settings_module
-from .errors import ConsoleError, ValidationError
+from .errors import ConsoleError, DBBusy, ValidationError
 from .security import is_authenticated
 from .sidecar import Sidecar
 
@@ -91,6 +92,8 @@ async def park_submit(request: Request, domain: str):
         )
     except ConsoleError as exc:
         return _error_page(exc)
+    except sqlite3.Error as exc:
+        return _error_page(DBBusy(f"edge database error: {exc}"))
     return RedirectResponse(_flash(domain, "Parked"), status_code=303, headers=NO_STORE)
 
 
@@ -120,6 +123,8 @@ async def restore_submit(request: Request, domain: str):
         )
     except ConsoleError as exc:
         return _error_page(exc)
+    except sqlite3.Error as exc:
+        return _error_page(DBBusy(f"edge database error: {exc}"))
     return RedirectResponse(_flash(domain, "Restored"), status_code=303, headers=NO_STORE)
 
 
@@ -137,7 +142,12 @@ def destroy_confirm(request: Request, domain: str):
     parked = False
     if not active:
         try:
-            parked = Sidecar(sidecar_path).load_snapshot(domain) is not None
+            sc = Sidecar(sidecar_path)
+            parked = sc.load_snapshot(domain) is not None and (
+                lifecycle._snapshot_is_parked(sc, domain)
+                if not Path(edge_path).is_file()
+                else True
+            )
         except Exception:
             parked = False
     return _render(
@@ -164,4 +174,6 @@ async def destroy_submit(request: Request, domain: str):
         )
     except ConsoleError as exc:
         return _error_page(exc)
+    except sqlite3.Error as exc:
+        return _error_page(DBBusy(f"edge database error: {exc}"))
     return RedirectResponse(_flash(domain, "Destroyed"), status_code=303, headers=NO_STORE)

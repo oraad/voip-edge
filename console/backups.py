@@ -260,6 +260,7 @@ def rotate_backups(
         _cleanup(
             old,
             Path(str(old) + ".parked.json"),
+            Path(str(old) + ".parked.json.tmp"),
             Path(str(old) + ".tmp"),
             Path(str(old) + ".console.sqlite.bak"),
             Path(str(old) + ".console.sqlite.bak.tmp"),

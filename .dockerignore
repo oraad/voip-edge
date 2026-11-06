@@ -9,8 +9,12 @@
 *.sqlite-shm
 *.console.sqlite.bak
 *.parked.json
+*.sqlite.tmp
+*.console.sqlite.bak.tmp
+*.parked.json.tmp
 .env
 .env.*
+*tsig*
 *.env
 !.env.example
 console-data

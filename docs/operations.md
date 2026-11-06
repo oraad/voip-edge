@@ -167,8 +167,9 @@ read the status strip / `core.uptime` surface.
 ## Exposure and Pangolin SSO
 
 Production binds `100.64.0.9:8080` on host networking and is exposed only
-through a Pangolin resource with SSO in front. The console token remains ON as a
-second factor. Do not publish the port directly or bypass the resource.
+through a Pangolin resource with SSO in front. The console token is a second
+factor only when console OIDC is not enabled; with OIDC on it is the break-glass
+alternative. Do not publish the port directly or bypass the resource.
 
 - Terminate TLS at Pangolin and set `CONSOLE_SECURE_COOKIE=1`.
 - `/health` is intentionally unauthenticated so the container healthcheck and

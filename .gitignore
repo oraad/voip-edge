@@ -6,6 +6,9 @@ __pycache__/
 *.sqlite-shm
 *.console.sqlite.bak
 *.parked.json
+*.sqlite.tmp
+*.console.sqlite.bak.tmp
+*.parked.json.tmp
 console-data/
 .pytest_cache/
 
@@ -22,6 +25,8 @@ tls/
 certs/
 backups/
 tools/private-deny.txt
+*technitium_tsig*
+*tsig*
 .env
 .env.*
 *.env

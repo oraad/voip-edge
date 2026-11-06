@@ -111,6 +111,12 @@
     <span class="spacer meta mono">console v1</span>
     {% endif %}
   </header>
+  {% if st.schema_check_deferred|default(false) %}
+  <div class="banner banner-global warn" role="status">
+    <strong>database schema check deferred</strong> — the edge database was busy
+    at startup; writes stay refused until a recheck succeeds.
+  </div>
+  {% endif %}
   {% if st.descriptor_problems|default(false) %}
   <div class="banner banner-global err" role="alert">
     <strong>database schema/version mismatch</strong> — writes are refused.

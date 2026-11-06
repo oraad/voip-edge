@@ -59,7 +59,7 @@ Use the repo virtualenv; there is no network or install step in this workspace.
 .venv/bin/python -m pytest -q
 ```
 
-Current baseline: **769 passed, 1 deselected**. Focused runs are fine while
+Current baseline: **770 passed, 1 deselected**. Focused runs are fine while
 developing:
 
 ```bash
@@ -150,7 +150,7 @@ descriptor/SQLite/reload rules.
   `CONSOLE_THROTTLE_TENANTDOM` is reserved but not read yet; throttles come from
   `console/tables.yaml`. Restart after changing env values (read at import).
 - **Testing a packaging change.** Run `.venv/bin/python -m pytest` (baseline
-  **769 passed, 1 deselected**), `.venv/bin/python -m compileall console`
+  **770 passed, 1 deselected**), `.venv/bin/python -m compileall console`
   (offline smoke), and `./tools/check-privacy.sh --all`. Do not put `pytest` or
   test doubles in the image, and do not claim `docker build` succeeded unless
   it actually ran on a network-enabled host.

@@ -157,6 +157,9 @@ def build_status(app: Any = None) -> dict[str, Any]:
         "descriptor_problems": list(
             getattr(getattr(app, "state", None), "descriptor_problems", []) or []
         ),
+        "schema_check_deferred": bool(
+            getattr(getattr(app, "state", None), "schema_check_deferred", False)
+        ),
         "pending_reloads": pending,
         "sidecar_available": pending is not None,
         "sidecar_error": sidecar_error,

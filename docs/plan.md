@@ -9,7 +9,7 @@
 ## 0. Decisions locked with the operator (2026-11-05)
 
 1. One-time voip-edge restart to load `jsonrpcs` is approved (WITH_CONSOLE ifdef).
-2. Exposure: Pangolin resource with SSO in front; console in the same compose stack; `network_mode: host`, binds `100.64.0.9:8080`. Console token ON as a second factor regardless.
+2. Exposure: Pangolin resource with SSO in front; console in the same compose stack; `network_mode: host`, binds `100.64.0.9:8080`. Console token available as break-glass; a second factor only when console OIDC is not enabled.
 3. Wire-IP remains a manual wizard step with inline guidance.
 4. Online DB backups (SQLite backup API, WAL-safe) before every edge-mutating lifecycle op (park, restore, active destroy), rotate keep-5 (global across all backups, regardless of purpose tag). Parked destroy only removes the sidecar snapshot.
 

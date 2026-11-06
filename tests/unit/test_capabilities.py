@@ -173,3 +173,6 @@ def test_probe_can_skip_the_destructive_delete_check(fake):
     result = probe(fake, allow_delete=False)
     assert fake.calls_for("htable.delete") == []
     assert result["htable.delete"] is False
+    assert result["skipped"] == ["htable.delete"]
+    assert result["ok"] is True
+    assert missing_capabilities(result) == []

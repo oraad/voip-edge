@@ -40,6 +40,8 @@ while IFS= read -r f; do
             echo "privacy: refusing database file: $f" >&2; fail=1 ;;
         *.console.sqlite.bak|*.parked.json)
             echo "privacy: refusing backup/snapshot companion: $f" >&2; fail=1 ;;
+        *.sqlite.tmp|*.console.sqlite.bak.tmp|*.parked.json.tmp)
+            echo "privacy: refusing partial backup: $f" >&2; fail=1 ;;
         *.key|*.pem|*.crt|*.cer|*privkey*|*fullchain*)
             echo "privacy: refusing key/cert material: $f" >&2; fail=1 ;;
         *technitium_tsig*|*/tls/*|/acme/*|*/acme/data/*|*console-data/*|*/backups/*)

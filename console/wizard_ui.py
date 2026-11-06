@@ -52,6 +52,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import db, descriptors, validators
 from .backups import create_backup
+from .errors import ValidationError
 from .security import read_session, is_authenticated
 
 router = APIRouter()
@@ -1102,6 +1103,37 @@ def _apply_rows(conn: sqlite3.Connection, writes: Iterable[tuple[str, dict]]) ->
         _insert_row(conn, table, row)
 
 
+def _assert_apply_conflicts(
+    conn: sqlite3.Connection,
+    draft: WizardDraft,
+    writes: Iterable[tuple[str, dict]],
+    tableset: descriptors.TableSet,
+) -> None:
+    """Re-check identity/prefix uniqueness inside the write transaction.
+
+    Step validation happens before the write lock; two concurrent applies can
+    otherwise pick the same tenantid/set/landline.  Re-run the DB rules here
+    and refuse the batch (the transaction rolls back).
+    """
+    errors, _ = validate_step(1, draft, conn, tableset)
+    if errors:
+        raise ValidationError(
+            summary="The home changed while you were reviewing: "
+            + "; ".join(message for messages in errors.values() for message in messages)
+        )
+    for table, row in writes:
+        if table != "dispatcher":
+            continue
+        setid = row.get("setid")
+        taken = conn.execute(
+            "SELECT 1 FROM dispatcher WHERE setid = ? LIMIT 1", (setid,)
+        ).fetchone()
+        if taken is not None:
+            raise ValidationError(
+                summary=f"Route set {setid} was taken by another home; retry."
+            )
+
+
 # ---------------------------------------------------------------------------
 # routes
 # ---------------------------------------------------------------------------
@@ -1241,6 +1273,7 @@ async def _apply(request: Request, conn: sqlite3.Connection):
 
     try:
         with db.write_transaction(conn):
+            _assert_apply_conflicts(conn, draft, writes, tableset)
             _apply_rows(conn, writes)
     except Exception as exc:  # noqa: BLE001 — any failure rolls back
         return _render(

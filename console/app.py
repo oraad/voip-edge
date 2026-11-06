@@ -147,11 +147,12 @@ def create_app() -> FastAPI:
             except sqlite3.OperationalError as exc:
                 text = str(exc).lower()
                 if "locked" in text or "busy" in text:
-                    # Transient startup lock (e.g. WAL switch): do not turn
-                    # it into a permanent "schema mismatch" and block writes.
+                    # Transient startup lock (e.g. WAL switch): keep writes
+                    # refused until a recheck succeeds; do not call it clean.
                     observability.log_event(
                         "schema.check.deferred", error=str(exc)[:200]
                     )
+                    app.state.schema_check_deferred = True
                     app.state.descriptor_problems = []
                 else:
                     app.state.descriptor_problems = [
@@ -180,9 +181,12 @@ def create_app() -> FastAPI:
             cfg = settings_module.settings
             while not sweeper_stop.is_set():
                 try:
+                    if getattr(app.state, "schema_check_deferred", False):
+                        _revalidate_schema()
                     if (
                         settings_module.settings.readonly
                         or app.state.descriptor_problems
+                        or getattr(app.state, "schema_check_deferred", False)
                     ):
                         observability.log_event(
                             "sweeper.skipped",
@@ -203,7 +207,8 @@ def create_app() -> FastAPI:
                         app.state.capabilities = capabilities.probe(
                             _get_rpc(),
                             allow_delete=not settings_module.settings.readonly
-                            and not app.state.descriptor_problems,
+                            and not app.state.descriptor_problems
+                            and not app.state.schema_check_deferred,
                         )
                     else:
                         # Kamailio may have removed the socket: do not keep a
@@ -320,9 +325,11 @@ def create_app() -> FastAPI:
             )
 
         # Schema/version mismatch: refuse writes before CSRF or route deps.
+        if getattr(app.state, "schema_check_deferred", False):
+            _revalidate_schema()
         problems = getattr(app.state, "descriptor_problems", None)
         if (
-            problems
+            (problems or getattr(app.state, "schema_check_deferred", False))
             and request.method not in SAFE_METHODS
             and request.url.path not in READONLY_EXEMPT_PATHS
         ):
@@ -492,6 +499,7 @@ def create_app() -> FastAPI:
     app.state.rpc = None  # set on first use; tests may pre-inject
     app.state.capabilities = None  # T9 startup probe result (advisory only)
     app.state.descriptor_problems = []  # startup schema/version check
+    app.state.schema_check_deferred = False  # transient startup lock
 
     _lazy_lock = threading.RLock()  # worker factory -> rpc factory nests
 
@@ -501,6 +509,41 @@ def create_app() -> FastAPI:
                 if app.state.rpc is None:
                     app.state.rpc = app.state.rpc_factory()
         return app.state.rpc
+
+    def _revalidate_schema() -> None:
+        """Retry a deferred startup schema check; clear only on success."""
+        if not getattr(app.state, "schema_check_deferred", False):
+            return
+        cfg = settings_module.settings
+        if not Path(cfg.db_path).is_file():
+            return
+        try:
+            from . import db as db_module
+            from . import descriptors as descriptor_mod
+
+            conn = db_module.connect(cfg.db_path)
+            try:
+                problems = descriptor_mod.validate_against_db(
+                    descriptor_mod.load(), conn
+                )
+            finally:
+                conn.close()
+        except sqlite3.OperationalError as exc:
+            text = str(exc).lower()
+            if "locked" in text or "busy" in text:
+                return
+            app.state.descriptor_problems = [
+                f"schema consistency check failed: {exc}"
+            ]
+            app.state.schema_check_deferred = False
+        except BaseException as exc:
+            app.state.descriptor_problems = [
+                f"schema consistency check failed: {exc}"
+            ]
+            app.state.schema_check_deferred = False
+        else:
+            app.state.descriptor_problems = problems
+            app.state.schema_check_deferred = False
 
     def _startup_probe() -> None:
         """Advisory probe on a daemon thread; startup never waits on Kamailio."""
@@ -512,7 +555,8 @@ def create_app() -> FastAPI:
             result = capabilities.probe(
                 _get_rpc(),
                 allow_delete=not settings_module.settings.readonly
-                and not app.state.descriptor_problems,
+                and not app.state.descriptor_problems
+                and not app.state.schema_check_deferred,
             )
             app.state.capabilities = result
         except BaseException:
