@@ -16,16 +16,21 @@ package names are fixed so they do not change if the repository is renamed.
 
 Both workflows run on:
 
-- **push of a release tag** `v*` — each image gets the tag without `v`
-  (for example `v0.1.11` → `0.1.11`), plus a short-SHA tag and `latest`;
+- **push of a release tag** `v*` — the console gets the tag without `v`
+  (for example `v0.1.11` → `0.1.11`); the rtpengine image gets the **upstream
+  rtpengine source release** (`mr26.3.1.2` by default), because its version
+  tracks upstream, not the console;
 - **manual dispatch** — tags the build with the short SHA and also moves
   `latest`. For rtpengine the dispatch input `rtpe_version` selects the
-  upstream source tag (default `mr26.3.1.2`).
+  upstream source tag; leaving it empty uses the default in
+  [`Dockerfile.rtpengine`](../../Dockerfile.rtpengine).
+
+Both images also get a short-SHA tag and `latest`.
 
 The rtpengine image is built from
 [`Dockerfile.rtpengine`](../../Dockerfile.rtpengine), which compiles upstream
 source. A manual rtpengine run is the way to test a new upstream release
-without creating a version tag.
+without creating a console version tag.
 
 `latest` is emitted by an explicit `type=raw,value=latest` rule, so both
 workflows always publish it alongside the version and short-SHA tags.
@@ -77,8 +82,9 @@ newest published build and is intended for lab/staging only.
 
 1. Bump the version in the repository and tag it (`vX.Y.Z`).
 2. Push the tag; both workflows publish their image.
-3. Verify the package tags in GitHub → Packages and, for private packages, that
-   the deployment host can `docker login ghcr.io`.
+3. Verify the package tags in GitHub → Packages: the console has `X.Y.Z`; the
+   rtpengine image has the upstream `mr...` tag. For private packages, check
+   that the deployment host can `docker login ghcr.io`.
 4. Set `CONSOLE_IMAGE` / `RTPENGINE_IMAGE` in the deployment environment and
    pull. Keep the previous image tag for rollback.
 5. After a successful rollout, consider pinning the verified digest in `.env`.

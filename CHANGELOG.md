@@ -13,7 +13,9 @@ carry fixes.
 
 - `Dockerfile.rtpengine` is now part of this repository, together with
   `.github/workflows/publish-rtpengine.yml`, so the rtpengine image is built and
-  published from the same `v*` release tag as the console.
+  published from the same `v*` release tag as the console. The image is tagged
+  with the upstream rtpengine release (`mr26.3.1.2` by default), not the console
+  version.
 
 ### Changed
 

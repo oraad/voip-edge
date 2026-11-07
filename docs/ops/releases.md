@@ -18,10 +18,11 @@ version = "0.1.11"
 The Python project is `voip-edge`; the image keeps the service name and must
 carry the same version: `voip-edge-console:0.1.11`. The same version is
 published to GHCR as `ghcr.io/<owner>/voip-edge-console:0.1.11`; see
-[GitHub Packages](packages.md). The `v<version>` tag also publishes the
-rtpengine image as `ghcr.io/<owner>/voip-edge-rtpengine:<version>`, built from
-[`Dockerfile.rtpengine`](../../Dockerfile.rtpengine). Use an immutable version
-tag (optionally pinned by digest in production), never `latest` for a
+[GitHub Packages](packages.md). The same `v<version>` tag also publishes the
+rtpengine image from [`Dockerfile.rtpengine`](../../Dockerfile.rtpengine), but
+that image is tagged with the **upstream rtpengine source release**
+(`mr26.3.1.2` by default), not with the console version. Use an immutable
+version tag (optionally pinned by digest in production), never `latest` for a
 deployment that needs rollback.
 
 ## What requires a rebuild

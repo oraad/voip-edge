@@ -164,9 +164,12 @@ documented in [docs/oidc.md](docs/oidc.md).
 | Image | Registry | Tags |
 |---|---|---|
 | Console | `ghcr.io/oraad/voip-edge-console` | `<version>`, `sha-<short>`, `latest` |
-| rtpengine | `ghcr.io/oraad/voip-edge-rtpengine` | `<version>`, `sha-<short>`, `latest` |
+| rtpengine | `ghcr.io/oraad/voip-edge-rtpengine` | `<rtpe_version>`, `sha-<short>`, `latest` |
 
 - Both images are published on a `v*` tag or by manual workflow dispatch.
+- The console version tracks this repository (`0.1.11`, `0.1.12`, …).
+  rtpengine tracks the **upstream source release** (`mr26.3.1.2` by default),
+  not the console version.
 - `latest` follows the newest published build and is intended for lab/staging.
   Pin a version tag, or a digest, in production.
 - See [docs/ops/packages.md](docs/ops/packages.md) for publishing, private

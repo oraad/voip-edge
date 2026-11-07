@@ -1,11 +1,11 @@
 # Publish the rtpengine image to GitHub Packages (GHCR).
 #
-# Trigger: push a release tag (`v*`) or run manually. The image is tagged
-# `ghcr.io/<owner>/voip-edge-rtpengine:<version>` (tag without the `v` prefix),
-# plus `:<short-sha>` and `:latest`.
+# Trigger: push a release tag (`v*`) or run manually. The image is tagged with
+# the upstream rtpengine source release (`mr26.3.1.2` by default), plus
+# `:<short-sha>` and `:latest` — not with the console's version tag.
 #
-# The image is built from upstream source; a manual run can select the upstream
-# release with the `rtpe_version` input (default: mr26.3.1.2).
+# A manual run can select another upstream release with the `rtpe_version`
+# input; on a `v*` tag the default comes from Dockerfile.rtpengine.
 name: publish-rtpengine
 
 on:
@@ -13,8 +13,8 @@ on:
     inputs:
       rtpe_version:
         description: Upstream rtpengine release (mrXX...)
-        required: true
-        default: mr26.3.1.2
+        required: false
+        default: ""
   push:
     tags: ["v*"]
 
@@ -27,6 +27,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve rtpengine version
+        id: rtpe
+        run: |
+          version="${{ inputs.rtpe_version }}"
+          if [ -z "$version" ]; then
+            version="$(sed -n 's/^ARG RTPE_VERSION=//p' Dockerfile.rtpengine | head -n1)"
+          fi
+          if [ -z "$version" ]; then
+            echo "Could not determine RTPE_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Lowercase repository owner (GHCR requires lowercase)
         id: owner
@@ -48,7 +61,7 @@ jobs:
         with:
           images: ghcr.io/${{ steps.owner.outputs.name }}/voip-edge-rtpengine
           tags: |
-            type=semver,pattern={{version}}
+            type=raw,value=${{ steps.rtpe.outputs.version }}
             type=sha
             type=raw,value=latest
 
@@ -63,5 +76,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             OCI_SOURCE=${{ github.server_url }}/${{ github.repository }}
-            IMAGE_VERSION=${{ github.ref_name }}
-            RTPE_VERSION=${{ inputs.rtpe_version || 'mr26.3.1.2' }}
+            IMAGE_VERSION=${{ steps.rtpe.outputs.version }}
+            RTPE_VERSION=${{ steps.rtpe.outputs.version }}
