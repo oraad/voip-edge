@@ -7,6 +7,19 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While the project is pre-1.0, MINOR bumps carry feature sets and PATCH bumps
 carry fixes.
 
+## [Unreleased]
+
+### Added
+
+- `Dockerfile.rtpengine` is now part of this repository, together with
+  `.github/workflows/publish-rtpengine.yml`, so the rtpengine image is built and
+  published from the same `v*` release tag as the console.
+
+### Changed
+
+- README rewritten as an overview and installation guide focused on the
+  project's purpose and usage.
+
 ## [0.1.11] - 2026-11-06
 
 ### Changed

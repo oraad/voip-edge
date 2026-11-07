@@ -1,7 +1,7 @@
 # Deploying the console in the edge stack
 
 This is the console-specific deployment runbook. The Kamailio/Pangolin/TLS
-stack itself is documented in `/root/voip-stack/kamailio-edge/DEPLOY.md`; read
+stack itself is documented in the edge-stack `DEPLOY.md`; read
 that first and keep the two stories aligned rather than copying its steps here.
 
 The console is a **single-process** FastAPI container. It:
@@ -160,7 +160,7 @@ by the current settings module; per-table throttles come from
 Plain Docker, with the host `console` GID baked in for the non-root option:
 
 ```bash
-cd /root/voip-edge
+cd voip-edge
 CONSOLE_GID="$(getent group console | cut -d: -f3)"
 docker build -f Dockerfile.console \
   --build-arg CONSOLE_GID="${CONSOLE_GID}" \
@@ -190,7 +190,7 @@ checkout for release tags.
 
 ## 6. Start the service
 
-Deploy `/root/voip-edge/compose.yml` as its **own** Arcane stack on the same
+Deploy this repository's `compose.yml` as its **own** Arcane stack on the same
 host, with the same `EDGE_HOME` / `EDGE_RUN` values as the edge stack. Do not
 merge the service into the edge compose file: its `env_file: .env` and
 `build.context: .` are relative to the console compose file, so a copy into
@@ -235,7 +235,7 @@ unreachable banner), read-only state, pending reloads, sidecar state.
 ### 7.1 Pangolin SSO resource
 
 Pangolin UI labels vary by version; this is the same resource pattern used in
-`/root/voip-stack/kamailio-edge/DEPLOY.md` §C, applied to HTTP instead of SIP.
+the edge-stack `DEPLOY.md` §C, applied to HTTP instead of SIP.
 
 1. **Pangolin UI → Resources → New resource** (or the equivalent in your
    Pangolin version).

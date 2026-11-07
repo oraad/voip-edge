@@ -18,8 +18,11 @@ version = "0.1.11"
 The Python project is `voip-edge`; the image keeps the service name and must
 carry the same version: `voip-edge-console:0.1.11`. The same version is
 published to GHCR as `ghcr.io/<owner>/voip-edge-console:0.1.11`; see
-[GitHub Packages](packages.md). Use an immutable version tag (optionally pinned
-by digest in production), never `latest` for a deployment that needs rollback.
+[GitHub Packages](packages.md). The `v<version>` tag also publishes the
+rtpengine image as `ghcr.io/<owner>/voip-edge-rtpengine:<version>`, built from
+[`Dockerfile.rtpengine`](../../Dockerfile.rtpengine). Use an immutable version
+tag (optionally pinned by digest in production), never `latest` for a
+deployment that needs rollback.
 
 ## What requires a rebuild
 
@@ -95,7 +98,8 @@ refuses all writes (reads remain available) until it is fixed.
 
 - [ ] version bumped in `pyproject.toml` + `CHANGELOG.md`
 - [ ] `pytest -q` and `compileall console` pass
-- [ ] image built once and tagged with the version
+- [ ] console image built once and tagged with the version
+- [ ] `v<version>` pushed; both GHCR workflows succeed
 - [ ] `compose.yml` image tag updated (and previous tag retained)
 - [ ] `CONSOLE_READONLY=1` deploy verified
 - [ ] Pangolin SSO resource still reachable and `/health` unchanged

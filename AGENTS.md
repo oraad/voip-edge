@@ -9,7 +9,7 @@ and owns tenant lifecycle (park/restore/destroy) plus online backups.
 
 - Spec: `docs/plan.md` (v2) · validation matrix: `docs/validation-matrix.md`
 - Operator runbook: `docs/operations.md` · design artifact: `docs/wireframe.html`
-- Edge-stack deployment (Kamailio, Pangolin, TLS): `/root/voip-stack/kamailio-edge/DEPLOY.md`
+- Edge-stack deployment (Kamailio, Pangolin, TLS): the edge-stack `DEPLOY.md`
 
 Do not edit `docs/wireframe.html` as part of implementation work; it is the
 design reference, not a template source.

@@ -1,0 +1,70 @@
+# Dockerfile.rtpengine — rtpengine built from upstream source.
+#
+#   docker build -f Dockerfile.rtpengine -t voip-edge-rtpengine .
+#
+# Published as ghcr.io/<owner>/voip-edge-rtpengine by
+# .github/workflows/publish-rtpengine.yml on a v* tag or manual dispatch.
+#
+# Bump the upstream version with:  --build-arg RTPE_VERSION=mr26.3.1.2
+# (validated by building mr26.3.1.2 natively on trixie and running it
+#  against the edge lab: kamailio's rtpengine module found/enabled it on
+#  connect; userspace forwarding table=-1.)
+#
+# Build choices: relay-only daemon (no recording daemon / CLI / man pages),
+# no transcoding, no iptables kernel hooks, no MQTT/systemd integration —
+# this deployment does pure userspace relay (table=-1), so the image links
+# only what the daemon unconditionally needs (lib/deps.Makefile +
+# daemon/Makefile LDLIBS).
+#
+# Note: upstream's flag generator still *requires* a few dev packages at
+# build time even when the feature isn't linked (opus, jwt, mysqlclient) —
+# they cost nothing at runtime (not linked in our profile).
+
+FROM debian:trixie-slim AS build
+
+ARG RTPE_VERSION=mr26.3.1.2
+ARG OCI_SOURCE=""
+ARG IMAGE_VERSION=""
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential pkgconf git gperf ca-certificates \
+        libglib2.0-dev libjson-glib-dev libcurl4-openssl-dev libssl-dev \
+        libevent-dev libpcre2-dev libwebsockets-dev zlib1g-dev \
+        libncurses-dev libopus-dev libjwt-dev libhiredis-dev libpcap0.8-dev \
+        default-libmysqlclient-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch "$RTPE_VERSION" \
+        https://github.com/sipwise/rtpengine.git /src
+
+WORKDIR /src
+RUN DEB_BUILD_PROFILES="pkg.ngcp-rtpengine.no-transcoding pkg.ngcp-rtpengine.nobcg729" \
+        make -C daemon -j"$(nproc)" rtpengine
+
+
+FROM debian:trixie-slim
+
+ARG OCI_SOURCE=""
+ARG IMAGE_VERSION=""
+
+LABEL org.opencontainers.image.title="voip-edge-rtpengine" \
+      org.opencontainers.image.source="${OCI_SOURCE}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.description="VoIP edge media relay (rtpengine)"
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libglib2.0-0t64 zlib1g libpcre2-8-0 libcurl4t64 libssl3t64 \
+        libevent-2.1-7t64 libevent-core-2.1-7t64 libevent-pthreads-2.1-7t64 \
+        libatomic1 \
+        libpcap0.8t64 libhiredis1.1.0 \
+        libjson-glib-1.0-0 libwebsockets19t64 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /src/daemon/rtpengine /usr/sbin/rtpengine
+
+# fail the BUILD (not the first call) if any shared library is missing:
+RUN /usr/sbin/rtpengine --version
+
+# control: /etc/rtpengine/rtpengine.conf (mounted by compose)
+ENTRYPOINT ["/usr/sbin/rtpengine", "--config-file=/etc/rtpengine/rtpengine.conf", "--foreground", "--log-stderr"]

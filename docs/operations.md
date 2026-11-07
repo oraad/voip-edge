@@ -2,7 +2,7 @@
 
 Operator-facing skeleton. It covers the console only; the edge stack (Kamailio,
 Pangolin, TLS, rtpengine) is documented in
-`/root/voip-stack/kamailio-edge/DEPLOY.md`. Do not copy that file here — link to
+the edge-stack `DEPLOY.md`. Do not copy that file here — link to
 it so the two deployment stories cannot drift.
 
 The console is a single-process FastAPI app. Run exactly one instance
@@ -178,5 +178,5 @@ alternative. Do not publish the port directly or bypass the resource.
 - First production session: `CONSOLE_READONLY=1`, verify reads and the status
   strip, then enable writes.
 - Follow the existing Pangolin resource pattern in
-  `/root/voip-stack/kamailio-edge/DEPLOY.md` §C and the concrete steps in
+  the edge-stack `DEPLOY.md` §C and the concrete steps in
   `docs/ops/deploy.md` rather than inventing a second exposure path.

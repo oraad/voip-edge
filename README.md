@@ -1,148 +1,249 @@
-# VoIP Edge Console
+# VoIP Edge
 
-Operator web console for the Kamailio edge proxy described in `docs/plan.md`.
-It manages homes (tenants), landlines, route sets, number rules and trusted
-sources, drives Kamailio reloads, and owns park/restore/destroy lifecycle plus
-online backups.
+Operator console and container images for a self-hosted, multi-tenant SIP edge
+built on **Kamailio** and **rtpengine**.
 
-## Status
+[![publish console](https://github.com/oraad/voip-edge/actions/workflows/publish-ghcr.yml/badge.svg)](https://github.com/oraad/voip-edge/actions/workflows/publish-ghcr.yml)
+[![publish rtpengine](https://github.com/oraad/voip-edge/actions/workflows/publish-rtpengine.yml/badge.svg)](https://github.com/oraad/voip-edge/actions/workflows/publish-rtpengine.yml)
+![Python 3.15](https://img.shields.io/badge/python-3.15-blue)
 
-Implementation tasks T0–T10 are complete and have passed multiple independent
-review rounds. A few explicit documentation/coverage follow-ups remain: the
-validation matrix still has `TODO` rows, the Homes coherence column is a
-placeholder. The image has been built and smoke-tested locally. The current
-release is **0.1.11**.
+## Overview
 
-| Task | Scope | State |
+VoIP Edge is the operator-facing control plane for a home/small-office VoIP
+edge. It manages **homes (tenants)**, landlines, ring groups, dispatcher sets,
+number rules and trusted tunnel sources, writes the Kamailio routing tables,
+and triggers reloads over Kamailio's JSON-RPC socket. It also owns the
+park/restore/destroy lifecycle and online SQLite backups.
+
+The edge itself runs two containers:
+
+- **Kamailio** — SIP proxy for tenant detection, REGISTER relay and INVITE
+  routing;
+- **rtpengine** — userspace media relay for NATed phones.
+
+The console is a single-process FastAPI app. It uses host networking, talks to
+Kamailio over a unix datagram socket, and is meant to sit behind a reverse proxy
+with SSO (for example Pangolin/Traefik). It is **not** a public endpoint.
+
+## Features
+
+- Multi-tenant data model: domains, landlines, ring groups, dispatcher sets,
+  dialplan partitions and trusted tunnel sources.
+- Descriptor-driven create/edit/delete with validation, reference guards and
+  packed mtree encoding.
+- Live dashboard: registered phones, route-set probes and edge health.
+- Guided onboarding wizard for a new home.
+- Park, restore and destroy lifecycle with online SQLite backups (keep-5).
+- Single uvicorn worker; process-local locks, queues and session state stay
+  consistent.
+- OIDC SSO with break-glass token login; CSRF protection, secure cookies and
+  login rate limiting.
+- Published console and rtpengine images, built by GitHub Actions.
+
+## Architecture
+
+```text
+ phones / homes ──SIP/TLS──▶ Kamailio edge ──SIP──▶ tenant voip-stack / PSTN
+                                   │
+                              rtpengine
+                                   │
+ operator ──HTTPS/SSO──▶ console ──┴── JSON-RPC (unix socket) + SQLite
+```
+
+| Component | Role |
+|---|---|
+| `console/` | FastAPI operator console; edits the edge DB and calls Kamailio RPC |
+| `kamailio/` | Edge SIP configuration and routing fragments |
+| `rtpengine/` | Userspace media-relay configuration |
+| `deploy/` | ACME and certificate deployment helpers |
+| `compose.yml` | Host-networked console service |
+
+## Quick start
+
+### Prerequisites
+
+- Docker Engine with Compose v2.
+- A running Kamailio edge stack with `jsonrpcs` enabled and its database at
+  `${EDGE_HOME}/kamailio/db/edge.sqlite`.
+- A private or tunnel address for the console (for example `100.64.0.9`).
+- A reverse proxy with SSO in front of the console.
+
+The full edge and console runbook is in
+[docs/ops/deploy.md](docs/ops/deploy.md).
+
+### 1. Pull the image
+
+```bash
+docker pull ghcr.io/oraad/voip-edge-console:0.1.11
+```
+
+The images are public; no registry login is required. For a fork, replace
+`oraad` with your GitHub owner.
+
+### 2. Configure
+
+```bash
+git clone https://github.com/oraad/voip-edge.git
+cd voip-edge
+cp .env.example .env
+```
+
+Set at least:
+
+```dotenv
+EDGE_HOME=/opt/voip-edge
+EDGE_RUN=/run/kamailio-edge
+CONSOLE_BIND=100.64.0.9
+CONSOLE_PORT=8080
+CONSOLE_TOKEN=<random token>
+CONSOLE_SECRET=<random secret>
+CONSOLE_IMAGE=ghcr.io/oraad/voip-edge-console:0.1.11
+```
+
+Generate the credentials with `openssl rand -hex 32`. If either value is left
+blank the process generates a random one, which makes login impossible until
+you set it.
+
+### 3. Start
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### 4. Open the console
+
+From the host or the overlay:
+
+```bash
+curl http://<CONSOLE_BIND>:<CONSOLE_PORT>/health
+```
+
+Then open the console through the SSO-protected resource and sign in with the
+token (or OIDC). The onboarding wizard creates the first home.
+
+> Host networking is deliberate. Do not publish `${CONSOLE_BIND}:${CONSOLE_PORT}`
+> directly to the Internet; expose it through the reverse proxy with SSO.
+
+### Build locally instead
+
+```bash
+docker build -f Dockerfile.console -t voip-edge-console:0.1.11 .
+docker compose up -d
+```
+
+## Configuration
+
+Settings are read once at import; restart the container after changing them.
+The full surface, with comments, is in [`.env.example`](.env.example).
+
+| Variable | Default | Purpose |
 |---|---|---|
-| T0 | Descriptor engine + pack/unpack golden vectors | done |
-| T1 | RPC client + serialized reload worker + capability probes | done |
-| T2 | App skeleton, auth/CSRF, health, host-lab harness | done |
-| T3 | Read-only table browser and Homes landing | done |
-| T4 | Create/edit + validation families (T4.1–T4.8) | done; matrix TODOs tracked |
-| T5 | Row delete + reference guards | done |
-| T6 | Live dashboard (registered phones, route-set probes, health) | done; Homes coherence placeholder |
-| T7 | Onboarding wizard | done |
-| T8 | Lifecycle park/restore/destroy + backups | done |
-| T9 | Hardening + observability | done |
-| T10 | Packaging + docs | done; image built and smoke-tested locally |
+| `EDGE_HOME` | `/opt/voip-edge` | Host path holding `kamailio/db` and `console/` |
+| `EDGE_RUN` | `/run/kamailio-edge` | Host run directory with `kamailio_rpc.sock` |
+| `CONSOLE_BIND` | `127.0.0.1` | Bind address; use the tunnel address in production |
+| `CONSOLE_PORT` | `8080` | HTTP port |
+| `CONSOLE_TOKEN` | random | Break-glass login token |
+| `CONSOLE_SECRET` | random | Session-cookie signing secret |
+| `CONSOLE_AUTH_MODE` | `both` | `both`, `oidc` or `token` |
+| `CONSOLE_SECURE_COOKIE` | `0` | Set to `1` behind HTTPS |
+| `CONSOLE_SESSION_TTL` | `43200` | Absolute session lifetime (seconds) |
+| `CONSOLE_LOGIN_RATE` | `5` | Failed logins per minute per source |
+| `CONSOLE_READONLY` | `0` | Disable all writes |
+| `CONSOLE_ALLOWED_SUFFIXES` | `home.example.net` | Comma-separated allowed tenant domain suffixes |
+| `CONSOLE_RPC_SOCK` | `/run/kamailio/kamailio_rpc.sock` | Kamailio JSON-RPC socket |
+| `CONSOLE_RPC_TIMEOUT_MS` | `2000` | Per-RPC timeout |
+| `CONSOLE_ENFORCE_CAPABILITIES` | `0` | Refuse lifecycle actions when the RPC capability probe fails |
 
-Test baseline: **786 passed, 1 deselected** with
-`.venv/bin/python -m pytest`. The live Kamailio park/restore gate is
-`tests/live/run-live.sh` and is run separately (it binds SIP port 5060).
+OIDC variables (`OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`,
+`OIDC_REDIRECT_URI`, `OIDC_ALLOWED_GROUPS`, `OIDC_ALLOWED_EMAIL_DOMAINS`, …) are
+documented in [docs/oidc.md](docs/oidc.md).
 
-The Docker image was built and smoke-tested locally: `Dockerfile.console` on
-`python:3.15-slim` (Python 3.15.2) starts as the non-root `console` user,
-answers `/health` with 200, and reaches Docker health status `healthy`. Rebuild
-and re-verify on the deployment host; see `docs/ops/deploy.md`.
+## Container images
 
-## Layout
+| Image | Registry | Tags |
+|---|---|---|
+| Console | `ghcr.io/oraad/voip-edge-console` | `<version>`, `sha-<short>`, `latest` |
+| rtpengine | `ghcr.io/oraad/voip-edge-rtpengine` | `<version>`, `sha-<short>`, `latest` |
 
-```
-console/            Python package
-  app.py            FastAPI factory, auth/CSRF, health
-  settings.py       env-var config surface (plan §10)
-  errors.py         frozen error taxonomy
-  descriptors.py    tables.yaml loader + DB consistency check
-  pack.py           packed mtree codec and flags
-  db.py             WAL connections, generic reads, write transaction lock
-  rpc.py            unix-datagram JSON-RPC client
-  reloads.py        one background ReloadWorker + coalescing throttle
-  lifecycle.py      park / restore / destroy state machines
-  backups.py        online SQLite backup, keep-5 rotation
-  sidecar.py        console.sqlite: audit, parked, intents, pending reloads
-  security.py       session cookie, CSRF, login rate limit
-  homes_ui.py       Homes landing
-  forms_ui.py       descriptor-driven create/edit/delete routes
-  tables_ui.py      generic read-only table browser
-  live.py           live dashboard + polling fragment
-  wizard_ui.py      onboarding wizard
-  capabilities.py   startup RPC capability probe
-  observability.py  structured redacted logs
-  system_ui.py      audit/backups + status-strip routes
-  derivations.py    named `derived:` field rules
-  tables.yaml       five table descriptors (grammar v1)
-web/
-  templates/        Jinja2 shells and generic table templates
-  static/           vendored htmx / PicoCSS (see web/static/README.md)
-tests/
-  unit/ api/        unit and API suites
-  fixtures/         seed DB, edge DB and FakeRPC doubles
-  live/             real-Kamailio lifecycle gate; e2e/ reserved
-docs/
-  plan.md                    spec v2
-  validation-matrix.md       §5.2 rule → test → owner traceability
-  operations.md              operator runbook
-  ops/deploy.md              console deployment in the Arcane stack
-  ops/backups.md             backup + stopped-stack restore runbook
-  ops/releases.md            image versioning, bump and rollback
-  wireframe.html             design artifact (do not edit during implementation)
-  research-*.md              background research
-Dockerfile.console   single-process console image (Python 3.15, workers=1)
-compose.yml          host-networked service for the existing edge stack
-.env.example         plan §10 environment surface with safe defaults
-CHANGELOG.md         Keep a Changelog history
-AGENTS.md            contributor/agent conventions
-```
+- Both images are published on a `v*` tag or by manual workflow dispatch.
+- `latest` follows the newest published build and is intended for lab/staging.
+  Pin a version tag, or a digest, in production.
+- See [docs/ops/packages.md](docs/ops/packages.md) for publishing, private
+  packages and digest pinning.
 
-## Deploy (short form)
-
-The full runbook, including the Kamailio `WITH_CONSOLE` block, group/GID story,
-Pangolin SSO resource and healthcheck semantics, is `docs/ops/deploy.md`.
+Build the images locally:
 
 ```bash
-# Build once, pinned to the code version (no test deps in the image).
-CONSOLE_GID="$(getent group console | cut -d: -f3)"
-docker build -f Dockerfile.console \
-  --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.11 .
-
-cp .env.example .env        # set token, secret, bind, read-only=1 first
-# Deploy compose.yml as its own Arcane stack with the same EDGE_HOME/EDGE_RUN.
+docker build -f Dockerfile.console -t voip-edge-console:local .
+docker build -f Dockerfile.rtpengine -t voip-edge-rtpengine:local .
 ```
 
-The console binds `100.64.0.9:8080` on host networking and is exposed only
-through a Pangolin resource with SSO. The token is a second factor only when
-console OIDC is not enabled; with OIDC on it is break-glass only in `both` mode.
-`/health` is console liveness only and stays 200 when Kamailio is down.
+rtpengine is built from upstream source; the first build takes several minutes.
+Select the upstream release with `--build-arg RTPE_VERSION=mr26.3.1.2`.
 
-## Docs
+## Repository layout
 
-- [Plan](docs/plan.md) — decisions, architecture, task breakdown, review ledger.
-- [Validation matrix](docs/validation-matrix.md) — rule ids, severity and
-  current test/owner traceability; explicit `TODO` gaps remain for some rules.
-- [Operations](docs/operations.md) — env vars, backup/restore, lifecycle and
-  reload troubleshooting, Pangolin exposure.
-- [Deployment](docs/ops/deploy.md) — image build, compose service, mounts,
-  group/permission story, SSO resource, rollout.
-- [Backups and restore](docs/ops/backups.md) — online backups, keep-5 rotation,
-  never hot-swap, stopped-stack recovery.
-- [Releases](docs/ops/releases.md) — image pinned to code, baked
-  `tables.yaml`, bump and rollback.
-- [GitHub Packages](docs/ops/packages.md) — publishing/consuming the console
-  and rtpengine images on GHCR.
-- [Changelog](CHANGELOG.md) — release history and review-round fixes.
-- [Wireframe](docs/wireframe.html) — visual/IA reference.
-- [AGENTS.md](AGENTS.md) — module map, code conventions, deployment
-  conventions, T4.2–T4.8 workflow.
-- Edge-stack deployment: `/root/voip-stack/kamailio-edge/DEPLOY.md`.
+```text
+console/              FastAPI application
+web/                  Jinja2 templates and vendored static assets
+kamailio/             Edge SIP configuration and routes
+rtpengine/            Media-relay configuration
+deploy/               ACME / certificate helpers
+tests/                Unit, API and live-Kamailio tests
+docs/                 Operator runbooks and design notes
+Dockerfile.console    Console image (Python 3.15, one worker)
+Dockerfile.rtpengine  rtpengine image (upstream source build)
+compose.yml           Console service (host networking)
+```
 
-## Not yet
+## Development
 
-- **Image build** — `Dockerfile.console` builds on Python 3.15.2 and the
-  container passes its `/health` healthcheck; the compose pair still needs a
-  first run against a real edge host.
-- **Live/e2e coverage** — `tests/live/` contains the real Kamailio lifecycle
-  journey; broader end-to-end browser coverage is still a follow-up.
-
-## Dev
+Python 3.15 or newer is required.
 
 ```bash
-.venv/bin/python -m pytest             # 786 passed, 1 deselected
-.venv/bin/python -m compileall console # packaging smoke, no network
-./tests/live/run-live.sh               # real Kamailio; run alone
+python3.15 -m venv .venv
+.venv/bin/pip install \
+  'fastapi>=0.162' 'uvicorn>=0.54' 'jinja2>=3.1' 'httpx>=0.28' \
+  'authlib>=1.6' 'cryptography>=43' 'PyYAML>=6' 'MarkupSafe>=3' pytest
+.venv/bin/python -m pytest
 ```
 
-No test touches the live edge; fixtures use temporary databases and a FakeRPC
-datagram double. There is no install step and no network access in this
-workspace.
+The live Kamailio lifecycle gate binds SIP port 5060 and must run on its own:
+
+```bash
+./tests/live/run-live.sh
+```
+
+The console image runs exactly **one** uvicorn worker. Reload serialization,
+the coalescing queue, the write lock and session state are process-local; do
+not add `--workers` or a multi-process manager.
+
+## Documentation
+
+- [Deployment](docs/ops/deploy.md) — edge prerequisites, compose service,
+  mounts, permissions, SSO resource and rollout.
+- [Operations](docs/operations.md) — environment, lifecycle, reload
+  troubleshooting and exposure.
+- [Backups and restore](docs/ops/backups.md) — online backups and stopped-stack
+  recovery.
+- [Releases](docs/ops/releases.md) — image versioning, bump and rollback.
+- [GitHub Packages](docs/ops/packages.md) — publishing and consuming the images.
+- [OIDC](docs/oidc.md) — SSO design and configuration.
+- [Plan](docs/plan.md) — architecture, decisions and task history.
+- [AGENTS.md](AGENTS.md) — module map and contributor conventions.
+
+## Security
+
+- Never expose the console directly to the Internet. Bind it to a private or
+  tunnel address and put an authenticating reverse proxy in front of it.
+- Set `CONSOLE_TOKEN` and `CONSOLE_SECRET` explicitly; the fail-closed random
+  defaults are not usable for a real deployment.
+- The console mounts the Kamailio database read/write and needs write access to
+  the JSON-RPC socket. Treat the host and its tunnel as trusted.
+- Use `CONSOLE_READONLY=1` for a first rollout, then enable writes.
+
+## Contributing
+
+Bug reports and pull requests are welcome. Run the test suite before opening a
+PR and follow the conventions in [AGENTS.md](AGENTS.md).
