@@ -56,7 +56,10 @@
   <h2 style="margin-top:0">Add emergency numbers</h2>
   <p class="sub">Calls to these numbers go to the selected homes' PSTN trunk.</p>
   {% if emergency_partitions %}
-  <form method="post" action="/number-rules/emergency">
+  <form method="post" action="/number-rules/emergency"
+          hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
+          hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
+    <input type="hidden" name="kind" value="emergency">
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="emergency-dpid">Applies to</label>
@@ -76,6 +79,9 @@
       <label for="emergency-description">Description <span class="meta">(optional)</span></label>
       <input id="emergency-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
     </div>
+    <div class="preview" id="rule-preview" role="status" aria-live="polite">
+      <span class="hint">Enter values to preview the pattern.</span>
+    </div>
     <div class="formbar">
       <button class="btn pri" type="submit" {% if status.readonly %}disabled{% endif %}>Add emergency numbers</button>
       <span class="meta">Creates one rule in the selected partition.</span>
@@ -91,7 +97,10 @@
   <h2 style="margin-top:0">Add blocked numbers or ranges</h2>
   <p class="sub">Matches return 403 before any trunk decision.</p>
   {% if blocked_partitions %}
-  <form method="post" action="/number-rules/blocked">
+  <form method="post" action="/number-rules/blocked"
+          hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
+          hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
+    <input type="hidden" name="kind" value="blocked">
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="blocked-dpid">Applies to</label>
@@ -133,6 +142,9 @@
       <label for="blocked-description">Description <span class="meta">(optional)</span></label>
       <input id="blocked-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
     </div>
+    <div class="preview" id="rule-preview" role="status" aria-live="polite">
+      <span class="hint">Enter values to preview the pattern.</span>
+    </div>
     <div class="formbar">
       <button class="btn pri" type="submit" {% if status.readonly %}disabled{% endif %}>Add blocked rule</button>
       <span class="meta">Creates one rule in the selected partition.</span>
@@ -147,7 +159,10 @@
 <section class="panel">
   <h2 style="margin-top:0">Add a custom rule</h2>
   <p class="sub">A custom regex in a partition. It only affects calls when a home uses that partition.</p>
-  <form method="post" action="/number-rules/custom">
+  <form method="post" action="/number-rules/custom"
+          hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
+          hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
+    <input type="hidden" name="kind" value="custom">
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="custom-dpid">Partition</label>
@@ -174,6 +189,9 @@
     <div class="field">
       <label for="custom-description">Description <span class="meta">(optional)</span></label>
       <input id="custom-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
+    </div>
+    <div class="preview" id="rule-preview" role="status" aria-live="polite">
+      <span class="hint">Enter values to preview the pattern.</span>
     </div>
     <div class="formbar">
       <button class="btn pri" type="submit" {% if status.readonly %}disabled{% endif %}>Add custom rule</button>
