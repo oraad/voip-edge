@@ -4,8 +4,8 @@ Both images are published from this repository:
 
 | Image | Workflow |
 |---|---|
-| `ghcr.io/<owner>/voip-edge-console` | `.github/workflows/publish-ghcr.yml` |
-| `ghcr.io/<owner>/voip-edge-rtpengine` | `.github/workflows/publish-rtpengine.yml` |
+| `ghcr.io/<owner>/voip-edge-console` | `.github/workflows/publish-images.yml` |
+| `ghcr.io/<owner>/voip-edge-rtpengine` | `.github/workflows/publish-images.yml` |
 
 Publishing runs on a `v*` tag or manual dispatch. The console gets the version
 without `v`; rtpengine gets its upstream release tag (`mr26.3.1.2` by
