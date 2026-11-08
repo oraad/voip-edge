@@ -52,9 +52,9 @@ services:
     environment:
       SHM_MEMORY: ${SHM_MEMORY:-256}
       PKG_MEMORY: ${PKG_MEMORY:-64}
-      CONSOLE_ALLOWED_SUFFIXES: ${CONSOLE_ALLOWED_SUFFIXES:?set CONSOLE_ALLOWED_SUFFIXES}
+      TENANT_ALLOWED_SUFFIXES: ${TENANT_ALLOWED_SUFFIXES:?set TENANT_ALLOWED_SUFFIXES}
     # The entrypoint generates the tenant suffix gate from
-    # CONSOLE_ALLOWED_SUFFIXES, then execs Kamailio.
+    # TENANT_ALLOWED_SUFFIXES, then execs Kamailio.
     entrypoint: ["/bin/sh", "/etc/kamailio/voip-edge/entrypoint.sh"]
     volumes:
       - ${EDGE_HOME:?set EDGE_HOME}/kamailio:/etc/kamailio/voip-edge:rw

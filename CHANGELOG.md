@@ -12,7 +12,7 @@ carry fixes.
 ### Added
 
 - The onboarding wizard offers two domain input methods: a subdomain field
-  plus a base-domain dropdown built from `CONSOLE_ALLOWED_SUFFIXES`, or the
+  plus a base-domain dropdown built from `TENANT_ALLOWED_SUFFIXES`, or the
   existing full custom-domain input. The composed domain is validated by the
   same tenant-domain rules.
 - `CONSOLE_RPC_REPLY_DIR`: bind the console's JSON-RPC reply socket to a
@@ -31,13 +31,16 @@ carry fixes.
 
 ### Changed
 
+- Renamed `CONSOLE_ALLOWED_SUFFIXES` to `TENANT_ALLOWED_SUFFIXES`; the same
+  comma-separated list feeds the console validator, onboarding dropdown and
+  generated Kamailio suffix gate.
 - Replaced PicoCSS with a token-based design system in `web/static/app.css`:
   dark-first surfaces, light theme toggle, responsive sidebar and topbar,
   icons, summary cards, consistent tables, forms, badges and dialogs. Page-
   local style blocks were removed so the theme is centralized.
 - ACME scripts moved from `deploy/` to `acme/`; Compose mounts
   `acme/` scripts and `rtpengine/rtpengine.conf` relative to the repo.
-- Kamailio's tenant suffix gate is generated from `CONSOLE_ALLOWED_SUFFIXES`
+- Kamailio's tenant suffix gate is generated from `TENANT_ALLOWED_SUFFIXES`
   by the container entrypoint, so adding a base domain updates both the console
   validator/wizard and the edge without editing `TENANTSUFFIXRE` by hand.
 - Kamailio route configs flattened from `kamailio/routes/` into

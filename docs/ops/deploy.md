@@ -31,7 +31,7 @@ Edit `$EDGE_HOME/kamailio/kamailio.cfg`: `PUBIP`, `WGIP`, `WGSOCK`
 (`udp:<WGIP>:5060`), `PUBDOM`. `WGIP` and `WGSOCK` change together.
 
 The tenant suffix gate (`TENANTSUFFIXRE`) is generated from
-`CONSOLE_ALLOWED_SUFFIXES` by the container entrypoint on every start. Do not
+`TENANT_ALLOWED_SUFFIXES` by the container entrypoint on every start. Do not
 edit `tenant_suffix.cfg`; change the env list instead.
 
 Edit `rtpengine/rtpengine.conf`:

@@ -225,7 +225,7 @@ T4 started `docs/validation-matrix.md`: rules have ids (e.g. `V-REG-CLI-COLLIDE`
 
 ## 10. Env/config table, packaging, docs, rollout
 
-Env (single surface, defaults sane): `CONSOLE_TOKEN`, `CONSOLE_SECRET` (unset/blank → random per process; never derived), `CONSOLE_BIND=100.64.0.9`, `CONSOLE_PORT=8080`, `CONSOLE_DB_PATH`, `CONSOLE_SIDECAR_DIR=${EDGE_HOME}/console`, `CONSOLE_RPC_SOCK=/run/kamailio/kamailio_rpc.sock`, `CONSOLE_RPC_TIMEOUT_MS=2000`, `CONSOLE_THROTTLE_TENANTDOM=…` (per-table map, measured), `CONSOLE_ALLOWED_SUFFIXES=home.example.net`, `CONSOLE_POLL_MS=15000`, `CONSOLE_READONLY=0`, `CONSOLE_TLS_LIVE=1`.
+Env (single surface, defaults sane): `CONSOLE_TOKEN`, `CONSOLE_SECRET` (unset/blank → random per process; never derived), `CONSOLE_BIND=100.64.0.9`, `CONSOLE_PORT=8080`, `CONSOLE_DB_PATH`, `CONSOLE_SIDECAR_DIR=${EDGE_HOME}/console`, `CONSOLE_RPC_SOCK=/run/kamailio/kamailio_rpc.sock`, `CONSOLE_RPC_TIMEOUT_MS=2000`, `CONSOLE_THROTTLE_TENANTDOM=…` (per-table map, measured), `TENANT_ALLOWED_SUFFIXES=home.example.net`, `CONSOLE_POLL_MS=15000`, `CONSOLE_READONLY=0`, `CONSOLE_TLS_LIVE=1`.
 
 Compose service: `network_mode: host`; volumes `db/` rw, `${EDGE_RUN}` rw, `${EDGE_HOME}/console` rw; group story: jsonrpcs `dgram_group` = a group the console container runs with (or console root + documented note); tables.yaml baked into image (pinned with code); vendored htmx/PicoCSS (no runtime fetch); `mem_limit: 256m, cpus: 0.5`; `restart: unless-stopped`; **healthcheck tests the console process only** (`/health` 200 even when Kamailio is down — its status is a body field, never the exit code; otherwise Docker restart-loops the console exactly when the operator needs the banner).
 

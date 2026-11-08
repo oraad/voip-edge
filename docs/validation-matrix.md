@@ -36,7 +36,7 @@ How to read this:
 | Rule id | Rule | Severity | Unit test | Form test | Owner |
 |---|---|---|---|---|---|
 | `V-REG-DOMAIN-CHARSET` | `tprefix` uses only letters, digits, dot and dash, and stays inside the mtree `char_list` | error | TODO | TODO | T4.2 |
-| `V-REG-DOMAIN-SUFFIX` | `tprefix` ends in one of `CONSOLE_ALLOWED_SUFFIXES` | error | TODO | TODO | T4.2 |
+| `V-REG-DOMAIN-SUFFIX` | `tprefix` ends in one of `TENANT_ALLOWED_SUFFIXES` | error | TODO | TODO | T4.2 |
 | `V-REG-DOMAIN-UNIQUE` | `tprefix` is unique across the registry | error | TODO | TODO | T4.2 |
 | `V-REG-TENANTID-FORMAT` | `tenantid` matches `[A-Z0-9]+` | error | TODO | TODO | T4.2 |
 | `V-REG-TENANTID-UNIQUE` | `tenantid` is unique across homes | error | TODO | TODO | T4.2 |

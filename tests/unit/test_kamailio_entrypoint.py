@@ -22,7 +22,7 @@ def test_entrypoint_generates_tenant_suffix_regex(tmp_path):
     env = os.environ.copy()
     env.update(
         {
-            "CONSOLE_ALLOWED_SUFFIXES": "home.example.net, edge.example.net",
+            "TENANT_ALLOWED_SUFFIXES": "home.example.net, edge.example.net",
             "KAM_CONFIG_DIR": str(config_dir),
             "PATH": f"{bin_dir}:{env.get('PATH', '')}",
             "SHM_MEMORY": "128",
@@ -56,7 +56,7 @@ def test_entrypoint_rejects_an_empty_suffix_list(tmp_path):
     env = os.environ.copy()
     env.update(
         {
-            "CONSOLE_ALLOWED_SUFFIXES": " , ",
+            "TENANT_ALLOWED_SUFFIXES": " , ",
             "KAM_CONFIG_DIR": str(tmp_path / "config"),
             "PATH": f"{bin_dir}:{env.get('PATH', '')}",
         }

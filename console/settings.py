@@ -38,7 +38,7 @@ class Settings:
         "dialplan": 5, "trusted": 5,
     })
     allowed_suffixes: tuple[str, ...] = tuple(
-        s for s in os.environ.get("CONSOLE_ALLOWED_SUFFIXES", "home.example.net").split(",") if s
+        s for s in os.environ.get("TENANT_ALLOWED_SUFFIXES", "home.example.net").split(",") if s
     )
     poll_ms: int = int(os.environ.get("CONSOLE_POLL_MS", "15000"))
     readonly: bool = _bool("CONSOLE_READONLY")
