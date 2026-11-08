@@ -199,8 +199,10 @@ def test_wizard_happy_path_writes_five_rows_backs_up_and_reloads(
     green = html.unescape(verify.text)
     assert "all coherence checks are green" in green
     assert "Home registered in the routing table" in green
-    assert "Route sets present in the dispatcher" in green
-    assert "Trusted source mapped to this home" in green
+    assert "PBX \u2192 edge" in green
+    assert "Edge \u2192 PBX" in green
+    assert "Place a call from a phone on the PBX" in green
+    assert "Dial out through the landline trunk" in green
     assert "Landline points at the ring group" in green
     assert "Waiting for the first registration" in green
 
@@ -299,7 +301,10 @@ def test_wizard_no_trunk_writes_four_rows_and_skips_pstn_set(
     _assert_four_reloads(worker)
 
     verify = auth_client.get(f"/wizard/verify/{IDENTITY['domain']}")
-    assert "all coherence checks are green" in html.unescape(verify.text)
+    verify_page = " ".join(html.unescape(verify.text).split())
+    assert "all coherence checks are green" in verify_page
+    assert "No PSTN trunk configured" in verify_page
+    assert "Dial out through the landline trunk" not in verify_page
 
 
 # ---------------------------------------------------------------------------

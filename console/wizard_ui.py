@@ -40,6 +40,7 @@ without weakening the real uniqueness rules.
 """
 from __future__ import annotations
 
+import ipaddress
 import re
 import sqlite3
 from dataclasses import dataclass, replace
@@ -319,6 +320,23 @@ def destination_for(lan_ip: str, port: int = DEFAULT_SIP_PORT) -> str:
 def edge_trunk_display(host: str, port: int) -> str:
     """The edge tunnel address shown in the PBX trunk note ('' when unset)."""
     return f"{host}:{port}" if host else ""
+
+
+def dispatcher_target_ok(destination: str) -> bool:
+    """True for a ``sip:<literal IPv4>[:port]`` dispatcher destination."""
+    text = "" if destination is None else str(destination).strip()
+    if not text.lower().startswith("sip:"):
+        return False
+    rest = text[4:]
+    if "@" in rest or rest.startswith("["):
+        return False
+    host_port = rest.split(";", 1)[0]
+    host = host_port.rsplit(":", 1)[0] if ":" in host_port else host_port
+    try:
+        ipaddress.IPv4Address(host)
+    except ValueError:
+        return False
+    return True
 
 
 def plan_writes(
@@ -875,31 +893,54 @@ def verify_checklist(
     onnet = _int_or_none(values.get("ds_onnet"))
     pstn = _int_or_none(values.get("ds_pstn"))
     set_ids = [value for value in (onnet, pstn) if value not in (None, 0)]
-    sets_ok = False
+    rows_by_set: dict[int, list[str]] = {}
     if conn is not None and set_ids:
         try:
-            found = {
-                int(row[0])
-                for row in conn.execute(
-                    "SELECT DISTINCT setid FROM dispatcher WHERE setid IN "
-                    f"({', '.join('?' for _ in set_ids)})",
-                    set_ids,
-                )
-            }
-            sets_ok = found == set(set_ids)
+            for row in conn.execute(
+                "SELECT setid, destination FROM dispatcher WHERE setid IN "
+                f"({', '.join('?' for _ in set_ids)})",
+                set_ids,
+            ):
+                rows_by_set.setdefault(int(row[0]), []).append(str(row[1]))
         except sqlite3.Error:
-            sets_ok = False
-    set_text = " · ".join(str(value) for value in set_ids) or "none"
+            rows_by_set = {}
+
+    onnet_rows = rows_by_set.get(onnet, []) if onnet not in (None, 0) else []
+    onnet_ok = bool(onnet_rows) and all(
+        dispatcher_target_ok(destination) for destination in onnet_rows
+    )
+    if onnet in (None, 0):
+        onnet_detail = "no on-net route set"
+    elif not onnet_rows:
+        onnet_detail = f"set {onnet} has no dispatcher row"
+    elif not onnet_ok:
+        onnet_detail = f"set {onnet} has a non-literal-IPv4 destination"
+    else:
+        onnet_detail = f"set {onnet} → {onnet_rows[0]}"
     items.append(
         {
-            "key": "sets",
-            "label": "Route sets present in the dispatcher",
-            "ok": sets_ok,
-            "detail": (
-                f"sets {set_text}"
-                if pstn not in (None, 0)
-                else f"set {set_text} (no PSTN trunk)"
-            ),
+            "key": "edge_trunk_out",
+            "label": "Edge → PBX: on-net route set",
+            "ok": onnet_ok,
+            "detail": onnet_detail,
+        }
+    )
+
+    pstn_rows = rows_by_set.get(pstn, []) if pstn not in (None, 0) else []
+    pstn_ok = True
+    if pstn in (None, 0):
+        pstn_detail = "No PSTN trunk configured"
+    elif pstn_rows:
+        pstn_detail = f"set {pstn} → {pstn_rows[0]}"
+    else:
+        pstn_ok = False
+        pstn_detail = f"set {pstn} has no dispatcher row"
+    items.append(
+        {
+            "key": "pstn",
+            "label": "PSTN trunk route set",
+            "ok": pstn_ok,
+            "detail": pstn_detail,
         }
     )
 
@@ -918,8 +959,8 @@ def verify_checklist(
             trusted_detail = f"{row[0]} → {domain}"
     items.append(
         {
-            "key": "trusted",
-            "label": "Trusted source mapped to this home",
+            "key": "edge_trunk_in",
+            "label": "PBX → edge: trusted tunnel source",
             "ok": trusted_ok,
             "detail": trusted_detail,
         }
@@ -978,9 +1019,29 @@ def verify_checklist(
         }
     )
 
+    manual = [
+        {
+            "key": "call_out",
+            "label": "Place a call from a phone on the PBX through the edge",
+            "detail": "Confirm the call connects in both directions with audio.",
+        }
+    ]
+    if pstn not in (None, 0):
+        manual.append(
+            {
+                "key": "call_pstn",
+                "label": "Dial out through the landline trunk",
+                "detail": (
+                    "Confirm the carrier answers; the edge cannot test the "
+                    "PBX's internal trunk."
+                ),
+            }
+        )
+
     return {
         "items": items,
         "all_green": all(item["ok"] for item in items),
+        "manual": manual,
     }
 
 

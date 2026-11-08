@@ -37,6 +37,17 @@
     {% endif %}
   {% endif %}
 
+  {% if checklist["manual"] %}
+  <div class="warnsummary" role="status">
+    <b>Manual checks — the edge cannot see inside the PBX</b>
+    <ul style="margin:7px 0 0 17px; padding:0">
+      {% for item in checklist["manual"] %}
+      <li><b>{{ item.label }}</b> — {{ item.detail }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   <div class="panel" style="margin:16px 0 0; border-style:dashed">
     <b>Waiting for the first registration</b>
     <p class="sub" style="margin:6px 0 0">
