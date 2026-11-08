@@ -15,6 +15,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from markupsafe import escape
 
 from . import db, descriptors
 from .checks import (
@@ -160,7 +161,7 @@ def home_detail(
             "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<title>Home not found</title></head><body>"
             "<main><h1>Home not found</h1>"
-            f"<p>No registry row for {domain}.</p>"
+            f"<p>No registry row for {escape(domain)}.</p>"
             '<p><a href="/homes">Back to homes</a></p>'
             "</main></body></html>",
             status_code=404,
