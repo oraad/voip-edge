@@ -14,7 +14,7 @@
 {% set item_state = item.state or ('ok' if item.ok else 'missing') %}
 <div class="checkline">
   <span class="dot {{ 'ok' if item_state == 'ok' else '' }}" aria-hidden="true"></span>
-  <b>{{ "Not configured" if item_state == "neutral" else "OK" if item_state == "ok" else "Unavailable" if item_state == "unavailable" else "Missing" }}</b> — {{ item.label }}
+  <b>{{ "Not configured" if item_state == "neutral" else "OK" if item_state == "ok" else "Unconfirmed" if item_state == "unconfirmed" else "Unavailable" if item_state == "unavailable" else "Missing" }}</b> — {{ item.label }}
   <span class="meta">{{ item.detail }}</span>
 </div>
 {% endfor %}

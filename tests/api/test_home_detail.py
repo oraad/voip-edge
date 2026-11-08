@@ -87,28 +87,29 @@ def test_home_live_filters_phones_to_this_domain(
                 },
             },
         )
-        fake.script(
+        regcache = [
+            {
+                "entry": 0,
+                "size": 2,
+                "slot": [
+                    {
+                        "item": {
+                            "name": "mobile1@sip.alpha.home.example.net",
+                            "value": "sip:198.51.100.20:2416;transport=tls",
+                        }
+                    },
+                    {
+                        "item": {
+                            "name": "garden@sip.beta.home.example.net",
+                            "value": "sip:198.51.100.21:43774;transport=tcp",
+                        }
+                    },
+                ],
+            }
+        ]
+        fake.handler(
             "htable.dump",
-            [
-                {
-                    "entry": 0,
-                    "size": 2,
-                    "slot": [
-                        {
-                            "item": {
-                                "name": "mobile1@sip.alpha.home.example.net",
-                                "value": "sip:198.51.100.20:2416;transport=tls",
-                            }
-                        },
-                        {
-                            "item": {
-                                "name": "garden@sip.beta.home.example.net",
-                                "value": "sip:198.51.100.21:43774;transport=tcp",
-                            }
-                        },
-                    ],
-                }
-            ],
+            lambda params: regcache if params == ["regcache"] else [],
         )
         app.state.rpc = UnixDatagramRPC(fake.sock_path, timeout_ms=500)
         page = auth_client.get("/homes/sip.alpha.home.example.net/live")
@@ -118,6 +119,7 @@ def test_home_live_filters_phones_to_this_domain(
     assert "mobile1@sip.alpha.home.example.net" in text
     assert "garden@sip.beta.home.example.net" not in text
     assert "tls" in text
+    assert "Unconfirmed — PBX → edge: trunk heartbeat" in text
 
 
 def test_home_live_reports_unreachable_edge(seeded_db, auth_client, app):
@@ -180,3 +182,63 @@ def test_home_detail_404_for_a_parked_home(seeded_db, auth_client):
 def test_home_live_404_for_unknown_home(seeded_db, auth_client):
     page = auth_client.get("/homes/sip.missing.example.net/live")
     assert page.status_code == 404
+
+
+def test_home_live_reports_pbx_heartbeat(seeded_db, auth_client, app, tmp_path):
+    with FakeRPC(tmp_path / "rpc.sock") as fake:
+        fake.script("core.uptime", {"uptime": "1 hour"})
+        fake.script(
+            "dispatcher.list",
+            {
+                "NRSETS": 1,
+                "RECORDS": [
+                    {
+                        "SET": {
+                            "ID": 11,
+                            "TARGETS": [
+                                {
+                                    "DEST": {
+                                        "URI": "sip:10.0.0.10:5060;transport=tcp",
+                                        "FLAGS": "AP",
+                                        "PRIORITY": 0,
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                ],
+            },
+        )
+        fake.script(
+            "permissions.trustedDump",
+            {
+                "table": 0,
+                "item": {
+                    "ip": "100.64.10.10",
+                    "tag": "sip.alpha.home.example.net",
+                },
+            },
+        )
+        heartbeat = [
+            {
+                "entry": 0,
+                "size": 1,
+                "slot": [
+                    {
+                        "item": {
+                            "name": "100.64.10.10",
+                            "value": "1700000000",
+                        }
+                    }
+                ],
+            }
+        ]
+        fake.handler(
+            "htable.dump",
+            lambda params: heartbeat if params == ["trunkseen"] else [],
+        )
+        app.state.rpc = UnixDatagramRPC(fake.sock_path, timeout_ms=500)
+        page = auth_client.get("/homes/sip.alpha.home.example.net/live")
+    text = _text(page.text)
+    assert "OK — PBX → edge: trunk heartbeat" in text
+    assert "PBX SIP seen at 2023-11-14 22:13:20Z" in text

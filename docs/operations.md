@@ -62,9 +62,17 @@ Kamailio. Open `/homes/<domain>` for the full checklist, the PBX and PSTN
 targets, any last reload failure, and the registered phones.
 
 `Run live checks` calls `core.uptime`, `dispatcher.list`,
-`permissions.trustedDump` and `regcache` for that home. It is on demand so the
-detail page still renders when the edge is down. The onboarding
-`/wizard/verify/<domain>` page remains available and uses the same checks.
+`permissions.trustedDump`, `htable.dump trunkseen` and `regcache` for that
+home. It is on demand so the detail page still renders when the edge is down.
+The onboarding `/wizard/verify/<domain>` page remains available and uses the
+same checks.
+
+Kamailio records the last SIP request from each trusted source in the
+`trunkseen` htable. The live panel reports `PBX → edge: trunk heartbeat` as
+seen or `Unconfirmed`. This is the only PBX-side evidence the edge can obtain
+without a PBX API: a static trunk that sends no OPTIONS keepalive and carries
+no calls stays unconfirmed. Ask the PBX admin to enable OPTIONS/qualify on the
+edge trunk, or place a test call, to turn it green.
 
 ## Lifecycle
 

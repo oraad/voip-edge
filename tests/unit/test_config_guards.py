@@ -51,3 +51,9 @@ def test_indialog_and_phone_media_guards_are_present():
     assert "s.substr,4,0" in misc
     assert "does not match regcache flow" in invite
     assert "direction=public direction=public" in media
+
+
+def test_trusted_sources_record_pbx_heartbeat():
+    cfg = (ROOT / "kamailio" / "kamailio.cfg").read_text()
+    assert '"trunkseen=>size=8;autoexpire=0;"' in cfg
+    assert "$sht(trunkseen=>$si) = $Ts;" in cfg

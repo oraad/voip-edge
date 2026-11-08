@@ -22,6 +22,8 @@ carry fixes.
   same tenant-domain rules.
 - The wizard states the required PBX edge trunk and shows the literal edge
   address from optional `EDGE_TRUNK_HOST` / `EDGE_TRUNK_PORT` settings.
+- The home live panel reports a PBX-side trunk heartbeat from the last trusted
+  SIP request Kamailio saw, and marks a silent static trunk `Unconfirmed`.
 - The Homes list shows a DB-only coherence badge and links each home to a
   detail page with the full checklist, PBX/PSTN targets, last reload failure,
   registered phones and an on-demand live probe.

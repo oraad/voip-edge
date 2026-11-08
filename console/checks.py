@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from . import db, descriptors, validators
@@ -264,6 +265,46 @@ def build_live_checks(
             "ok": trusted_ok,
             "state": trusted_state,
             "detail": trusted_detail,
+        }
+    )
+
+    heartbeat_ok = False
+    heartbeat_state = "unconfirmed"
+    if not source_ip:
+        heartbeat_state = "missing"
+        heartbeat_detail = "no trusted source configured"
+    else:
+        try:
+            from .live import flatten_htable_dump
+
+            dump = flatten_htable_dump(rpc.call("htable.dump", ["trunkseen"]))
+            entry = dump.get(source_ip)
+            raw = entry.get("value") if isinstance(entry, Mapping) else entry
+            if raw not in (None, ""):
+                try:
+                    seen = datetime.fromtimestamp(
+                        float(raw), tz=timezone.utc
+                    ).strftime("%Y-%m-%d %H:%M:%SZ")
+                except (TypeError, ValueError, OSError):
+                    seen = str(raw)
+                heartbeat_ok = True
+                heartbeat_state = "ok"
+                heartbeat_detail = f"PBX SIP seen at {seen}"
+            else:
+                heartbeat_detail = (
+                    "No PBX-originated SIP seen since edge start; configure "
+                    "OPTIONS keepalive or place a call."
+                )
+        except Exception as exc:  # noqa: BLE001
+            heartbeat_state = "unavailable"
+            heartbeat_detail = f"trunk heartbeat unavailable: {exc}"
+    items.append(
+        {
+            "key": "pbx_heartbeat",
+            "label": "PBX → edge: trunk heartbeat",
+            "ok": heartbeat_ok,
+            "state": heartbeat_state,
+            "detail": heartbeat_detail,
         }
     )
 
