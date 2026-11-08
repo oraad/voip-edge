@@ -240,7 +240,7 @@ def home_detail(
             "reload_errors": reload_errors,
             "live_url": f"/homes/{quote(domain, safe='')}/live",
             "edit_url": f"/tables/tenant_registry/{quote(domain, safe='')}/edit",
-            "registry_url": f"/tables/tenant_registry/{quote(domain, safe='')}",
+            "tenant_url": f"/tables/tenant_registry/{quote(domain, safe='')}",
             "park_url": f"/homes/{quote(domain, safe='')}/park",
             "destroy_url": f"/homes/{quote(domain, safe='')}/destroy",
         },
