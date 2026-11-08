@@ -308,8 +308,9 @@ def test_wizard_no_trunk_writes_four_rows_and_skips_pstn_set(
     _assert_four_reloads(worker)
 
     verify = auth_client.get(f"/wizard/verify/{IDENTITY['domain']}")
-    verify_page = " ".join(html.unescape(verify.text).split())
+    verify_page = _text(verify.text)
     assert "all coherence checks are green" in verify_page
+    assert "Not configured — PSTN trunk route set" in verify_page
     assert "No PSTN trunk configured" in verify_page
     assert "Dial out through the landline trunk" not in verify_page
 
@@ -369,8 +370,9 @@ def test_live_verify_probes_dispatcher_and_trusted_table(
         page = auth_client.get(
             "/wizard/verify/sip.alpha.home.example.net/live"
         )
-    text = " ".join(html.unescape(page.text).split())
+    text = _text(page.text)
     assert page.status_code == 200
+    assert 'hx-disabled-elt="this"' in page.text
     assert "Edge reachable" in text
     assert "set 11" in text
     assert "set 31" in text
@@ -458,10 +460,17 @@ def test_live_verify_reports_inactive_dispatcher(
                                 {
                                     "DEST": {
                                         "URI": "sip:10.0.0.10:5060;transport=tcp",
+                                        "FLAGS": "AP",
+                                        "PRIORITY": 0,
+                                    }
+                                },
+                                {
+                                    "DEST": {
+                                        "URI": "sip:10.0.0.11:5060;transport=tcp",
                                         "FLAGS": "IP",
                                         "PRIORITY": 0,
                                     }
-                                }
+                                },
                             ],
                         }
                     }
@@ -481,6 +490,8 @@ def test_live_verify_reports_inactive_dispatcher(
         )
     text = _text(page.text)
     assert "probe not answered" in text
+    assert "10.0.0.10" in text
+    assert "10.0.0.11" in text
     assert "OK — Edge → PBX" not in text
 
 
@@ -682,6 +693,7 @@ def test_wizard_requires_login(client):
     for path in (
         "/wizard",
         "/wizard/verify/sip.alpha.home.example.net",
+        "/wizard/verify/sip.alpha.home.example.net/live",
     ):
         response = client.get(path)
         assert response.status_code == 303

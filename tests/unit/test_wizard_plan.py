@@ -284,3 +284,22 @@ def test_build_live_checks_handles_rpc_client_failure():
     assert live["reachable"] is False
     assert live["items"] == []
     assert "rpc factory failed" in live["errors"][0]
+
+
+def test_dispatcher_target_ok_matches_dispatcher_rule():
+    assert wizard_ui.dispatcher_target_ok("sip:10.0.6.20:5060;transport=tcp")
+    assert wizard_ui.dispatcher_target_ok(
+        "sips:trunk@10.0.6.20:5060;transport=tcp"
+    )
+    assert not wizard_ui.dispatcher_target_ok("sip:pbx.lan:5060;transport=tcp")
+
+
+def test_trusted_entries_does_not_pair_an_untagged_row():
+    text = (
+        "table: 0\nitem: {\n ip: 100.64.10.10\n}\n"
+        "table: 1\nitem: {\n ip: 100.64.10.12\n"
+        " tag: sip.beta.home.example.net\n}"
+    )
+    assert wizard_ui.trusted_entries(text) == [
+        {"ip": "100.64.10.12", "tag": "sip.beta.home.example.net"}
+    ]

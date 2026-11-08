@@ -17,9 +17,10 @@
 
   {% if checklist %}
     {% for item in checklist["items"] %}
+    {% set item_neutral = item.get("neutral", false) %}
     <div class="checkline">
-      <span class="dot {{ 'ok' if item.ok else '' }}" aria-hidden="true"></span>
-      <b>{{ "OK" if item.ok else "Missing" }}</b> — {{ item.label }}
+      <span class="dot {{ '' if item_neutral else ('ok' if item.ok else '') }}" aria-hidden="true"></span>
+      <b>{{ "Not configured" if item_neutral else ("OK" if item.ok else "Missing") }}</b> — {{ item.label }}
       <span class="meta">{{ item.detail }}</span>
     </div>
     {% endfor %}
@@ -35,7 +36,6 @@
       <b>Not green yet</b> — fix the named row before announcing the home.
     </div>
     {% endif %}
-  {% endif %}
 
   {% if checklist["manual"] %}
   <div class="warnsummary" role="status">
@@ -47,6 +47,7 @@
     </ul>
   </div>
   {% endif %}
+  {% endif %}
 
   <div class="panel" id="live-checks" style="margin:16px 0 0">
     <b>Live edge checks</b>
@@ -55,7 +56,8 @@
     </p>
     <button class="btn" type="button"
             hx-get="/wizard/verify/{{ draft.domain | urlencode }}/live"
-            hx-target="#live-checks" hx-swap="innerHTML">Run live checks</button>
+            hx-target="#live-checks" hx-swap="innerHTML"
+            hx-disabled-elt="this">Run live checks</button>
   </div>
 
   <div class="panel" style="margin:16px 0 0; border-style:dashed">

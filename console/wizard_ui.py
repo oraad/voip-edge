@@ -40,7 +40,6 @@ without weakening the real uniqueness rules.
 """
 from __future__ import annotations
 
-import ipaddress
 import re
 import sqlite3
 from dataclasses import dataclass, replace
@@ -323,20 +322,20 @@ def edge_trunk_display(host: str, port: int) -> str:
 
 
 def dispatcher_target_ok(destination: str) -> bool:
-    """True for a ``sip:<literal IPv4>[:port]`` dispatcher destination."""
+    """True for a dispatcher URI the dispatcher rule would save.
+
+    ``sips:`` and a user part are accepted, matching
+    :func:`console.rules.dispatcher.destination_ipv4_required`; the shared
+    ``sip_uri`` rule enforces the literal-IPv4 host.
+    """
     text = "" if destination is None else str(destination).strip()
-    if not text.lower().startswith("sip:"):
+    scheme, separator, rest = text.partition(":")
+    if not separator or scheme.strip().lower() not in {"sip", "sips"}:
         return False
-    rest = text[4:]
-    if "@" in rest or rest.startswith("["):
-        return False
-    host_port = rest.split(";", 1)[0]
-    host = host_port.rsplit(":", 1)[0] if ":" in host_port else host_port
-    try:
-        ipaddress.IPv4Address(host)
-    except ValueError:
-        return False
-    return True
+    errors, _ = validators.sip_uri(
+        f"sip:{rest}", validators.ValidationContext()
+    )
+    return not errors
 
 
 def trusted_entries(result: Any) -> list[dict[str, str]]:
@@ -358,10 +357,14 @@ def trusted_entries(result: Any) -> list[dict[str, str]]:
         if value is None:
             return
         if isinstance(value, str):
-            for ip, tag in re.findall(
-                r"ip:\s*(\S+).*?tag:\s*(\S+)", value, re.S
-            ):
-                add(ip, tag)
+            # One block per ``item:`` keeps an untagged row from pairing with
+            # the next row's tag.
+            for block in re.split(r"item\s*:\s*\{", value)[1:]:
+                block = block.split("}", 1)[0]
+                ip = re.search(r"\bip\s*:\s*(\S+)", block)
+                tag = re.search(r"\btag\s*:\s*(\S+)", block)
+                if ip is not None and tag is not None:
+                    add(ip.group(1), tag.group(1))
             return
         if isinstance(value, Mapping):
             item = value.get("item")
@@ -923,11 +926,15 @@ def _live_targets(rows: list[dict[str, Any]], set_id: int | None) -> list[dict[s
 
 
 def _live_detail(rows: list[dict[str, Any]], set_id: int) -> str:
-    row = rows[0]
-    state = row.get("label") or row.get("state") or "unknown"
-    target = row.get("target") or row.get("target_display") or ""
-    loaded = "loaded" if row.get("state") == "active" else "probe not answered"
-    return f"set {set_id} · {target} · {loaded} ({state})"
+    parts: list[str] = []
+    for row in rows:
+        state = row.get("label") or row.get("state") or "unknown"
+        target = row.get("target") or row.get("target_display") or ""
+        loaded = (
+            "loaded" if row.get("state") == "active" else "probe not answered"
+        )
+        parts.append(f"{target} · {loaded} ({state})")
+    return f"set {set_id} · " + " | ".join(parts)
 
 
 def build_live_checks(
@@ -1014,6 +1021,7 @@ def build_live_checks(
         pstn_detail = "dispatcher list unavailable"
     elif pstn_set in (None, 0):
         pstn_ok = True
+        pstn_state = "neutral"
         pstn_detail = "No PSTN trunk configured"
     elif not pstn_rows:
         pstn_ok = False
@@ -1086,26 +1094,45 @@ def build_live_checks(
     }
 
 
+def _verify_state(
+    conn: sqlite3.Connection | None, domain: str
+) -> tuple[Any, dict[str, Any], str]:
+    """Registry row, unpacked values and the home's trusted source address."""
+    registry = None
+    values: dict[str, Any] = {}
+    source_ip = ""
+    if conn is None:
+        return registry, values, source_ip
+    try:
+        registry = db.read_row(conn, "tenant_registry", domain)
+    except sqlite3.Error:
+        registry = None
+    if registry is not None:
+        try:
+            values = descriptors.unpack_row(
+                descriptors.load().tables["tenant_registry"], registry
+            )
+        except (ValueError, KeyError):
+            values = {}
+    try:
+        row = conn.execute(
+            "SELECT src_ip FROM trusted WHERE tag = ? ORDER BY id LIMIT 1",
+            (domain,),
+        ).fetchone()
+    except sqlite3.Error:
+        row = None
+    if row is not None:
+        source_ip = str(row[0])
+    return registry, values, source_ip
+
+
 def verify_checklist(
     conn: sqlite3.Connection | None, domain: str
 ) -> dict[str, Any]:
     """DB-only coherence checklist for the verify step (no RPC, no N+1)."""
     items: list[dict[str, Any]] = []
 
-    registry = None
-    values: dict[str, Any] = {}
-    if conn is not None:
-        try:
-            registry = db.read_row(conn, "tenant_registry", domain)
-        except sqlite3.Error:
-            registry = None
-        if registry is not None:
-            try:
-                values = descriptors.unpack_row(
-                    descriptors.load().tables["tenant_registry"], registry
-                )
-            except (ValueError, KeyError):
-                values = {}
+    registry, values, source_ip = _verify_state(conn, domain)
 
     items.append(
         {
@@ -1166,23 +1193,15 @@ def verify_checklist(
             "key": "pstn",
             "label": "PSTN trunk route set",
             "ok": pstn_ok,
+            "neutral": pstn in (None, 0),
             "detail": pstn_detail,
         }
     )
 
-    trusted_ok = False
-    trusted_detail = "no trusted row"
-    if conn is not None:
-        try:
-            row = conn.execute(
-                "SELECT src_ip FROM trusted WHERE tag = ? ORDER BY id LIMIT 1",
-                (domain,),
-            ).fetchone()
-        except sqlite3.Error:
-            row = None
-        if row is not None:
-            trusted_ok = True
-            trusted_detail = f"{row[0]} → {domain}"
+    trusted_ok = bool(source_ip)
+    trusted_detail = (
+        f"{source_ip} → {domain}" if trusted_ok else "no trusted row"
+    )
     items.append(
         {
             "key": "edge_trunk_in",
@@ -1767,37 +1786,14 @@ def wizard_verify_live(
     if redirect is not None:
         return redirect
 
-    onnet = None
-    pstn = None
-    source_ip = ""
-    if conn is not None:
-        try:
-            registry = db.read_row(conn, "tenant_registry", domain)
-        except sqlite3.Error:
-            registry = None
-        if registry is not None:
-            try:
-                values = descriptors.unpack_row(
-                    descriptors.load().tables["tenant_registry"], registry
-                )
-                onnet = _int_or_none(values.get("ds_onnet"))
-                pstn = _int_or_none(values.get("ds_pstn"))
-            except (ValueError, KeyError):
-                pass
-        try:
-            row = conn.execute(
-                "SELECT src_ip FROM trusted WHERE tag = ? ORDER BY id LIMIT 1",
-                (domain,),
-            ).fetchone()
-        except sqlite3.Error:
-            row = None
-        if row is not None:
-            source_ip = str(row[0])
+    _registry, values, source_ip = _verify_state(conn, domain)
+    onnet = _int_or_none(values.get("ds_onnet"))
+    pstn = _int_or_none(values.get("ds_pstn"))
 
-    getter = getattr(request.app.state, "get_rpc", None)
-    if getter is None:
-        def getter():
-            return getattr(request.app.state, "rpc", None)
+    state = request.app.state
+    getter = getattr(state, "get_rpc", None) or (
+        lambda: getattr(state, "rpc", None)
+    )
 
     live = build_live_checks(getter, domain, source_ip, onnet, pstn)
     return request.app.state.templates.TemplateResponse(
