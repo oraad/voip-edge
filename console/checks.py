@@ -275,6 +275,33 @@ def build_live_checks(
     }
 
 
+def build_home_live(
+    get_rpc: Any,
+    domain: str,
+    source_ip: str,
+    onnet_set: int | None,
+    pstn_set: int | None,
+) -> dict[str, Any]:
+    """Live checks plus the phones registered at this home."""
+    live = build_live_checks(
+        get_rpc, domain, source_ip, onnet_set, pstn_set
+    )
+    live["phones"] = []
+    if not live["reachable"]:
+        return live
+    try:
+        rpc = get_rpc()
+        from .live import build_regcache_view
+
+        rows = build_regcache_view(rpc.call("htable.dump", ["regcache"]))
+        live["phones"] = [
+            row for row in rows if row.get("domain") == domain
+        ]
+    except Exception as exc:  # noqa: BLE001 - panel must still render
+        live["errors"].append(f"registered phones unavailable: {exc}")
+    return live
+
+
 def coherence_summaries(
     conn: sqlite3.Connection | None, domains: Iterable[str]
 ) -> dict[str, dict[str, Any]]:

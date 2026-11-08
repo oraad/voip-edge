@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ domain }} — Home checks{% endblock %}
+{% block content %}
+<p class="meta"><a href="/homes">← Back to homes</a></p>
+<div class="pagehead">
+  <div>
+    <h1 class="mono">{{ domain }}</h1>
+    <div class="sub">Landline <span class="mono">{{ landline or "—" }}</span>
+      · route sets <span class="mono">{{ route_sets }}</span></div>
+  </div>
+  <span class="chip ok">Active</span>
+</div>
+
+<section class="stats" aria-label="Home summary">
+  <div class="stat">
+    <span class="stat-label">Checks</span>
+    <strong>{{ "all green" if checklist["all_green"] else "needs attention" }}</strong>
+    <span>database coherence</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">On-net set</span>
+    <strong>{{ onnet or "—" }}</strong>
+    <span>{{ onnet_targets|length }} target{{ "" if onnet_targets|length == 1 else "s" }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">PSTN</span>
+    <strong>{{ "not configured" if not pstn else pstn }}</strong>
+    <span>{{ pstn_targets|length }} target{{ "" if pstn_targets|length == 1 else "s" }}</span>
+  </div>
+</section>
+
+{% if reload_errors %}
+<div class="warnsummary" role="status">
+  <b>Last reload failed</b>
+  <span class="meta">These table errors affect every home, including this one.</span>
+  <ul style="margin:7px 0 0 17px; padding:0">
+    {% for message in reload_errors %}<li>{{ message }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<section class="panel" aria-labelledby="home-checks-title">
+  <h2 id="home-checks-title" style="margin-top:0">Coherence checks</h2>
+  <p class="sub">Database-only. It proves the rows exist and agree; live
+    loaded state comes from the probe below.</p>
+  {% for item in checklist["items"] %}
+  {% set item_neutral = item.get("neutral", false) %}
+  <div class="checkline">
+    <span class="dot {{ '' if item_neutral else ('ok' if item.ok else '') }}" aria-hidden="true"></span>
+    <b>{{ "Not configured" if item_neutral else ("OK" if item.ok else "Missing") }}</b> — {{ item.label }}
+    <span class="meta">{{ item.detail }}</span>
+  </div>
+  {% endfor %}
+  {% if checklist["all_green"] %}
+  <div class="checkline" role="status">
+    <span class="dot ok" aria-hidden="true"></span>
+    <b>OK</b> — all coherence checks are green.
+  </div>
+  {% else %}
+  <div class="checkline" role="alert">
+    <span class="dot" aria-hidden="true"></span>
+    <b>Not green yet</b> — fix the named row before announcing the home.
+  </div>
+  {% endif %}
+</section>
+
+<div class="panel" id="live-checks">
+  <b>Live edge checks</b>
+  <p class="sub" style="margin:6px 0 10px">
+    Reads the loaded dispatcher, trusted table and registered phones from
+    Kamailio. Nothing is called on page load.
+  </p>
+  <button class="btn" type="button"
+          hx-get="{{ live_url }}"
+          hx-target="#live-checks" hx-swap="innerHTML"
+          hx-disabled-elt="this">Run live checks</button>
+</div>
+
+<section class="panel" aria-labelledby="pbx-title">
+  <h2 id="pbx-title" style="margin-top:0">PBX trunk</h2>
+  <dl>
+    <div class="detailfield">
+      <dt>Edge → PBX on-net target</dt>
+      <dd>
+        {% for target in onnet_targets %}<span class="mono">{{ target }}</span>{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
+        <span class="meta" style="display:block">Set {{ onnet or "—" }}. Literal IPv4, TCP.</span>
+      </dd>
+    </div>
+    <div class="detailfield">
+      <dt>PSTN route target</dt>
+      <dd>
+        {% if not pstn %}<span class="meta">No PSTN trunk configured.</span>
+        {% else %}
+        {% for target in pstn_targets %}<span class="mono">{{ target }}</span>{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
+        <span class="meta" style="display:block">Set {{ pstn }}.</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div class="detailfield">
+      <dt>PBX → edge trusted source</dt>
+      <dd><span class="mono">{{ source_ip or "—" }}</span>
+        <span class="meta" style="display:block">The PBX trunk must be static, no registration, and allow this edge address as an incoming source.</span>
+      </dd>
+    </div>
+  </dl>
+</section>
+
+{% if checklist["manual"] %}
+<section class="warnsummary" role="status">
+  <b>Manual checks — the edge cannot see inside the PBX</b>
+  <ul style="margin:7px 0 0 17px; padding:0">
+    {% for item in checklist["manual"] %}
+    <li><b>{{ item.label }}</b> — {{ item.detail }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<div class="formbar">
+  {% if not status.readonly %}
+  <a class="btn pri" href="{{ edit_url }}">Edit</a>
+  {% endif %}
+  <a class="btn" href="{{ raw_url }}">Raw registry row</a>
+  {% if not status.readonly %}
+  <a class="btn" href="{{ park_url }}">Park…</a>
+  <a class="btn" href="{{ destroy_url }}">Destroy…</a>
+  {% endif %}
+</div>
+{% endblock %}

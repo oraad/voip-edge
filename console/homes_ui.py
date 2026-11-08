@@ -17,7 +17,13 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import db, descriptors
-from .checks import coherence_summaries
+from .checks import (
+    build_home_live,
+    coherence_summaries,
+    int_or_none,
+    verify_checklist,
+    verify_state,
+)
 from .security import read_session, is_authenticated
 
 router = APIRouter()
@@ -119,5 +125,112 @@ def homes(
             "parked": parked,
             "corrupt_rows": corrupt,
         },
+        headers=NO_STORE,
+    )
+
+
+def _dispatcher_targets(
+    conn: sqlite3.Connection | None, setid: int | None
+) -> list[str]:
+    if conn is None or setid in (None, 0):
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT destination FROM dispatcher WHERE setid = ? ORDER BY destination",
+            (setid,),
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    return [str(row[0]) for row in rows]
+
+
+@router.get("/homes/{domain}", response_class=HTMLResponse)
+def home_detail(
+    request: Request,
+    domain: str,
+    conn: sqlite3.Connection | None = Depends(db.get_read_db),
+):
+    redirect = _requires_login(request)
+    if redirect is not None:
+        return redirect
+
+    registry, values, source_ip = verify_state(conn, domain)
+    if registry is None:
+        return HTMLResponse(
+            "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<title>Home not found</title></head><body>"
+            "<main><h1>Home not found</h1>"
+            f"<p>No registry row for {domain}.</p>"
+            '<p><a href="/homes">Back to homes</a></p>'
+            "</main></body></html>",
+            status_code=404,
+            headers=NO_STORE,
+        )
+
+    onnet = int_or_none(values.get("ds_onnet"))
+    pstn = int_or_none(values.get("ds_pstn"))
+    checklist = verify_checklist(conn, domain)
+
+    worker = getattr(request.app.state, "worker", None)
+    worker_errors = getattr(worker, "errors", {}) if worker is not None else {}
+    reload_errors = [
+        f"{label}: {worker_errors[key]}"
+        for key, label in (
+            ("tenantdom", "home registry"),
+            ("landline", "landline"),
+            ("dispatcher", "route sets"),
+            ("trusted", "trusted sources"),
+        )
+        if worker_errors.get(key) is not None
+    ]
+
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "home_detail.html",
+        {
+            "nav": "homes",
+            "domain": domain,
+            "landline": str(values.get("cli") or ""),
+            "route_sets": _route_sets(values),
+            "onnet": onnet,
+            "pstn": pstn,
+            "onnet_targets": _dispatcher_targets(conn, onnet),
+            "pstn_targets": _dispatcher_targets(conn, pstn),
+            "source_ip": source_ip,
+            "checklist": checklist,
+            "reload_errors": reload_errors,
+            "live_url": f"/homes/{quote(domain, safe='')}/live",
+            "edit_url": f"/tables/tenant_registry/{quote(domain, safe='')}/edit",
+            "raw_url": f"/tables/tenant_registry/{quote(domain, safe='')}",
+            "park_url": f"/homes/{quote(domain, safe='')}/park",
+            "destroy_url": f"/homes/{quote(domain, safe='')}/destroy",
+        },
+        headers=NO_STORE,
+    )
+
+
+@router.get("/homes/{domain}/live", response_class=HTMLResponse)
+def home_live(
+    request: Request,
+    domain: str,
+    conn: sqlite3.Connection | None = Depends(db.get_read_db),
+):
+    redirect = _requires_login(request)
+    if redirect is not None:
+        return redirect
+
+    _registry, values, source_ip = verify_state(conn, domain)
+    onnet = int_or_none(values.get("ds_onnet"))
+    pstn = int_or_none(values.get("ds_pstn"))
+
+    state = request.app.state
+    getter = getattr(state, "get_rpc", None) or (
+        lambda: getattr(state, "rpc", None)
+    )
+    live = build_home_live(getter, domain, source_ip, onnet, pstn)
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "partials/home_live.html",
+        {"live": live, "domain": domain},
         headers=NO_STORE,
     )

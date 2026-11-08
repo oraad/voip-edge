@@ -1,0 +1,53 @@
+{% if live.reachable %}
+<div class="warnsummary" role="status" style="border-color:var(--ok,#2e7d32)">
+  <b>Edge reachable</b>
+  {% if live.uptime %}<span class="meta"> · uptime {{ live.uptime }}</span>{% endif %}
+</div>
+{% else %}
+<div class="warnsummary" role="status">
+  <b>Edge unreachable</b>
+  <span class="meta"> · database checks above still apply.</span>
+</div>
+{% endif %}
+
+{% for item in live["items"] %}
+{% set item_state = item.state or ('ok' if item.ok else 'missing') %}
+<div class="checkline">
+  <span class="dot {{ 'ok' if item_state == 'ok' else '' }}" aria-hidden="true"></span>
+  <b>{{ "Not configured" if item_state == "neutral" else "OK" if item_state == "ok" else "Unavailable" if item_state == "unavailable" else "Missing" }}</b> — {{ item.label }}
+  <span class="meta">{{ item.detail }}</span>
+</div>
+{% endfor %}
+
+{% for message in live["errors"] %}
+<div class="errtxt">{{ message }}</div>
+{% endfor %}
+
+{% if live.reachable %}
+<h3 style="margin:14px 0 6px">Phones registered at the edge</h3>
+{% if live["phones"] %}
+<div style="overflow-x:auto">
+  <table>
+    <thead><tr><th scope="col">AOR</th><th scope="col">Flow</th><th scope="col">Transport</th></tr></thead>
+    <tbody>
+      {% for phone in live["phones"] %}
+      <tr>
+        <td class="mono">{{ phone.aor }}</td>
+        <td class="mono">{{ phone.flow }}</td>
+        <td>{{ phone.transport }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="meta">No phone registered from this home right now.</p>
+{% endif %}
+{% endif %}
+
+<div style="margin-top:10px">
+  <button class="btn" type="button"
+          hx-get="/homes/{{ domain | urlencode }}/live"
+          hx-target="#live-checks" hx-swap="innerHTML"
+          hx-disabled-elt="this">Run live checks again</button>
+</div>
