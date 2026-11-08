@@ -74,6 +74,19 @@ without a PBX API: a static trunk that sends no OPTIONS keepalive and carries
 no calls stays unconfirmed. Ask the PBX admin to enable OPTIONS/qualify on the
 edge trunk, or place a test call, to turn it green.
 
+## Number rules
+
+`/number-rules` is the simple editor for dialplan rows. It has three tabs:
+
+- **Emergency** — exact numbers added to an emergency partition.
+- **Blocked** — exact numbers, prefixes, ranges or a custom pattern.
+- **Custom** — a raw pattern in any partition.
+
+The partition dropdowns show which homes use the partition. Only a home's
+emergency `dpid` and blocked-destinations partition affect calls; an unused
+partition warns but still saves. `/tables/dialplan` remains the Advanced view
+for existing rows and complex edits.
+
 ## Lifecycle
 
 Each operation writes a durable intent in `console.sqlite`. The sweeper resumes

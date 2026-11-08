@@ -22,6 +22,9 @@ carry fixes.
   same tenant-domain rules.
 - The wizard states the required PBX edge trunk and shows the literal edge
   address from optional `EDGE_TRUNK_HOST` / `EDGE_TRUNK_PORT` settings.
+- A simplified Number rules page has Emergency, Blocked and Custom tabs with
+  referenced-partition dropdowns, exact/prefix/range builders and a pattern
+  preview. The Advanced dialplan table remains for existing rows.
 - The home live panel reports a PBX-side trunk heartbeat from the last trusted
   SIP request Kamailio saw, and marks a silent static trunk `Unconfirmed`.
 - The Homes list shows a DB-only coherence badge and links each home to a
