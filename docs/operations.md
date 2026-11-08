@@ -49,6 +49,8 @@ console after a change. Critical values:
 | `CONSOLE_BIND` | tunnel address, e.g. `100.64.0.9` |
 | `CONSOLE_READONLY` | `1` gates every write |
 | `TENANT_ALLOWED_SUFFIXES` | drives the validator, wizard dropdown and generated Kamailio suffix gate |
+| `EDGE_TRUNK_HOST` | optional literal edge tunnel address shown in the wizard trunk note |
+| `EDGE_TRUNK_PORT` | edge trunk port shown in the note; default `5060` |
 | `CONSOLE_RPC_REPLY_DIR` | shared reply-socket dir when the console is on a bridge |
 | `CONSOLE_AUTH_MODE` | `both`, `oidc` or `token` |
 | `CONSOLE_ENFORCE_CAPABILITIES` | `1` refuses unsafe lifecycle actions |

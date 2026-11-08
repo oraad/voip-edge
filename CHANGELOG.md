@@ -15,6 +15,12 @@ carry fixes.
   plus a base-domain dropdown built from `TENANT_ALLOWED_SUFFIXES`, or the
   existing full custom-domain input. The composed domain is validated by the
   same tenant-domain rules.
+- The wizard states the required PBX edge trunk and shows the literal edge
+  address from optional `EDGE_TRUNK_HOST` / `EDGE_TRUNK_PORT` settings.
+- Step 4 separates edge→PBX and PBX→edge checks, verifies the PSTN route set
+  when the home has a trunk, and lists the manual call tests the edge cannot
+  perform. An on-demand probe reads Kamailio's loaded dispatcher and trusted
+  tables and reports each direction.
 - `CONSOLE_RPC_REPLY_DIR`: bind the console's JSON-RPC reply socket to a
   filesystem path in a directory shared with Kamailio. This lets the console
   run on a Docker bridge instead of `network_mode: host`; abstract socket
@@ -31,6 +37,8 @@ carry fixes.
 
 ### Changed
 
+- Wizard and descriptor help now say PBX instead of voip-stack/HT813 so
+  onboarding reads correctly for any PBX.
 - Renamed `CONSOLE_ALLOWED_SUFFIXES` to `TENANT_ALLOWED_SUFFIXES`; the same
   comma-separated list feeds the console validator, onboarding dropdown and
   generated Kamailio suffix gate.
