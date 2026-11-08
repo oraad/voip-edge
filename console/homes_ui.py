@@ -1,11 +1,10 @@
-"""homes_ui.py — Homes landing page (plan §6, wireframe v1).
+"""homes_ui.py — Homes list and per-home checks.
 
-The landing page is a thin, descriptor-driven projection of
-``tenant_registry``: one row per home, its landline and route-set ids, the
-coherence placeholder (live checks arrive with T6) and an Active status badge
-because a row is present.  Parked homes live in the sidecar and are a later
-task.  With no registry rows the page shows the first-use empty state and the
-"+ Onboard a home" CTA.
+The list is a descriptor-driven projection of ``tenant_registry`` with a
+DB-only coherence badge; opening a home reaches ``/homes/<domain>`` for the
+full checklist, PBX/PSTN targets and an on-demand live probe. Parked homes
+live in the sidecar; with no registry rows the page shows the first-use
+empty state and the "+ Onboard a home" CTA.
 """
 from __future__ import annotations
 
@@ -130,6 +129,65 @@ def homes(
     )
 
 
+_RELOAD_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("home registry", ("tenant_registry", "tenantdom")),
+    ("landline", ("tenant_landline", "landline")),
+    ("route sets", ("dispatcher",)),
+    ("trusted sources", ("trusted",)),
+    ("number rules", ("dialplan",)),
+)
+
+
+def _reload_messages(request: Request) -> list[str]:
+    """Merge in-process reload errors with sidecar pending rows."""
+    messages: dict[str, str] = {}
+    worker = getattr(request.app.state, "worker", None)
+    worker_errors = getattr(worker, "errors", {}) if worker is not None else {}
+    for label, keys in _RELOAD_TABLES:
+        for key in keys:
+            error = worker_errors.get(key)
+            if error is not None:
+                messages[label] = f"{label}: {error}"
+                break
+
+    try:
+        from . import settings as settings_module
+        from .sidecar import Sidecar
+
+        sidecar = Sidecar(
+            Path(settings_module.settings.sidecar_dir) / "console.sqlite"
+        )
+        for row in sidecar.pending_reloads():
+            table = str(row.get("table") or "")
+            label = next(
+                (name for name, keys in _RELOAD_TABLES if table in keys),
+                None,
+            )
+            if label is None:
+                continue
+            error = row.get("last_error")
+            if error:
+                messages[label] = f"{label}: {error}"
+            else:
+                messages.setdefault(label, f"{label}: reload pending")
+    except BaseException:
+        pass
+    return list(messages.values())
+
+
+def _not_found_home(domain: str) -> HTMLResponse:
+    return HTMLResponse(
+        "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<title>Home not found</title></head><body>"
+        "<main><h1>Home not found</h1>"
+        f"<p>No registry row for {escape(domain)}.</p>"
+        '<p><a href="/homes">Back to homes</a></p>'
+        "</main></body></html>",
+        status_code=404,
+        headers=NO_STORE,
+    )
+
+
 def _dispatcher_targets(
     conn: sqlite3.Connection | None, setid: int | None
 ) -> list[str]:
@@ -157,33 +215,13 @@ def home_detail(
 
     registry, values, source_ip = verify_state(conn, domain)
     if registry is None:
-        return HTMLResponse(
-            "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-            "<title>Home not found</title></head><body>"
-            "<main><h1>Home not found</h1>"
-            f"<p>No registry row for {escape(domain)}.</p>"
-            '<p><a href="/homes">Back to homes</a></p>'
-            "</main></body></html>",
-            status_code=404,
-            headers=NO_STORE,
-        )
+        return _not_found_home(domain)
 
     onnet = int_or_none(values.get("ds_onnet"))
     pstn = int_or_none(values.get("ds_pstn"))
     checklist = verify_checklist(conn, domain)
 
-    worker = getattr(request.app.state, "worker", None)
-    worker_errors = getattr(worker, "errors", {}) if worker is not None else {}
-    reload_errors = [
-        f"{label}: {worker_errors[key]}"
-        for key, label in (
-            ("tenantdom", "home registry"),
-            ("landline", "landline"),
-            ("dispatcher", "route sets"),
-            ("trusted", "trusted sources"),
-        )
-        if worker_errors.get(key) is not None
-    ]
+    reload_errors = _reload_messages(request)
 
     return request.app.state.templates.TemplateResponse(
         request,
@@ -220,7 +258,9 @@ def home_live(
     if redirect is not None:
         return redirect
 
-    _registry, values, source_ip = verify_state(conn, domain)
+    registry, values, source_ip = verify_state(conn, domain)
+    if registry is None:
+        return _not_found_home(domain)
     onnet = int_or_none(values.get("ds_onnet"))
     pstn = int_or_none(values.get("ds_pstn"))
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import re
+import sqlite3
 
 from console.rpc import UnixDatagramRPC
 from tests.fixtures.fakerpc import FakeRPC
@@ -125,3 +126,57 @@ def test_home_live_reports_unreachable_edge(seeded_db, auth_client, app):
     page = auth_client.get("/homes/sip.alpha.home.example.net/live")
     assert page.status_code == 200
     assert "Edge unreachable" in page.text
+
+
+def test_home_detail_reports_failed_registry_reload(
+    seeded_db, auth_client, app
+):
+    class ErrorWorker:
+        errors = {"tenant_registry": RuntimeError("mtree reload failed")}
+
+    app.state.worker = ErrorWorker()
+    page = auth_client.get("/homes/sip.alpha.home.example.net")
+    text = _text(page.text)
+    assert "Last reload failed" in text
+    assert "home registry: mtree reload failed" in text
+
+
+def test_home_detail_reports_restart_pending_reload(
+    seeded_db, auth_client, tmp_path, monkeypatch
+):
+    from dataclasses import replace
+
+    from console import settings as settings_module
+    from console.sidecar import Sidecar
+
+    sidecar_dir = tmp_path / "console-data"
+    sidecar_dir.mkdir()
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        replace(settings_module.settings, sidecar_dir=str(sidecar_dir)),
+    )
+    Sidecar(sidecar_dir / "console.sqlite").record_pending_reload(
+        "tenant_landline", last_error="landline reload failed"
+    )
+    page = auth_client.get("/homes/sip.alpha.home.example.net")
+    text = _text(page.text)
+    assert "Last reload failed" in text
+    assert "landline: landline reload failed" in text
+
+
+def test_home_detail_404_for_a_parked_home(seeded_db, auth_client):
+    conn = sqlite3.connect(seeded_db)
+    conn.execute(
+        "DELETE FROM tenant_registry WHERE tprefix = ?",
+        ("sip.alpha.home.example.net",),
+    )
+    conn.commit()
+    conn.close()
+    page = auth_client.get("/homes/sip.alpha.home.example.net")
+    assert page.status_code == 404
+
+
+def test_home_live_404_for_unknown_home(seeded_db, auth_client):
+    page = auth_client.get("/homes/sip.missing.example.net/live")
+    assert page.status_code == 404

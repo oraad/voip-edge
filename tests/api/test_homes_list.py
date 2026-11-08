@@ -94,3 +94,17 @@ def test_homes_coherence_badge_names_a_missing_trusted_source(
     page = html.unescape(auth_client.get("/homes").text)
     assert "no trusted source" in page
     assert 'href="/homes/sip.alpha.home.example.net"' in page
+
+
+def test_homes_badge_names_a_missing_dispatcher_set(seeded_db, auth_client):
+    conn = sqlite3.connect(seeded_db)
+    conn.execute("DELETE FROM dispatcher WHERE setid = 11")
+    conn.commit()
+    conn.close()
+
+    page = html.unescape(auth_client.get("/homes").text)
+    assert "set 11 missing" in page
+    detail = html.unescape(
+        auth_client.get("/homes/sip.alpha.home.example.net").text
+    )
+    assert "set 11 has no dispatcher row" in detail

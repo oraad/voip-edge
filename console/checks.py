@@ -342,7 +342,11 @@ def coherence_summaries(
             if number is not None:
                 dispatcher_sets.setdefault(number, []).append(str(destination))
         trusted_tags = {
-            str(row[0]) for row in conn.execute("SELECT DISTINCT tag FROM trusted")
+            str(row[0])
+            for row in conn.execute(
+                "SELECT DISTINCT tag FROM trusted "
+                "WHERE src_ip IS NOT NULL AND src_ip != ''"
+            )
         }
         landline_keys = {
             str(row[0])
