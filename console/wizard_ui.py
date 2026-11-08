@@ -340,7 +340,12 @@ def dispatcher_target_ok(destination: str) -> bool:
 
 
 def trusted_entries(result: Any) -> list[dict[str, str]]:
-    """Normalise ``permissions.trustedDump`` text or structured output."""
+    """Normalise ``permissions.trustedDump`` text or structured output.
+
+    Kamailio repeats ``item`` keys in one object, so :meth:`call_pairs`
+    returns nested ``(key, value)`` lists.  Treat those as mappings and keep
+    every row instead of the last one.
+    """
     entries: list[dict[str, str]] = []
 
     def add(ip: Any, tag: Any) -> None:
@@ -365,6 +370,22 @@ def trusted_entries(result: Any) -> list[dict[str, str]]:
             add(value.get("ip"), value.get("tag"))
             return
         if isinstance(value, (list, tuple)):
+            pairs = [
+                item
+                for item in value
+                if isinstance(item, tuple)
+                and len(item) == 2
+                and isinstance(item[0], str)
+            ]
+            if pairs:
+                for key, item in pairs:
+                    if key == "item":
+                        collect(item)
+                add(
+                    next((item for key, item in pairs if key == "ip"), None),
+                    next((item for key, item in pairs if key == "tag"), None),
+                )
+                return
             for item in value:
                 collect(item)
 
@@ -905,7 +926,8 @@ def _live_detail(rows: list[dict[str, Any]], set_id: int) -> str:
     row = rows[0]
     state = row.get("label") or row.get("state") or "unknown"
     target = row.get("target") or row.get("target_display") or ""
-    return f"set {set_id} · {target} · loaded ({state})"
+    loaded = "loaded" if row.get("state") == "active" else "probe not answered"
+    return f"set {set_id} · {target} · {loaded} ({state})"
 
 
 def build_live_checks(
@@ -939,75 +961,119 @@ def build_live_checks(
         }
 
     rows: list[dict[str, Any]] = []
+    dispatcher_unavailable = False
     try:
         rows = build_dispatcher_view(rpc.call("dispatcher.list"))
     except Exception as exc:  # noqa: BLE001
         if "No Destination Sets" not in str(exc):
+            dispatcher_unavailable = True
             errors.append(f"dispatcher.list failed: {exc}")
 
     onnet_rows = _live_targets(rows, onnet_set)
-    onnet_ok = bool(onnet_rows) and all(
-        dispatcher_target_ok(row.get("target", "")) for row in onnet_rows
-    )
-    if onnet_set in (None, 0):
+    onnet_state = "ok"
+    if dispatcher_unavailable:
+        onnet_ok = False
+        onnet_state = "unavailable"
+        onnet_detail = "dispatcher list unavailable"
+    elif onnet_set in (None, 0):
+        onnet_ok = False
+        onnet_state = "missing"
         onnet_detail = "no on-net route set"
     elif not onnet_rows:
+        onnet_ok = False
+        onnet_state = "missing"
         onnet_detail = f"set {onnet_set} is not loaded"
-    elif not onnet_ok:
+    elif not all(
+        dispatcher_target_ok(row.get("target", "")) for row in onnet_rows
+    ):
+        onnet_ok = False
+        onnet_state = "missing"
         onnet_detail = f"set {onnet_set} has a non-literal-IPv4 destination"
+    elif not all(row.get("state") == "active" for row in onnet_rows):
+        onnet_ok = False
+        onnet_state = "missing"
+        onnet_detail = _live_detail(onnet_rows, onnet_set)
     else:
+        onnet_ok = True
         onnet_detail = _live_detail(onnet_rows, onnet_set)
     items.append(
         {
             "key": "edge_trunk_out",
             "label": "Edge → PBX: on-net route set",
             "ok": onnet_ok,
+            "state": onnet_state,
             "detail": onnet_detail,
         }
     )
 
     pstn_rows = _live_targets(rows, pstn_set)
-    pstn_ok = True
-    if pstn_set in (None, 0):
+    pstn_state = "ok"
+    if dispatcher_unavailable:
+        pstn_ok = False
+        pstn_state = "unavailable"
+        pstn_detail = "dispatcher list unavailable"
+    elif pstn_set in (None, 0):
+        pstn_ok = True
         pstn_detail = "No PSTN trunk configured"
     elif not pstn_rows:
         pstn_ok = False
+        pstn_state = "missing"
         pstn_detail = f"set {pstn_set} is not loaded"
+    elif not all(
+        dispatcher_target_ok(row.get("target", "")) for row in pstn_rows
+    ) or not all(row.get("state") == "active" for row in pstn_rows):
+        pstn_ok = False
+        pstn_state = "missing"
+        pstn_detail = _live_detail(pstn_rows, pstn_set)
     else:
+        pstn_ok = True
         pstn_detail = _live_detail(pstn_rows, pstn_set)
     items.append(
         {
             "key": "pstn",
             "label": "PSTN trunk route set",
             "ok": pstn_ok,
+            "state": pstn_state,
             "detail": pstn_detail,
         }
     )
 
     trusted_ok = False
+    trusted_state = "missing"
     trusted_detail = "no trusted entries loaded"
     try:
-        entries = trusted_entries(rpc.call("permissions.trustedDump"))
-        match = next(
-            (
-                entry
-                for entry in entries
-                if entry["ip"] == source_ip and entry["tag"] == domain
-            ),
-            None,
-        )
-        if match is not None:
-            trusted_ok = True
-            trusted_detail = f"{match['ip']} → {match['tag']} · loaded"
-        elif source_ip:
-            trusted_detail = f"{source_ip} → {domain} is not loaded"
+        dump = getattr(rpc, "call_pairs", rpc.call)
+        result = dump("permissions.trustedDump")
+        entries = trusted_entries(result)
+        if not entries and result not in (None, [], (), {}):
+            trusted_state = "unavailable"
+            trusted_detail = "trusted dump is not readable"
+        else:
+            match = next(
+                (
+                    entry
+                    for entry in entries
+                    if entry["ip"] == source_ip and entry["tag"] == domain
+                ),
+                None,
+            )
+            if match is not None:
+                trusted_ok = True
+                trusted_state = "ok"
+                trusted_detail = f"{match['ip']} → {match['tag']} · loaded"
+            elif not source_ip:
+                trusted_detail = "no trusted source in the database"
+            else:
+                trusted_detail = f"{source_ip} → {domain} is not loaded"
     except Exception as exc:  # noqa: BLE001 - older Kamailio may lack the RPC
+        trusted_state = "unavailable"
         trusted_detail = f"trusted dump unavailable: {exc}"
     items.append(
         {
             "key": "edge_trunk_in",
             "label": "PBX → edge: trusted tunnel source",
             "ok": trusted_ok,
+            "state": trusted_state,
             "detail": trusted_detail,
         }
     )

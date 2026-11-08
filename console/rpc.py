@@ -90,12 +90,8 @@ class UnixDatagramRPC:
             self._next_id += 1
             return self._next_id
 
-    def call(self, method: str, params: list | None = None) -> Any:
-        """Invoke *method* and return the decoded JSON-RPC ``result``.
-
-        Raises :class:`KamailioUnavailable` for any transport failure and
-        :class:`RPCFault` when Kamailio answers with an ``error`` object.
-        """
+    def _exchange(self, method: str, params: list | None = None) -> bytes:
+        """Send one JSON-RPC request and return the raw reply datagram."""
         request: dict[str, Any] = {
             "jsonrpc": "2.0",
             "method": method,
@@ -115,7 +111,7 @@ class UnixDatagramRPC:
                 reply_path = _bind_client_socket(sock, self.reply_dir)
                 sock.connect(self.sock_path)
                 sock.send(payload)
-                raw = sock.recv(_MAX_REPLY)
+                return sock.recv(_MAX_REPLY)
         except OSError as exc:
             raise KamailioUnavailable(
                 f"kamailio RPC unavailable at {self.sock_path}: {exc}"
@@ -132,6 +128,8 @@ class UnixDatagramRPC:
                 except OSError:
                     pass
 
+    def _decode(self, raw: bytes, method: str) -> dict[str, Any]:
+        """Decode a reply datagram and raise the typed RPC errors."""
         try:
             reply = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -162,7 +160,58 @@ class UnixDatagramRPC:
             raise KamailioUnavailable(
                 "kamailio RPC reply has neither result nor error"
             )
-        return reply["result"]
+        return reply
+
+    def call(self, method: str, params: list | None = None) -> Any:
+        """Invoke *method* and return the decoded JSON-RPC ``result``.
+
+        Raises :class:`KamailioUnavailable` for any transport failure and
+        :class:`RPCFault` when Kamailio answers with an ``error`` object.
+        """
+        return self._decode(self._exchange(method, params), method)["result"]
+
+    def call_pairs(self, method: str, params: list | None = None) -> Any:
+        """Like :meth:`call`, but keep duplicate object keys as ``(key, value)``.
+
+        Kamailio's ``permissions.trustedDump`` builds one object with a
+        repeated ``item`` key per row.  Ordinary JSON decoding keeps only the
+        last one, so this method parses every object with
+        ``object_pairs_hook=list`` and returns the result as nested pair lists.
+        """
+        raw = self._exchange(method, params)
+        try:
+            reply = json.loads(raw.decode("utf-8"), object_pairs_hook=list)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise KamailioUnavailable(
+                f"kamailio RPC returned an invalid reply ({len(raw)} bytes) "
+                f"from {self.sock_path}"
+            ) from exc
+        if not isinstance(reply, list):
+            raise KamailioUnavailable(
+                f"kamailio RPC returned {type(reply).__name__}, expected an object"
+            )
+
+        fields = dict(reply)
+        error = fields.get("error")
+        if error is not None:
+            if isinstance(error, list):
+                error = dict(error)
+            if not isinstance(error, dict):
+                raise KamailioUnavailable(
+                    f"kamailio RPC returned a malformed error object: {error!r}"
+                )
+            try:
+                code = int(error.get("code", -32603))
+            except (TypeError, ValueError):
+                code = -32603
+            message = error.get("message", "unspecified JSON-RPC error")
+            raise RPCFault(method, code, str(message))
+
+        if "result" not in fields:
+            raise KamailioUnavailable(
+                "kamailio RPC reply has neither result nor error"
+            )
+        return fields["result"]
 
 
 def flatten_htable_dump(dump: Any) -> dict[str, dict[str, Any]]:

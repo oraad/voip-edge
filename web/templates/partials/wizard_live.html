@@ -11,9 +11,10 @@
 {% endif %}
 
 {% for item in live["items"] %}
+{% set item_state = item.state or ('ok' if item.ok else 'missing') %}
 <div class="checkline">
-  <span class="dot {{ 'ok' if item.ok else '' }}" aria-hidden="true"></span>
-  <b>{{ "OK" if item.ok else "Missing" }}</b> — {{ item.label }}
+  <span class="dot {{ 'ok' if item_state == 'ok' else '' }}" aria-hidden="true"></span>
+  <b>{{ "OK" if item_state == "ok" else "Unavailable" if item_state == "unavailable" else "Missing" }}</b> — {{ item.label }}
   <span class="meta">{{ item.detail }}</span>
 </div>
 {% endfor %}

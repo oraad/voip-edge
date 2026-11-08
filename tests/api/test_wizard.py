@@ -69,6 +69,11 @@ def _hidden(text: str) -> dict[str, str]:
     }
 
 
+def _text(page: str) -> str:
+    """Rendered page text with tags collapsed to single spaces."""
+    return " ".join(re.sub(r"<[^>]+>", " ", html.unescape(page)).split())
+
+
 def _to_review(client, identity=None, network=None):
     """Follow step 1 and step 2; return the review response and apply payload."""
     identity = dict(IDENTITY if identity is None else identity)
@@ -371,6 +376,112 @@ def test_live_verify_probes_dispatcher_and_trusted_table(
     assert "set 31" in text
     assert "100.64.10.10" in text
     assert "loaded" in text
+
+
+def test_live_verify_reads_all_trusted_entries(
+    seeded_db, auth_client, app, tmp_path
+):
+    with FakeRPC(tmp_path / "rpc.sock") as fake:
+        fake.script("core.uptime", {"uptime": "1 hour"})
+        fake.script(
+            "dispatcher.list",
+            {
+                "NRSETS": 1,
+                "RECORDS": [
+                    {
+                        "SET": {
+                            "ID": 11,
+                            "TARGETS": [
+                                {
+                                    "DEST": {
+                                        "URI": "sip:10.0.0.10:5060;transport=tcp",
+                                        "FLAGS": "AP",
+                                        "PRIORITY": 0,
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                ],
+            },
+        )
+        fake.raw(
+            "permissions.trustedDump",
+            (
+                b'{"jsonrpc":"2.0","id":1,"result":{'
+                b'"table":0,"item":{"ip":"100.64.10.10",'
+                b'"tag":"sip.alpha.home.example.net"},'
+                b'"table":1,"item":{"ip":"100.64.10.12",'
+                b'"tag":"sip.beta.home.example.net"}}}'
+            ),
+        )
+        app.state.rpc = UnixDatagramRPC(fake.sock_path, timeout_ms=500)
+        page = auth_client.get(
+            "/wizard/verify/sip.alpha.home.example.net/live"
+        )
+    text = _text(page.text)
+    assert "OK — PBX → edge: trusted tunnel source" in text
+    assert (
+        "100.64.10.10 → sip.alpha.home.example.net · loaded" in text
+    )
+
+
+def test_live_verify_marks_unavailable_trusted_dump(
+    seeded_db, auth_client, app, tmp_path
+):
+    with FakeRPC(tmp_path / "rpc.sock") as fake:
+        fake.script("core.uptime", {"uptime": "1 hour"})
+        fake.script("dispatcher.list", {"NRSETS": 0, "RECORDS": []})
+        fake.fault("permissions.trustedDump", message="not supported")
+        app.state.rpc = UnixDatagramRPC(fake.sock_path, timeout_ms=500)
+        page = auth_client.get(
+            "/wizard/verify/sip.alpha.home.example.net/live"
+        )
+    text = _text(page.text)
+    assert "Unavailable — PBX → edge: trusted tunnel source" in text
+
+
+def test_live_verify_reports_inactive_dispatcher(
+    seeded_db, auth_client, app, tmp_path
+):
+    with FakeRPC(tmp_path / "rpc.sock") as fake:
+        fake.script("core.uptime", {"uptime": "1 hour"})
+        fake.script(
+            "dispatcher.list",
+            {
+                "NRSETS": 1,
+                "RECORDS": [
+                    {
+                        "SET": {
+                            "ID": 11,
+                            "TARGETS": [
+                                {
+                                    "DEST": {
+                                        "URI": "sip:10.0.0.10:5060;transport=tcp",
+                                        "FLAGS": "IP",
+                                        "PRIORITY": 0,
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                ],
+            },
+        )
+        fake.script(
+            "permissions.trustedDump",
+            {"table": 0, "item": {
+                "ip": "100.64.10.10",
+                "tag": "sip.alpha.home.example.net",
+            }},
+        )
+        app.state.rpc = UnixDatagramRPC(fake.sock_path, timeout_ms=500)
+        page = auth_client.get(
+            "/wizard/verify/sip.alpha.home.example.net/live"
+        )
+    text = _text(page.text)
+    assert "probe not answered" in text
+    assert "OK — Edge → PBX" not in text
 
 
 def test_live_verify_reports_unreachable_edge(seeded_db, auth_client, app):

@@ -236,3 +236,51 @@ def test_trusted_entries_reads_text_and_structured_dumps():
 def test_dispatcher_target_ok_rejects_fqdn_and_accepts_ipv4():
     assert wizard_ui.dispatcher_target_ok("sip:10.0.6.20:5060;transport=tcp")
     assert not wizard_ui.dispatcher_target_ok("sip:pbx.lan:5060;transport=tcp")
+
+
+def test_trusted_entries_reads_duplicate_key_pairs():
+    payload = [
+        ("table", 0),
+        ("item", [("ip", "100.64.10.10"), ("tag", "sip.alpha.home.example.net")]),
+        ("table", 1),
+        ("item", [("ip", "100.64.10.12"), ("tag", "sip.beta.home.example.net")]),
+    ]
+    assert wizard_ui.trusted_entries(payload) == [
+        {"ip": "100.64.10.10", "tag": "sip.alpha.home.example.net"},
+        {"ip": "100.64.10.12", "tag": "sip.beta.home.example.net"},
+    ]
+
+
+def test_verify_checklist_rejects_fqdn_and_missing_set(tmp_path):
+    from tests.fixtures import seeddb
+
+    path = seeddb.seed(tmp_path / "edge.sqlite")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "UPDATE dispatcher SET destination = ? WHERE setid = 11",
+        ("sip:pbx.lan:5060;transport=tcp",),
+    )
+    conn.commit()
+    checklist = wizard_ui.verify_checklist(conn, "sip.alpha.home.example.net")
+    items = {item["key"]: item for item in checklist["items"]}
+    assert not items["edge_trunk_out"]["ok"]
+    assert "non-literal-IPv4" in items["edge_trunk_out"]["detail"]
+
+    conn.execute("DELETE FROM dispatcher WHERE setid = 11")
+    conn.commit()
+    checklist = wizard_ui.verify_checklist(conn, "sip.alpha.home.example.net")
+    items = {item["key"]: item for item in checklist["items"]}
+    assert not items["edge_trunk_out"]["ok"]
+    assert "no dispatcher row" in items["edge_trunk_out"]["detail"]
+
+
+def test_build_live_checks_handles_rpc_client_failure():
+    def broken():
+        raise RuntimeError("rpc factory failed")
+
+    live = wizard_ui.build_live_checks(
+        broken, "sip.alpha.home.example.net", "100.64.10.10", 11, 31
+    )
+    assert live["reachable"] is False
+    assert live["items"] == []
+    assert "rpc factory failed" in live["errors"][0]
