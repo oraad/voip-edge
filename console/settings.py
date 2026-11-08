@@ -43,6 +43,10 @@ class Settings:
     poll_ms: int = int(os.environ.get("CONSOLE_POLL_MS", "15000"))
     readonly: bool = _bool("CONSOLE_READONLY")
     tls_live: bool = _bool("CONSOLE_TLS_LIVE", True)
+    # Optional onboarding hint: the literal edge tunnel address the home PBX
+    # must use for its static trunk. Empty shows generic wording.
+    edge_trunk_host: str = os.environ.get("EDGE_TRUNK_HOST", "")
+    edge_trunk_port: int = int(os.environ.get("EDGE_TRUNK_PORT", "5060"))
     session_ttl_seconds: int = int(os.environ.get("CONSOLE_SESSION_TTL", "43200"))
     login_rate_per_min: int = int(os.environ.get("CONSOLE_LOGIN_RATE", "5"))
     # --- OIDC (docs/oidc.md) ---

@@ -80,7 +80,7 @@ def test_fqdn_destination_is_an_error_with_the_lan_ip_hint():
         "destination_ipv4_required", "sip:voip-stack.lan:5060;transport=tcp"
     )
     assert errors
-    assert "use the voip-stack host's LAN IP" in errors[0]
+    assert "use the PBX host's LAN IP" in errors[0]
     assert warnings == []
 
 

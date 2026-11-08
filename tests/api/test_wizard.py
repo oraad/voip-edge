@@ -205,6 +205,43 @@ def test_wizard_happy_path_writes_five_rows_backs_up_and_reloads(
     assert "Waiting for the first registration" in green
 
 
+def test_step2_shows_pbx_edge_trunk_note(seeded_db, auth_client, monkeypatch):
+    from dataclasses import replace as _replace
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        _replace(
+            settings_module.settings,
+            db_path=str(seeded_db),
+            edge_trunk_host="203.0.113.9",
+            edge_trunk_port=5060,
+        ),
+    )
+    page = auth_client.post("/wizard/step1", data=IDENTITY)
+    text = " ".join(html.unescape(page.text).split())
+    assert "Add the edge trunk on the PBX" in text
+    assert "203.0.113.9:5060" in text
+    assert "Do not register" in text
+    assert "never the tenant's public SIP domain" in text
+    assert "PBX LAN IP" in text
+    assert "voip-stack" not in text.lower()
+
+
+def test_step2_note_without_edge_host_is_generic(seeded_db, auth_client, monkeypatch):
+    from dataclasses import replace as _replace
+
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        _replace(settings_module.settings, db_path=str(seeded_db), edge_trunk_host=""),
+    )
+    page = auth_client.post("/wizard/step1", data=IDENTITY)
+    text = " ".join(html.unescape(page.text).split())
+    assert "the edge tunnel address from your deployment" in text
+    assert "voip-stack" not in text.lower()
+
+
 # ---------------------------------------------------------------------------
 # no-PSTN variant: 4 rows, ds_pstn=0, PSTN set skipped
 # ---------------------------------------------------------------------------

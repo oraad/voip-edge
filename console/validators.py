@@ -290,7 +290,7 @@ def sip_uri(value: Any, context: ValidationContext) -> tuple[list[str], list[str
         return (
             [
                 "The destination host must be a literal IPv4 address "
-                f"(got {host!r}); use the voip-stack host's LAN IP, not an FQDN."
+                f"(got {host!r}); use the PBX host's LAN IP, not an FQDN."
             ],
             [],
         )

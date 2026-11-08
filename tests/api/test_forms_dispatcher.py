@@ -135,7 +135,7 @@ def test_fqdn_destination_is_422_with_the_lan_ip_hint(
 
     assert response.status_code == 422, response.text
     page = _squash(response.text)
-    assert "use the voip-stack host's LAN IP" in page
+    assert "use the PBX host's LAN IP" in page
     assert "not an FQDN" in page
     assert 'aria-invalid="true"' in response.text
     assert 'href="#field-destination"' in response.text

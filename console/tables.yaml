@@ -53,7 +53,7 @@ tables:
         type: int
         validator: set_exists_onnet
         severity: error
-        help: Dispatcher set id of this home's voip-stack (10+N by convention; a different id is a warning, not a block).
+        help: Dispatcher set id of this home's PBX (10+N by convention; a different id is a warning, not a block).
         widget: number
         show_in_list: true
         form_order: 2
@@ -62,7 +62,7 @@ tables:
         type: int
         validator: pstn_set_exists_or_zero
         severity: error
-        help: Dispatcher set id of this home's PSTN gateway; 0 means the home has no trunk.
+        help: Dispatcher set id of this home's PSTN gateway (usually the PBX); 0 means the home has no trunk.
         widget: number
         show_in_list: true
         form_order: 3
@@ -156,7 +156,7 @@ tables:
         type: int
         validator: null
         severity: error
-        help: Taken from the owning home's voip-stack set — read-only.
+        help: Taken from the owning home's PBX set — read-only.
         widget: number
         readonly: true
         derived: tenant_ds_onnet

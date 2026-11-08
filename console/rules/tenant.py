@@ -336,7 +336,7 @@ def set_exists_onnet(
             warnings.append(
                 f"On-net set {number} does not follow the 10+N convention: "
                 f"expected set {expected}. A different set is allowed — check "
-                "that it is this home's voip-stack."
+                "that it is this home's PBX."
             )
     return (errors, warnings)
 

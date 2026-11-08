@@ -98,7 +98,7 @@ FIELD_LABELS = {
     "landline": "Landline",
     "ring_group": "Ring group / extension",
     "label": "Display label",
-    "lan_ip": "voip-stack LAN IP",
+    "lan_ip": "PBX LAN IP",
     "wire_ip": "Wire-observed native IP",
     "has_pstn": "PSTN trunk",
     "tenantid": "Home id",
@@ -316,6 +316,11 @@ def destination_for(lan_ip: str, port: int = DEFAULT_SIP_PORT) -> str:
     return f"sip:{lan_ip}:{port};transport=tcp"
 
 
+def edge_trunk_display(host: str, port: int) -> str:
+    """The edge tunnel address shown in the PBX trunk note ('' when unset)."""
+    return f"{host}:{port}" if host else ""
+
+
 def plan_writes(
     draft: WizardDraft | Mapping[str, Any] | None = None,
     tableset: descriptors.TableSet | None = None,
@@ -385,7 +390,7 @@ def plan_writes(
                 "flags": 0,
                 "priority": 0,
                 "attrs": "",
-                "description": f"{draft.domain} voip-stack (native routing)",
+                "description": f"{draft.domain} PBX (native routing)",
             },
         ),
     ]
@@ -400,7 +405,7 @@ def plan_writes(
                     "priority": 0,
                     "attrs": "",
                     "description": (
-                        f"{draft.domain} PSTN via voip-stack (LAN-only)"
+                        f"{draft.domain} PSTN via PBX (LAN-only)"
                     ),
                 },
             )
@@ -687,7 +692,7 @@ def validate_step(
             "flags": 0,
             "priority": 0,
             "attrs": "",
-            "description": f"{draft.domain} voip-stack (native routing)",
+            "description": f"{draft.domain} PBX (native routing)",
         }
         for field_name in ("setid", "destination"):
             field_errors, field_warnings = _field_rule(
@@ -1083,6 +1088,12 @@ def _render(
         "plan": plan,
         "row_count": len(plan),
         "wire_hint": wire_ip_hint(draft.domain),
+        "edge_trunk_host": settings_module.settings.edge_trunk_host,
+        "edge_trunk_port": settings_module.settings.edge_trunk_port,
+        "edge_trunk_display": edge_trunk_display(
+            settings_module.settings.edge_trunk_host,
+            settings_module.settings.edge_trunk_port,
+        ),
         "tls_live": bool(settings_module.settings.tls_live),
         "tls_domain": draft.domain,
         "base_domains": base_domains,

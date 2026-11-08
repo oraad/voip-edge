@@ -185,18 +185,33 @@
       {% endfor %}
 
       <div class="wizfield">
-        <label for="field-lan_ip">voip-stack host LAN IP</label>
+        <label for="field-lan_ip">PBX LAN IP</label>
         <input id="field-lan_ip" name="lan_ip" type="text" class="mono"
                value="{{ draft.lan_ip }}" autocomplete="off" spellcheck="false"
                {% if field_meta.lan_ip.aria_invalid %}aria-invalid="true"{% endif %}
                aria-describedby="{{ field_meta.lan_ip.describedby }}">
         <div class="hint" id="help-lan_ip">The literal LAN address of the home's
-          voip-stack host, for example <span class="mono">10.0.6.20</span>.
-          Dispatcher destinations must be literal IPv4 hosts (TCP, port 5060),
-          never an FQDN.</div>
+          PBX (its SIP server), for example <span class="mono">10.0.6.20</span>.
+          The edge sends calls here over the tunnel. Dispatcher destinations must
+          be literal IPv4 hosts (TCP, port 5060), never an FQDN.</div>
         {% for message in field_meta.lan_ip.errors %}
         <div class="errtxt" id="err-lan_ip-{{ loop.index }}">{{ message }}</div>
         {% endfor %}
+      </div>
+
+      <div class="tlsnotice" role="note" id="edge-trunk-note">
+        <b>Add the edge trunk on the PBX.</b>
+        Create one static SIP trunk to this edge. Do not register it.
+        {% if edge_trunk_display %}
+        <div class="mono">Server / outbound proxy: {{ edge_trunk_display }}</div>
+        <div class="mono">Allowed incoming IP: {{ edge_trunk_host }}</div>
+        {% else %}
+        Use the edge tunnel address from your deployment as the server and
+        outbound proxy, and allow that address as an incoming source.
+        {% endif %}
+        Use the literal tunnel address, never the tenant's public SIP domain:
+        split-horizon DNS sends the call back into the PBX. Keep the PBX's
+        carrier or PSTN trunk as a separate line.
       </div>
 
       <div class="wizfield">

@@ -3,7 +3,7 @@
 Plan §5.2 (dispatcher row) and §7 scenario 18:
 
 * the destination must be a **literal IPv4** SIP URI (``sip:`` or ``sips:``);
-  an FQDN is blocked with the "use the voip-stack host's LAN IP" hint;
+  an FQDN is blocked with the "use the PBX host's LAN IP" hint;
 * the port, when present, is a whole number in ``1..65535``;
 * ``transport=`` is restricted to ``tcp``/``udp``;
 * **UDP on the tunnel is a warning**, never a block, with the locked MTU text;
