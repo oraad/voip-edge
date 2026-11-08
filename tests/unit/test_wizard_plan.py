@@ -11,6 +11,7 @@ from __future__ import annotations
 import sqlite3
 
 from console import descriptors
+from console import wizard_ui
 from console.wizard_ui import WizardDraft, draft_from_form, plan_writes, validate_step
 from tests.fixtures import seeddb
 
@@ -219,3 +220,19 @@ def test_draft_as_form_carries_domain_mode_state():
     assert form["domain_mode"] == "suffix"
     assert form["domain_subdomain"] == "sip.echo"
     assert form["domain_base"] == "home.example.net"
+
+
+def test_trusted_entries_reads_text_and_structured_dumps():
+    text = "table: 33\nitem: {\n ip: 100.64.10.20\n tag: sip.delta.home.example.net\n}"
+    assert wizard_ui.trusted_entries(text) == [
+        {"ip": "100.64.10.20", "tag": "sip.delta.home.example.net"}
+    ]
+    structured = [{"ip": "100.64.10.20", "tag": "sip.delta.home.example.net"}]
+    assert wizard_ui.trusted_entries(structured) == [
+        {"ip": "100.64.10.20", "tag": "sip.delta.home.example.net"}
+    ]
+
+
+def test_dispatcher_target_ok_rejects_fqdn_and_accepts_ipv4():
+    assert wizard_ui.dispatcher_target_ok("sip:10.0.6.20:5060;transport=tcp")
+    assert not wizard_ui.dispatcher_target_ok("sip:pbx.lan:5060;transport=tcp")

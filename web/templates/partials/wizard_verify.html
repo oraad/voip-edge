@@ -48,6 +48,16 @@
   </div>
   {% endif %}
 
+  <div class="panel" id="live-checks" style="margin:16px 0 0">
+    <b>Live edge checks</b>
+    <p class="sub" style="margin:6px 0 10px">
+      Reads the loaded dispatcher and trusted tables from Kamailio.
+    </p>
+    <button class="btn" type="button"
+            hx-get="/wizard/verify/{{ draft.domain | urlencode }}/live"
+            hx-target="#live-checks" hx-swap="innerHTML">Run live checks</button>
+  </div>
+
   <div class="panel" style="margin:16px 0 0; border-style:dashed">
     <b>Waiting for the first registration</b>
     <p class="sub" style="margin:6px 0 0">

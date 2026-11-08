@@ -552,6 +552,8 @@ def create_app() -> FastAPI:
                     app.state.rpc = app.state.rpc_factory()
         return app.state.rpc
 
+    app.state.get_rpc = _get_rpc
+
     def _revalidate_schema() -> None:
         """Retry a deferred startup schema check; clear only on success."""
         if not getattr(app.state, "schema_check_deferred", False):

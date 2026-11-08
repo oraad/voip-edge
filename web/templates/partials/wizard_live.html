@@ -1,0 +1,29 @@
+{% if live.reachable %}
+<div class="warnsummary" role="status" style="border-color:var(--ok,#2e7d32)">
+  <b>Edge reachable</b>
+  {% if live.uptime %}<span class="meta"> · uptime {{ live.uptime }}</span>{% endif %}
+</div>
+{% else %}
+<div class="warnsummary" role="status">
+  <b>Edge unreachable</b>
+  <span class="meta"> · the database checks above still apply.</span>
+</div>
+{% endif %}
+
+{% for item in live["items"] %}
+<div class="checkline">
+  <span class="dot {{ 'ok' if item.ok else '' }}" aria-hidden="true"></span>
+  <b>{{ "OK" if item.ok else "Missing" }}</b> — {{ item.label }}
+  <span class="meta">{{ item.detail }}</span>
+</div>
+{% endfor %}
+
+{% for message in live["errors"] %}
+<div class="errtxt">{{ message }}</div>
+{% endfor %}
+
+<div style="margin-top:10px">
+  <button class="btn" type="button"
+          hx-get="/wizard/verify/{{ domain | urlencode }}/live"
+          hx-target="#live-checks" hx-swap="innerHTML">Run live checks again</button>
+</div>

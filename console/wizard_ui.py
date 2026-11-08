@@ -339,6 +339,39 @@ def dispatcher_target_ok(destination: str) -> bool:
     return True
 
 
+def trusted_entries(result: Any) -> list[dict[str, str]]:
+    """Normalise ``permissions.trustedDump`` text or structured output."""
+    entries: list[dict[str, str]] = []
+
+    def add(ip: Any, tag: Any) -> None:
+        ip_text = str(ip or "").strip().strip('"')
+        tag_text = str(tag or "").strip().strip('"')
+        if ip_text and tag_text:
+            entries.append({"ip": ip_text, "tag": tag_text})
+
+    def collect(value: Any) -> None:
+        if value is None:
+            return
+        if isinstance(value, str):
+            for ip, tag in re.findall(
+                r"ip:\s*(\S+).*?tag:\s*(\S+)", value, re.S
+            ):
+                add(ip, tag)
+            return
+        if isinstance(value, Mapping):
+            item = value.get("item")
+            if isinstance(item, Mapping):
+                collect(item)
+            add(value.get("ip"), value.get("tag"))
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                collect(item)
+
+    collect(result)
+    return entries
+
+
 def plan_writes(
     draft: WizardDraft | Mapping[str, Any] | None = None,
     tableset: descriptors.TableSet | None = None,
@@ -858,6 +891,133 @@ def wire_ip_hint(domain: str) -> str:
         f"of a REGISTER from {target}. Paste that address — not a DNS answer "
         "and not a 100.96.128.x utility alias."
     )
+
+
+def _live_targets(rows: list[dict[str, Any]], set_id: int | None) -> list[dict[str, Any]]:
+    if set_id in (None, 0):
+        return []
+    return [
+        row for row in rows if str(row.get("setid")) == str(set_id)
+    ]
+
+
+def _live_detail(rows: list[dict[str, Any]], set_id: int) -> str:
+    row = rows[0]
+    state = row.get("label") or row.get("state") or "unknown"
+    target = row.get("target") or row.get("target_display") or ""
+    return f"set {set_id} · {target} · loaded ({state})"
+
+
+def build_live_checks(
+    get_rpc: Any,
+    domain: str,
+    source_ip: str,
+    onnet_set: int | None,
+    pstn_set: int | None,
+) -> dict[str, Any]:
+    """Probe Kamailio for the loaded dispatcher and trusted state."""
+    from .live import build_dispatcher_view, edge_health
+
+    items: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    try:
+        rpc = get_rpc()
+    except Exception as exc:  # noqa: BLE001 - report, never raise from the panel
+        rpc = None
+        errors.append(f"RPC client unavailable: {exc}")
+
+    health = edge_health(rpc)
+    reachable = bool(health["reachable"])
+    if not reachable:
+        errors.append("Edge unreachable; live checks skipped.")
+        return {
+            "reachable": False,
+            "uptime": None,
+            "items": [],
+            "errors": errors,
+        }
+
+    rows: list[dict[str, Any]] = []
+    try:
+        rows = build_dispatcher_view(rpc.call("dispatcher.list"))
+    except Exception as exc:  # noqa: BLE001
+        if "No Destination Sets" not in str(exc):
+            errors.append(f"dispatcher.list failed: {exc}")
+
+    onnet_rows = _live_targets(rows, onnet_set)
+    onnet_ok = bool(onnet_rows) and all(
+        dispatcher_target_ok(row.get("target", "")) for row in onnet_rows
+    )
+    if onnet_set in (None, 0):
+        onnet_detail = "no on-net route set"
+    elif not onnet_rows:
+        onnet_detail = f"set {onnet_set} is not loaded"
+    elif not onnet_ok:
+        onnet_detail = f"set {onnet_set} has a non-literal-IPv4 destination"
+    else:
+        onnet_detail = _live_detail(onnet_rows, onnet_set)
+    items.append(
+        {
+            "key": "edge_trunk_out",
+            "label": "Edge → PBX: on-net route set",
+            "ok": onnet_ok,
+            "detail": onnet_detail,
+        }
+    )
+
+    pstn_rows = _live_targets(rows, pstn_set)
+    pstn_ok = True
+    if pstn_set in (None, 0):
+        pstn_detail = "No PSTN trunk configured"
+    elif not pstn_rows:
+        pstn_ok = False
+        pstn_detail = f"set {pstn_set} is not loaded"
+    else:
+        pstn_detail = _live_detail(pstn_rows, pstn_set)
+    items.append(
+        {
+            "key": "pstn",
+            "label": "PSTN trunk route set",
+            "ok": pstn_ok,
+            "detail": pstn_detail,
+        }
+    )
+
+    trusted_ok = False
+    trusted_detail = "no trusted entries loaded"
+    try:
+        entries = trusted_entries(rpc.call("permissions.trustedDump"))
+        match = next(
+            (
+                entry
+                for entry in entries
+                if entry["ip"] == source_ip and entry["tag"] == domain
+            ),
+            None,
+        )
+        if match is not None:
+            trusted_ok = True
+            trusted_detail = f"{match['ip']} → {match['tag']} · loaded"
+        elif source_ip:
+            trusted_detail = f"{source_ip} → {domain} is not loaded"
+    except Exception as exc:  # noqa: BLE001 - older Kamailio may lack the RPC
+        trusted_detail = f"trusted dump unavailable: {exc}"
+    items.append(
+        {
+            "key": "edge_trunk_in",
+            "label": "PBX → edge: trusted tunnel source",
+            "ok": trusted_ok,
+            "detail": trusted_detail,
+        }
+    )
+
+    return {
+        "reachable": True,
+        "uptime": health.get("uptime"),
+        "items": items,
+        "errors": errors,
+    }
 
 
 def verify_checklist(
@@ -1527,4 +1687,56 @@ def wizard_verify(
         draft=WizardDraft(domain=domain),
         checklist=verify_checklist(conn, domain),
         reload_warnings=[warn] if warn else [],
+    )
+
+
+@router.get("/wizard/verify/{domain}/live", response_class=HTMLResponse)
+def wizard_verify_live(
+    request: Request,
+    domain: str,
+    conn: sqlite3.Connection | None = Depends(db.get_read_db),
+):
+    """On-demand probe of the dispatcher and trusted tables Kamailio loaded."""
+    redirect = _requires_login(request)
+    if redirect is not None:
+        return redirect
+
+    onnet = None
+    pstn = None
+    source_ip = ""
+    if conn is not None:
+        try:
+            registry = db.read_row(conn, "tenant_registry", domain)
+        except sqlite3.Error:
+            registry = None
+        if registry is not None:
+            try:
+                values = descriptors.unpack_row(
+                    descriptors.load().tables["tenant_registry"], registry
+                )
+                onnet = _int_or_none(values.get("ds_onnet"))
+                pstn = _int_or_none(values.get("ds_pstn"))
+            except (ValueError, KeyError):
+                pass
+        try:
+            row = conn.execute(
+                "SELECT src_ip FROM trusted WHERE tag = ? ORDER BY id LIMIT 1",
+                (domain,),
+            ).fetchone()
+        except sqlite3.Error:
+            row = None
+        if row is not None:
+            source_ip = str(row[0])
+
+    getter = getattr(request.app.state, "get_rpc", None)
+    if getter is None:
+        def getter():
+            return getattr(request.app.state, "rpc", None)
+
+    live = build_live_checks(getter, domain, source_ip, onnet, pstn)
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "partials/wizard_live.html",
+        {"live": live, "domain": domain},
+        headers=NO_STORE,
     )

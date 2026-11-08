@@ -16,6 +16,8 @@ from pathlib import Path
 
 from console import settings as settings_module
 from console import wizard_ui
+from console.rpc import UnixDatagramRPC
+from tests.fixtures.fakerpc import FakeRPC
 
 IDENTITY = {
     "domain": "sip.delta.home.example.net",
@@ -305,6 +307,80 @@ def test_wizard_no_trunk_writes_four_rows_and_skips_pstn_set(
     assert "all coherence checks are green" in verify_page
     assert "No PSTN trunk configured" in verify_page
     assert "Dial out through the landline trunk" not in verify_page
+
+
+def test_live_verify_probes_dispatcher_and_trusted_table(
+    seeded_db, auth_client, app, tmp_path
+):
+    with FakeRPC(tmp_path / "rpc.sock") as fake:
+        fake.script("core.uptime", {"uptime": "1 hour"})
+        fake.script(
+            "dispatcher.list",
+            {
+                "NRSETS": 2,
+                "RECORDS": [
+                    {
+                        "SET": {
+                            "ID": 11,
+                            "TARGETS": [
+                                {
+                                    "DEST": {
+                                        "URI": "sip:10.0.0.10:5060;transport=tcp",
+                                        "FLAGS": "AP",
+                                        "PRIORITY": 0,
+                                    }
+                                }
+                            ],
+                        }
+                    },
+                    {
+                        "SET": {
+                            "ID": 31,
+                            "TARGETS": [
+                                {
+                                    "DEST": {
+                                        "URI": "sip:10.0.0.10:5060;transport=tcp",
+                                        "FLAGS": "AP",
+                                        "PRIORITY": 0,
+                                    }
+                                }
+                            ],
+                        }
+                    },
+                ],
+            },
+        )
+        fake.script(
+            "permissions.trustedDump",
+            {
+                "table": 33,
+                "item": {
+                    "ip": "100.64.10.10",
+                    "tag": "sip.alpha.home.example.net",
+                },
+            },
+        )
+        app.state.rpc = UnixDatagramRPC(fake.sock_path, timeout_ms=500)
+        page = auth_client.get(
+            "/wizard/verify/sip.alpha.home.example.net/live"
+        )
+    text = " ".join(html.unescape(page.text).split())
+    assert page.status_code == 200
+    assert "Edge reachable" in text
+    assert "set 11" in text
+    assert "set 31" in text
+    assert "100.64.10.10" in text
+    assert "loaded" in text
+
+
+def test_live_verify_reports_unreachable_edge(seeded_db, auth_client, app):
+    app.state.rpc = None
+    app.state.get_rpc = lambda: None
+    page = auth_client.get(
+        "/wizard/verify/sip.alpha.home.example.net/live"
+    )
+    assert page.status_code == 200
+    assert "Edge unreachable" in page.text
 
 
 # ---------------------------------------------------------------------------
