@@ -86,6 +86,7 @@ def homes(
                     "route_sets": _route_sets(values),
                     "check_tone": "warn",
                     "check_text": "checks unavailable",
+                    "view_url": f"/tables/tenant_registry/{quote(domain, safe='')}",
                     "verify_url": f"/homes/{quote(domain, safe='')}",
                     "status": "Active",  # present in the registry = active
                     "_key": raw.get(key_name) if key_name else values.get("tprefix"),

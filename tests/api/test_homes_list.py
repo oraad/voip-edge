@@ -108,3 +108,19 @@ def test_homes_badge_names_a_missing_dispatcher_set(seeded_db, auth_client):
         auth_client.get("/homes/sip.alpha.home.example.net").text
     )
     assert "set 11 has no dispatcher row" in detail
+
+
+def test_homes_domain_opens_tenant_view_and_actions_are_labeled(
+    seeded_db, auth_client
+):
+    response = auth_client.get("/homes")
+    page = html.unescape(response.text)
+    domain = "sip.alpha.home.example.net"
+    assert (
+        f'<a href="/tables/tenant_registry/{domain}">{domain}</a>'
+        in page
+    )
+    assert f'aria-label="View details for {domain}"' in page
+    assert f'aria-label="Run checks for {domain}"' in page
+    assert f'aria-label="Park {domain}"' in page
+    assert f'aria-label="Destroy {domain}"' in page

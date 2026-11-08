@@ -69,16 +69,19 @@
     <tbody>
       {% for home in homes %}
       <tr>
-        <td class="mono"><a href="{{ home.verify_url }}">{{ home.domain }}</a></td>
+        <td class="mono"><a href="{{ home.view_url }}">{{ home.domain }}</a></td>
         <td class="mono">{{ home.landline }}</td>
         <td class="mono">{{ home.route_sets }}</td>
         <td><span class="badge {{ 'b-ok' if home.check_tone == 'ok' else 'b-warn' }}">{{ home.check_text }}</span></td>
         <td><span class="chip ok">{{ home.status }}</span></td>
-        <td><a href="{{ home.verify_url }}">Verify</a>
+        <td class="rowactions">
+            <a href="{{ home.view_url }}" aria-label="View details for {{ home.domain }}">Details</a>
+            <a href="{{ home.verify_url }}" aria-label="Run checks for {{ home.domain }}">Checks</a>
             {% if not status.readonly %}
-            <a href="/homes/{{ home.domain|urlencode }}/park">Park…</a>
-            <a href="/homes/{{ home.domain|urlencode }}/destroy">Destroy…</a>
-            {% endif %}</td>
+            <a href="/homes/{{ home.domain|urlencode }}/park" aria-label="Park {{ home.domain }}">Park…</a>
+            <a class="danger" href="/homes/{{ home.domain|urlencode }}/destroy" aria-label="Destroy {{ home.domain }}">Destroy…</a>
+            {% endif %}
+        </td>
       </tr>
       {% else %}
       <tr>

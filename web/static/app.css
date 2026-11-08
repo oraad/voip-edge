@@ -496,7 +496,19 @@ p {
   color: var(--muted);
 }
 
-.stats {
+.rowactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.rowactions a.danger {
+  color: var(--danger);
+}
+
+
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
