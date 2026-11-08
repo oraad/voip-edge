@@ -504,7 +504,8 @@ p {
   white-space: nowrap;
 }
 
-.rowactions a.danger {
+.rowactions a.danger,
+a.danger {
   color: var(--danger);
 }
 

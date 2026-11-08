@@ -18,3 +18,7 @@ def test_app_css_braces_balance():
 def test_stats_rule_keeps_its_selector():
     css = _css()
     assert ".stats {\n  display: grid;" in css
+
+
+def test_danger_links_use_the_danger_color():
+    assert "a.danger" in _css()

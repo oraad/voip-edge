@@ -109,7 +109,7 @@
             {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
             <button class="btn" type="submit"{% if status.readonly %} disabled{% endif %}>Restore</button>
           </form>
-          {% if not status.readonly %}<a href="/homes/{{ row.domain|urlencode }}/destroy">Destroy…</a>{% endif %}
+          {% if not status.readonly %}<a class="danger" href="/homes/{{ row.domain|urlencode }}/destroy">Destroy…</a>{% endif %}
         </td>
       </tr>
       {% endfor %}
