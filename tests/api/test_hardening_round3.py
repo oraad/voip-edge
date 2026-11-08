@@ -471,3 +471,9 @@ def test_null_origin_is_cross_site(client, monkeypatch):
         "/login", data={"token": "wrong"}, headers={"origin": "null"}
     ).status_code == 429
     assert client.post("/login", data={"token": "wrong"}).status_code == 401
+
+
+def test_static_assets_are_revalidated(client):
+    response = client.get("/static/app.css")
+    assert response.status_code == 200
+    assert response.headers.get("cache-control") == "no-cache"

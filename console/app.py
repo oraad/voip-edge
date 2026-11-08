@@ -307,6 +307,15 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.middleware("http")
+    async def static_cache_middleware(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            # Revalidate every asset. The immutable-looking filenames otherwise
+            # let a browser keep an old app.js/app.css after a console upgrade.
+            response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+    @app.middleware("http")
     async def csrf_middleware(request: Request, call_next):
         # Cap request bodies before any route reads them.  The declared length
         # is an early reject; the stream is counted as well because HTTP/2 and

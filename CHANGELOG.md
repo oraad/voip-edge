@@ -52,6 +52,11 @@ carry fixes.
 
 ### Fixed
 
+- Static assets send `Cache-Control: no-cache` and console asset URLs carry a
+  version query, so an upgraded `app.js`/`app.css` is not hidden by browser
+  cache after a console update.
+- The onboarding domain-mode control stacks on narrow screens; nav labels no
+  longer split mid-label on small viewports.
 - Sidebar navigation no longer inherits PicoCSS's flex row and overflow across
   the main content. The console layout now uses an explicit block nav, starts
   content directly under the status strip, and has a responsive single-column

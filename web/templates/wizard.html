@@ -95,7 +95,7 @@
           <option value="{{ base }}"{% if base == draft.domain_base %} selected{% endif %}>{{ base }}</option>
           {% endfor %}
         </select>
-        <div class="hint">Full domain: <span class="mono" id="domain-preview">{{ domain_preview }}</span></div>
+        <div class="hint">Full domain: <span class="mono" id="domain-preview" aria-live="polite">{{ domain_preview }}</span></div>
       </div>
       <div class="wizfield" data-domain-mode-panel="custom"
            {% if draft.domain_mode != 'custom' %}hidden{% endif %}>
