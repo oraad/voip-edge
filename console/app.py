@@ -690,10 +690,11 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     # T7: onboarding wizard (stateless hidden-input draft, one write txn)
     # ------------------------------------------------------------------
-    from . import lifecycle_ui, wizard_ui
+    from . import lifecycle_ui, number_rules_ui, wizard_ui
 
     app.include_router(lifecycle_ui.router)
     app.include_router(wizard_ui.router)
+    app.include_router(number_rules_ui.router)
 
     # OIDC: /auth/login, /auth/callback, /auth/logout (docs/oidc.md)
     from .oidc import router as oidc_router

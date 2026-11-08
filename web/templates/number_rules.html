@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Number rules — VoIP Edge Console{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>Number rules</h1>
+    <div class="sub">Emergency and blocked destinations, with a simpler form.
+      Existing rows stay editable in the advanced table.</div>
+  </div>
+  <a class="meta" href="{{ advanced_url }}">Advanced table</a>
+</div>
+
+{% if saved %}
+<div class="warnsummary" role="status" style="border-color:var(--ok,#2e7d32)">
+  <b>Saved</b> — {{ saved }}
+</div>
+{% endif %}
+
+{% if warnings %}
+<div class="warnsummary" role="status">
+  <b>Warning</b>
+  <ul style="margin:7px 0 0 17px; padding:0">
+    {% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="tlsnotice" role="note">
+  <b>Only assigned partitions affect calls.</b>
+  A home's emergency partition and its blocked-destinations partition are the
+  only dialplan partitions the edge consults. A custom rule in an unused
+  partition is stored but inert.
+</div>
+
+<div class="actions" style="display:flex; gap:8px; flex-wrap:wrap; margin:14px 0">
+  {% for entry in partitions %}
+  <span class="chip">
+    <strong>Partition {{ entry.dpid }}</strong>
+    · {{ entry.role_text }}
+    {% if entry.homes %}· {{ entry.homes|join(", ") }}{% endif %}
+    · {{ entry.rules }} rule{{ "" if entry.rules == 1 else "s" }}
+  </span>
+  {% endfor %}
+</div>
+
+<div class="steps" role="list" aria-label="Number rule types">
+  {% for name, label in tabs %}
+  <a role="listitem" class="{% if name == tab %}c{% endif %}"
+     href="/number-rules?tab={{ name }}"
+     {% if name == tab %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</div>
+
+{% if tab == "emergency" %}
+<section class="panel">
+  <h2 style="margin-top:0">Add emergency numbers</h2>
+  <p class="sub">Calls to these numbers go to the selected homes' PSTN trunk.</p>
+  {% if emergency_partitions %}
+  <form method="post" action="/number-rules/emergency">
+    {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    <div class="field">
+      <label for="emergency-dpid">Applies to</label>
+      <select id="emergency-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
+        {% for entry in emergency_partitions %}
+        <option value="{{ entry.dpid }}">Emergency · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="emergency-numbers">Emergency numbers</label>
+      <textarea id="emergency-numbers" name="numbers" rows="4" spellcheck="false" {% if status.readonly %}disabled{% endif %}>{{ values.get("numbers", "") }}</textarea>
+      <div class="hint">One number per line or comma-separated. Digits only.</div>
+      {% for message in errors.get("numbers", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
+    </div>
+    <div class="field">
+      <label for="emergency-description">Description <span class="meta">(optional)</span></label>
+      <input id="emergency-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
+    </div>
+    <div class="formbar">
+      <button class="btn pri" type="submit" {% if status.readonly %}disabled{% endif %}>Add emergency numbers</button>
+      <span class="meta">Creates one rule in the selected partition.</span>
+    </div>
+  </form>
+  {% else %}
+  <p class="meta">No home uses an emergency partition yet. Assign a partition in a home's <b>Emergency dialplan</b> field first.</p>
+  {% endif %}
+</section>
+
+{% elif tab == "blocked" %}
+<section class="panel">
+  <h2 style="margin-top:0">Add blocked numbers or ranges</h2>
+  <p class="sub">Matches return 403 before any trunk decision.</p>
+  {% if blocked_partitions %}
+  <form method="post" action="/number-rules/blocked">
+    {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    <div class="field">
+      <label for="blocked-dpid">Applies to</label>
+      <select id="blocked-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
+        {% for entry in blocked_partitions %}
+        <option value="{{ entry.dpid }}">Blocked · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="blocked-mode">Match</label>
+      <select id="blocked-mode" name="mode" {% if status.readonly %}disabled{% endif %}>
+        <option value="exact">Exactly these numbers</option>
+        <option value="prefix">Numbers starting with</option>
+        <option value="range">Number range</option>
+        <option value="custom">Custom pattern</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="blocked-numbers">Numbers or prefixes</label>
+      <textarea id="blocked-numbers" name="numbers" rows="4" spellcheck="false" {% if status.readonly %}disabled{% endif %}>{{ values.get("numbers", "") }}</textarea>
+      <div class="hint">Used by exact and starting-with modes. One per line or comma-separated.</div>
+    </div>
+    <div class="field">
+      <label>Range</label>
+      <div class="rowactions">
+        <input name="range_start" placeholder="Start, e.g. 90000000" value="{{ values.get('range_start', '') }}" {% if status.readonly %}disabled{% endif %}>
+        <input name="range_end" placeholder="End, e.g. 90009999" value="{{ values.get('range_end', '') }}" {% if status.readonly %}disabled{% endif %}>
+      </div>
+      <div class="hint">Same digit length. Used by the range mode.</div>
+    </div>
+    <div class="field">
+      <label for="blocked-pattern">Custom pattern</label>
+      <input id="blocked-pattern" name="pattern" class="mono" value="{{ values.get('pattern', '') }}" {% if status.readonly %}disabled{% endif %}>
+      <div class="hint">Regex used by the custom mode. Use Advanced for complex rules.</div>
+      {% for message in errors.get("pattern", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
+    </div>
+    <div class="field">
+      <label for="blocked-description">Description <span class="meta">(optional)</span></label>
+      <input id="blocked-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
+    </div>
+    <div class="formbar">
+      <button class="btn pri" type="submit" {% if status.readonly %}disabled{% endif %}>Add blocked rule</button>
+      <span class="meta">Creates one rule in the selected partition.</span>
+    </div>
+  </form>
+  {% else %}
+  <p class="meta">No home uses a blocked-destinations partition yet. Assign one in a home's call policy flags first.</p>
+  {% endif %}
+</section>
+
+{% else %}
+<section class="panel">
+  <h2 style="margin-top:0">Add a custom rule</h2>
+  <p class="sub">A custom regex in a partition. It only affects calls when a home uses that partition.</p>
+  <form method="post" action="/number-rules/custom">
+    {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
+    <div class="field">
+      <label for="custom-dpid">Partition</label>
+      {% if partitions %}
+      <select id="custom-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
+        {% for entry in partitions %}
+        <option value="{{ entry.dpid }}">Partition {{ entry.dpid }} · {{ entry.role_text }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <input id="custom-dpid" name="dpid" inputmode="numeric" placeholder="Partition ID" {% if status.readonly %}disabled{% endif %}>
+      {% endif %}
+    </div>
+    <div class="field">
+      <label for="custom-priority">Priority</label>
+      <input id="custom-priority" name="priority" type="number" min="1" max="100" value="{{ values.get('priority', '1') }}" {% if status.readonly %}disabled{% endif %}>
+    </div>
+    <div class="field">
+      <label for="custom-pattern">Match pattern</label>
+      <input id="custom-pattern" name="pattern" class="mono" value="{{ values.get('pattern', '') }}" {% if status.readonly %}disabled{% endif %} placeholder="^(0900|0901)">
+      <div class="hint">Regex matched against the dialed number. Use Advanced for complex edits.</div>
+      {% for message in errors.get("pattern", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
+    </div>
+    <div class="field">
+      <label for="custom-description">Description <span class="meta">(optional)</span></label>
+      <input id="custom-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
+    </div>
+    <div class="formbar">
+      <button class="btn pri" type="submit" {% if status.readonly %}disabled{% endif %}>Add custom rule</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2 style="margin-top:0">{{ tab|capitalize }} rules</h2>
+  {% if groups[tab] %}
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th scope="col">Rule</th><th scope="col">Partition</th><th scope="col">Priority</th><th scope="col">Description</th><th scope="col"><span class="meta">Actions</span></th></tr></thead>
+      <tbody>
+        {% for rule in groups[tab] %}
+        <tr>
+          <td class="mono">{{ rule.summary }}</td>
+          <td>{{ rule.dpid }}</td>
+          <td>{{ rule.priority }}</td>
+          <td>{{ rule.description or "—" }}</td>
+          <td class="rowactions">
+            <a href="{{ rule.edit_url }}">Edit</a>
+            <a class="danger" href="{{ rule.delete_url }}">Delete</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="meta">No {{ tab }} rules yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
