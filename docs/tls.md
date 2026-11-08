@@ -23,8 +23,8 @@ Set in `.env`:
   `ACME_DNS_PROVIDER=dns_technitium` with `Technitium_Server` and
   `Technitium_Token`.
 
-Enable TLS: add `-A WITH_TLS` to the Kamailio `entrypoint` in `compose.yaml`
-and uncomment both TLS mounts. Recreate Kamailio.
+Enable TLS: append `"-A", "WITH_TLS"` to the Kamailio `entrypoint` array in
+`compose.yaml` and uncomment both TLS mounts. Recreate Kamailio.
 
 ## Promote staging
 

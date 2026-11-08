@@ -37,6 +37,9 @@ carry fixes.
   local style blocks were removed so the theme is centralized.
 - ACME scripts moved from `deploy/` to `acme/`; Compose mounts
   `acme/` scripts and `rtpengine/rtpengine.conf` relative to the repo.
+- Kamailio's tenant suffix gate is generated from `CONSOLE_ALLOWED_SUFFIXES`
+  by the container entrypoint, so adding a base domain updates both the console
+  validator/wizard and the edge without editing `TENANTSUFFIXRE` by hand.
 - Kamailio route configs flattened from `kamailio/routes/` into
   `kamailio/`; the includes and static guards use the flat paths.
 - The Kamailio Compose service overrides the image entrypoint, because

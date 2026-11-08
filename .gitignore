@@ -23,7 +23,7 @@ kamailio/db/*.sqlite-shm
 *.cer
 *.pem
 tls/
-/acme/
+/acme/data/
 certs/
 backups/
 tools/private-deny.txt

@@ -48,7 +48,7 @@ console after a change. Critical values:
 | `CONSOLE_SECRET` | session signing secret; set explicitly |
 | `CONSOLE_BIND` | tunnel address, e.g. `100.64.0.9` |
 | `CONSOLE_READONLY` | `1` gates every write |
-| `CONSOLE_ALLOWED_SUFFIXES` | keep in sync with `TENANTSUFFIXRE` |
+| `CONSOLE_ALLOWED_SUFFIXES` | drives the validator, wizard dropdown and generated Kamailio suffix gate |
 | `CONSOLE_RPC_REPLY_DIR` | shared reply-socket dir when the console is on a bridge |
 | `CONSOLE_AUTH_MODE` | `both`, `oidc` or `token` |
 | `CONSOLE_ENFORCE_CAPABILITIES` | `1` refuses unsafe lifecycle actions |

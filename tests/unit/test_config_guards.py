@@ -15,12 +15,14 @@ def _substdef_regex(text: str, name: str) -> str:
     return match.group(1).replace(r"\$", "$")
 
 
-def test_tenant_suffix_gate_uses_a_substdef_not_a_define():
+def test_tenant_suffix_gate_uses_a_generated_substdef():
     cfg = (ROOT / "kamailio" / "kamailio.cfg").read_text()
-    assert "#!substdef" in cfg
+    assert '#!include_file "tenant_suffix.cfg"' in cfg
     assert '#!define TENANTSUFFIXRE' not in cfg
 
-    regex = _substdef_regex(cfg, "TENANTSUFFIXRE")
+    generated = (ROOT / "kamailio" / "tenant_suffix.cfg").read_text()
+    assert "#!substdef" in generated
+    regex = _substdef_regex(generated, "TENANTSUFFIXRE")
     assert re.fullmatch(regex, "sip.alpha.home.example.net")
     assert not re.fullmatch(regex, "sip.alpha.home.example.net.evil")
     assert not re.fullmatch(regex, "evil.example.net")

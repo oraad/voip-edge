@@ -52,9 +52,10 @@ services:
     environment:
       SHM_MEMORY: ${SHM_MEMORY:-256}
       PKG_MEMORY: ${PKG_MEMORY:-64}
-    # The upstream image entrypoint hard-codes `kamailio -DD -E -m .. -M ..`
-    # and ignores CMD, so the config path and -A flags must be in entrypoint.
-    entrypoint: ["/bin/sh", "-c", "exec kamailio -DD -E -m $${SHM_MEMORY} -M $${PKG_MEMORY} -f /etc/kamailio/voip-edge/kamailio.cfg -A WITH_CONSOLE"]
+      CONSOLE_ALLOWED_SUFFIXES: ${CONSOLE_ALLOWED_SUFFIXES:?set CONSOLE_ALLOWED_SUFFIXES}
+    # The entrypoint generates the tenant suffix gate from
+    # CONSOLE_ALLOWED_SUFFIXES, then execs Kamailio.
+    entrypoint: ["/bin/sh", "/etc/kamailio/voip-edge/entrypoint.sh"]
     volumes:
       - ${EDGE_HOME:?set EDGE_HOME}/kamailio:/etc/kamailio/voip-edge:rw
       - ${EDGE_RUN:-/run/kamailio-edge}:/run/kamailio
