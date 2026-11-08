@@ -69,12 +69,13 @@
     <tbody>
       {% for home in homes %}
       <tr>
-        <td class="mono"><a href="/tables/tenant_registry/{{ home.domain|urlencode }}">{{ home.domain }}</a></td>
+        <td class="mono"><a href="{{ home.verify_url }}">{{ home.domain }}</a></td>
         <td class="mono">{{ home.landline }}</td>
         <td class="mono">{{ home.route_sets }}</td>
-        <td>{{ home.coherence }}</td>
+        <td><span class="badge {{ 'b-ok' if home.check_tone == 'ok' else 'b-warn' }}">{{ home.check_text }}</span></td>
         <td><span class="chip ok">{{ home.status }}</span></td>
-        <td><a href="/tables/tenant_registry/{{ home.domain|urlencode }}">View</a>
+        <td><a href="{{ home.verify_url }}">Verify</a>
+            <a href="/tables/tenant_registry/{{ home.domain|urlencode }}">Raw row</a>
             {% if not status.readonly %}
             <a href="/homes/{{ home.domain|urlencode }}/park">Park…</a>
             <a href="/homes/{{ home.domain|urlencode }}/destroy">Destroy…</a>

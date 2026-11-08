@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import db, descriptors
+from .checks import coherence_summaries
 from .security import read_session, is_authenticated
 
 router = APIRouter()
@@ -70,16 +72,25 @@ def homes(
             except (KeyError, ValueError):
                 corrupt += 1
                 continue
+            domain = str(values.get("tprefix", ""))
             homes.append(
                 {
-                    "domain": values.get("tprefix", ""),
+                    "domain": domain,
                     "landline": values.get("cli", ""),
                     "route_sets": _route_sets(values),
-                    "coherence": "—",  # placeholder until the T6 live check
+                    "check_tone": "warn",
+                    "check_text": "checks unavailable",
+                    "verify_url": f"/homes/{quote(domain, safe='')}",
                     "status": "Active",  # present in the registry = active
                     "_key": raw.get(key_name) if key_name else values.get("tprefix"),
                 }
             )
+
+    summaries = coherence_summaries(conn, [home["domain"] for home in homes])
+    for home in homes:
+        summary = summaries.get(home["domain"], {})
+        home["check_tone"] = summary.get("tone", "warn")
+        home["check_text"] = summary.get("text", "checks unavailable")
 
     parked: list[dict] = []
     try:

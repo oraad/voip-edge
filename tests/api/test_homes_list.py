@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import sqlite3
 
 
 def _full_page(text: str) -> bool:
@@ -14,7 +15,7 @@ def _fragment_only(text: str) -> bool:
     return not any(marker in lowered for marker in ("<!doctype", "<html", "<body"))
 
 
-def test_homes_lists_registry_rows_with_placeholder_coherence(seeded_db, auth_client):
+def test_homes_lists_registry_rows_with_coherence(seeded_db, auth_client):
     response = auth_client.get("/homes")
     assert response.status_code == 200
     page = html.unescape(response.text)
@@ -32,9 +33,10 @@ def test_homes_lists_registry_rows_with_placeholder_coherence(seeded_db, auth_cl
     assert "11 on-net" in page
     assert "31 PSTN" in page
 
-    # Coherence is a placeholder until the live check lands (T6).
+    # Coherence is the DB-only check; no RPC on page load.
     assert "Coherence" in response.text
-    assert "—" in page
+    assert "all green" in page
+    assert 'href="/homes/sip.alpha.home.example.net"' in response.text
     # Presence in tenant_registry is the status signal.
     assert "Active" in page
     assert page.count("Active") >= 3
@@ -76,3 +78,19 @@ def test_homes_full_page_and_fragment_modes(seeded_db, auth_client):
     assert "sip.alpha.home.example.net" in fragment.text
     assert "X-CSRF-Token" not in fragment.text
     assert "Audit &amp; backups" not in fragment.text
+
+
+def test_homes_coherence_badge_names_a_missing_trusted_source(
+    seeded_db, auth_client
+):
+    conn = sqlite3.connect(seeded_db)
+    conn.execute(
+        "DELETE FROM trusted WHERE tag = ?",
+        ("sip.alpha.home.example.net",),
+    )
+    conn.commit()
+    conn.close()
+
+    page = html.unescape(auth_client.get("/homes").text)
+    assert "no trusted source" in page
+    assert 'href="/homes/sip.alpha.home.example.net"' in page

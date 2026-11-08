@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from . import db, descriptors, validators
 
@@ -273,6 +273,102 @@ def build_live_checks(
         "items": items,
         "errors": errors,
     }
+
+
+def coherence_summaries(
+    conn: sqlite3.Connection | None, domains: Iterable[str]
+) -> dict[str, dict[str, Any]]:
+    """DB-only coherence per home, with one bulk read for the Homes list."""
+    ordered = [str(domain) for domain in domains if str(domain)]
+    unavailable = {
+        domain: {
+            "tone": "warn",
+            "text": "database unavailable",
+            "missing": ["database"],
+        }
+        for domain in ordered
+    }
+    if conn is None or not ordered:
+        return unavailable
+
+    wanted = set(ordered)
+    registry_values: dict[str, dict[str, Any]] = {}
+    dispatcher_sets: dict[int, list[str]] = {}
+    trusted_tags: set[str] = set()
+    landline_keys: set[str] = set()
+    dpids: set[int] = set()
+    try:
+        descriptor = descriptors.load().tables["tenant_registry"]
+        for raw in db.read_rows(conn, "tenant_registry"):
+            try:
+                values = descriptors.unpack_row(descriptor, raw)
+            except (KeyError, ValueError):
+                continue
+            domain = str(values.get("tprefix") or "")
+            if domain in wanted:
+                registry_values[domain] = values
+
+        for setid, destination in conn.execute(
+            "SELECT setid, destination FROM dispatcher"
+        ):
+            number = int_or_none(setid)
+            if number is not None:
+                dispatcher_sets.setdefault(number, []).append(str(destination))
+        trusted_tags = {
+            str(row[0]) for row in conn.execute("SELECT DISTINCT tag FROM trusted")
+        }
+        landline_keys = {
+            str(row[0])
+            for row in conn.execute("SELECT tprefix FROM tenant_landline")
+        }
+        dpids = {
+            int(row[0])
+            for row in conn.execute("SELECT DISTINCT dpid FROM dialplan")
+            if int_or_none(row[0]) is not None
+        }
+    except sqlite3.Error:
+        return unavailable
+
+    summaries: dict[str, dict[str, Any]] = {}
+    for domain in ordered:
+        values = registry_values.get(domain)
+        if values is None:
+            summaries[domain] = {
+                "tone": "warn",
+                "text": "registry row missing",
+                "missing": ["registry row"],
+            }
+            continue
+
+        missing: list[str] = []
+        onnet = int_or_none(values.get("ds_onnet"))
+        pstn = int_or_none(values.get("ds_pstn"))
+        if onnet in (None, 0):
+            missing.append("no on-net set")
+        elif onnet not in dispatcher_sets:
+            missing.append(f"set {onnet} missing")
+        elif not all(
+            dispatcher_target_ok(destination)
+            for destination in dispatcher_sets[onnet]
+        ):
+            missing.append(f"set {onnet} destination")
+        if pstn not in (None, 0) and pstn not in dispatcher_sets:
+            missing.append(f"set {pstn} missing")
+        if domain not in trusted_tags:
+            missing.append("no trusted source")
+        cli = str(values.get("cli") or "").strip()
+        if not cli or cli not in landline_keys:
+            missing.append("landline row missing")
+        dpid = int_or_none(values.get("dpid"))
+        if dpid not in (None, 0) and dpid not in dpids:
+            missing.append(f"dpid {dpid} missing")
+
+        summaries[domain] = {
+            "tone": "ok" if not missing else "warn",
+            "text": "all green" if not missing else missing[0],
+            "missing": missing,
+        }
+    return summaries
 
 
 def verify_state(
