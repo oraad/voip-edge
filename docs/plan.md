@@ -1,8 +1,11 @@
 # VoIP Edge Console — plan v2 (Kamailio edge web admin UI)
 
+> Historical reference. Current deployment and operations are in
+> `docs/ops/deploy.md` and `docs/operations.md`.
+
 **Date:** 2026-11-05 (v2: multi-model review integrated — four-lens cycle 1: SIP engineering, architecture, QA, design)
-**Mode:** plan · **Target:** `/root/voip-stack/kamailio-edge/webui/` (new) + one optional `WITH_CONSOLE` ifdef in kamailio.cfg + compose service + docs
-**Companions:** `/root/voip-stack/docs/admin-console-stack-research.md`; wireframe: `/root/.opencode/plan/edge-console-wireframe.html` (v2)
+**Mode:** plan · **Target:** this repository (`console/`, `kamailio/`, `compose.yaml`) + `WITH_CONSOLE` in `kamailio.cfg`
+**Companions:** `docs/research-ui-stack.md`; wireframe: `docs/wireframe.html` (v2)
 
 ---
 

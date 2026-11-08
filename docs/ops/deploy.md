@@ -1,379 +1,158 @@
-# Deploying the console in the edge stack
+# Deploying the edge stack
 
-This is the console-specific deployment runbook. The Kamailio/Pangolin/TLS
-stack itself is documented in the edge-stack `DEPLOY.md`; read
-that first and keep the two stories aligned rather than copying its steps here.
-
-The console is a **single-process** FastAPI container. It:
-
-- runs with **host networking** and binds `${CONSOLE_BIND}:${CONSOLE_PORT}`
-  (`100.64.0.9:8080` in production);
-- mounts the Kamailio DB **read/write** and the `jsonrpcs` run directory
-  **read/write**;
-- stores its own state (`console.sqlite`, backups) under
-  `${EDGE_HOME}/console`;
-- is exposed only through a **Pangolin resource with SSO**; the console token
-  stays available as break-glass only in `both` mode (a second factor only when
-  console OIDC is not enabled).
-
-`workers=1` is a hard requirement: reload serialization, the coalescing
-throttle queue, the transaction write-lock and session state are process-local.
-Never add a second worker or a multi-process server.
-
----
+One `compose.yaml`: Kamailio, rtpengine, ACME, cert reloader, console, and an
+optional Homer profile. All mutable files live under `${EDGE_HOME}`
+(default `/opt/voip-edge`).
 
 ## 1. Prerequisites
 
-1. `voip-edge` (Kamailio 6.1.5) and its DB are running from the stock stack:
-   - DB at `${EDGE_HOME}/kamailio/db/edge.sqlite`
-   - run dir at `${EDGE_RUN}` (default `/run/kamailio-edge`)
-2. A group named `console` exists with a known GID. It must exist in the
-   **console image** (baked via `CONSOLE_GID`) and, for the non-root recipe,
-   inside the **Kamailio container's `/etc/group`** too, because
-   `dgram_group` is resolved by name *inside that container*. Docker
-   `group_add` adds a numeric supplementary group; it does **not** create an
-   `/etc/group` entry, so it is not enough on its own.
+- Docker Engine + Compose v2.
+- Public IPv4 for SIP/RTP; a tunnel address for the console.
+- Tenant DNS names, e.g. `sip.<client>.home.example.net`.
+- SSO reverse proxy (Pangolin) in front of the console.
+- Ports: `5060/udp`, `5060/tcp`, `30000-40000/udp`, and `5061/tcp` for TLS.
 
-   On the host (convention and a stable GID):
-   ```bash
-   getent group console || groupadd -r console
-   getent group console          # note the GID, e.g. console:x:995:
-   ```
-   With the default **root** console (section 6) the Kamailio-side group is
-   not required: root can use a `0660` socket even if it ends up
-   `root:root`. See the note in section 2.
-3. The console bind address exists on the host. With host networking,
-   uvicorn cannot bind `100.64.0.9` before the tunnel interface is up:
-   ```bash
-   ip -brief addr show | grep 100.64.0.9
-   ```
-4. The console image is built **once** (section 5). Do not build on every
-   deploy; the image tag is pinned to the code (`docs/ops/releases.md`).
-5. Outbound access is only needed at image-build time (pip/apt). The running
-   container needs no network beyond the host stack; htmx/PicoCSS are vendored
-   into the image and never fetched at runtime.
+Homes reach the VPS over the overlay with native routing and carry their LAN
+subnets. Dispatcher destinations are literal home LAN IPs; no `*.internal`
+names or resolver override.
 
----
-
-## 2. Enable `jsonrpcs` in Kamailio (one-time, approved restart)
-
-The console speaks JSON-RPC over a **unix datagram socket**. Add the block from
-plan §2 to `$EDGE_HOME/kamailio/kamailio.cfg` under the console ifdef:
-
-```
-#!ifdef WITH_CONSOLE
-loadmodule "jsonrpcs.so"
-modparam("jsonrpcs", "dgram_socket", "/run/kamailio/kamailio_rpc.sock")
-modparam("jsonrpcs", "transport", 4)          # datagram only
-modparam("jsonrpcs", "dgram_mode", 0660)
-modparam("jsonrpcs", "dgram_group", "console")
-modparam("db_sqlite", "db_set_journal_mode", "DBFILE=WAL")
-modparam("db_sqlite", "db_set_busy_timeout", "DBFILE=300")
-#!endif
-```
-
-Then restart `voip-edge` once with `WITH_CONSOLE` defined (the approved
-one-time blip). Confirm the socket exists on the host:
+## 2. Prepare `${EDGE_HOME}`
 
 ```bash
-ls -l "${EDGE_RUN}/kamailio_rpc.sock"
-# expected with a resolvable group: srw-rw---- 1 root console ... kamailio_rpc.sock
-# with the root console recipe, root:root 0660 is also usable
+export EDGE_HOME=/opt/voip-edge
+export EDGE_RUN=/run/kamailio-edge
+mkdir -p "$EDGE_HOME"/{kamailio,console,tls,acme/data} "$EDGE_RUN"
+
+cp -r kamailio/* "$EDGE_HOME/kamailio/"
+cp rtpengine/rtpengine.conf "$EDGE_HOME/rtpengine.conf"
+DOCKER=1 "$EDGE_HOME/kamailio/db/create-db.sh"
 ```
 
-`dgram_group` is resolved by **name inside the `voip-edge` container**, not on
-the host. The stock Kamailio image may not ship a `console` group, in which
-case Kamailio cannot `chown` the socket to `console` and it is created
-`root:root 0660` (check `docker logs voip-edge` for a getgrnam/chown warning).
-That is harmless for the **default root console** and is why root is the
-supported default. If your Kamailio build treats a missing group as fatal
-instead of falling back, add the group to its image even for the root recipe.
-For the non-root recipe the name must exist in both containers with the same
-GID; see section 8.
+Edit `$EDGE_HOME/kamailio/kamailio.cfg`: `PUBIP`, `WGIP`, `WGSOCK`
+(`udp:<WGIP>:5060`), `PUBDOM`. `WGIP` and `WGSOCK` change together.
 
-> The console never falls back to `kamcmd` or binrpc. A missing/wrong socket
-> surfaces as `KamailioUnavailable` and a pending-reload banner; the console
-> still starts and serves reads.
+Edit `$EDGE_HOME/rtpengine.conf`:
 
----
-
-## 3. Host directories and permissions
-
-```bash
-mkdir -p "${EDGE_HOME}/console"
-# The sidecar and backups are written by the console process:
-#   root:root by default (compose runs the console as 0:0)
-#   console:console if you use the non-root recipe below
+```ini
+interface = internal/<WGIP>;public/<PUBIP>
 ```
 
-The stock stack's `edge.sqlite` is created by Kamailio as `root:root`, and
-`edge.sqlite-wal` / `edge.sqlite-shm` are created next to it by whichever
-process opens the database first. That is why `compose.yml` runs the console as
-`root` by default: a non-root process cannot write a root-owned SQLite file or
-its WAL/SHM siblings without extra ownership/ACL work.
+For TLS, put the TSIG key at `$EDGE_HOME/acme/technitium_tsig`, mode `600`.
 
-The `jsonrpcs` socket is `0660` (ideally `root:console`; `root:root` when the
-group name does not resolve inside the Kamailio container). Root can use it
-regardless; in the non-root recipe the `console` group must resolve to the same
-GID in **both** containers (section 8).
+Seed the DB before the first Kamailio start. An empty auto-created DB does not
+recover dispatcher state on reload alone.
 
-**Do not** `chmod 777` the DB directory as a shortcut. It exposes the routing
-database to every process on the VPS and is not needed with the root default.
-
----
-
-## 4. Environment
-
-Copy `.env.example` to `.env` next to `compose.yml` (or paste the values into
-the Arcane stack editor). At minimum change:
-
-| Variable | Production value |
-|---|---|
-| `EDGE_HOME` | `/opt/voip-edge` (same as the edge stack) |
-| `EDGE_RUN` | `/run/kamailio-edge` (same as the edge stack) |
-| `CONSOLE_TOKEN` | long random value, distinct from `CONSOLE_SECRET` |
-| `CONSOLE_SECRET` | long random value; set explicitly (blank becomes a random per-process secret, invalidating sessions on restart) |
-| `CONSOLE_BIND` | `100.64.0.9` |
-| `CONSOLE_PORT` | `8080` |
-| `CONSOLE_SECURE_COOKIE` | `1` when Pangolin terminates HTTPS |
-| `CONSOLE_READONLY` | `1` for the first session, then `0` |
-| `CONSOLE_ENFORCE_CAPABILITIES` | `1` (refuses park/destroy when the purge primitives cannot be proven) |
-
-`compose.yml` pins the in-container paths (`/data/edge.sqlite`,
-`/var/lib/console`, `/run/kamailio/kamailio_rpc.sock`) so the host locations
-are changed through the volume mounts, not these variables.
-
-Arcane note: `compose.yml` uses `env_file: .env`. If your Arcane version injects
-the stack environment directly instead of materializing a `.env` file next to
-the compose file, either create that file (mode `600`) or mirror the same keys
-under the service's `environment:`. The container needs them at start, not only
-for compose interpolation.
-
-Note: `CONSOLE_THROTTLE_TENANTDOM` is reserved by plan §10 but is **not read**
-by the current settings module; per-table throttles come from
-`console/tables.yaml`. See `.env.example`.
-
----
-
-## 5. Build the image once
-
-Plain Docker, with the host `console` GID baked in for the non-root option:
+## 3. Environment
 
 ```bash
-cd voip-edge
-CONSOLE_GID="$(getent group console | cut -d: -f3)"
-docker build -f Dockerfile.console \
-  --build-arg CONSOLE_GID="${CONSOLE_GID}" \
-  -t voip-edge-console:0.1.11 .
+cp .env.example .env
 ```
 
-Arcane: build the same Dockerfile.console once via **Images → Build** and tag it
-`voip-edge-console:0.1.11`. The compose service references that image; it does
-not rebuild during a stack deploy.
+Set at least:
 
-Alternatively pull the published GHCR image and set
-`CONSOLE_IMAGE=ghcr.io/<owner>/voip-edge-console:0.1.11` in `.env`; see
-[GitHub Packages](packages.md) for the publish/pull steps.
+```dotenv
+EDGE_HOME=/opt/voip-edge
+EDGE_RUN=/run/kamailio-edge
+CONSOLE_BIND=100.64.0.9
+CONSOLE_PORT=8080
+CONSOLE_TOKEN=<random>
+CONSOLE_SECRET=<random>
+ACME_EMAIL=admin@example.net
+ACME_DOMAINS=sip.alpha.home.example.net,*.home.example.net
+ACME_CERT_NAME=sip.alpha.home.example.net
+NSUPDATE_SERVER=192.0.2.53
+```
 
-The build pins `fastapi`, `uvicorn`, `jinja2`, `MarkupSafe`, `PyYAML`, `httpx`,
-`authlib` and `cryptography` to the versions verified in this repo. `pytest`
-and the test doubles are deliberately not installed. `console/tables.yaml` and
-`web/templates` + `web/static` (including the vendored htmx/PicoCSS and
-`app.js`) are copied into the image; there is no runtime bind mount for code or
-descriptors.
+Generate tokens with `openssl rand -hex 32`. Start with `CONSOLE_READONLY=1`.
 
-Build context is the repo root. `.dockerignore` excludes `.venv`, `.git`, env
-files, databases and other local state; still prefer building from a clean
-checkout for release tags.
+## 4. Start
 
----
-
-## 6. Start the service
-
-Deploy this repository's `compose.yml` as its **own** Arcane stack on the same
-host, with the same `EDGE_HOME` / `EDGE_RUN` values as the edge stack. Do not
-merge the service into the edge compose file: its `env_file: .env` and
-`build.context: .` are relative to the console compose file, so a copy into
-another stack silently loads the wrong environment and build directory. If a
-single stack is mandatory, rewrite both paths to absolute values and re-run the
-deployment checks.
-
-The important properties of that service:
-
-| Property | Value | Why |
-|---|---|---|
-| `network_mode` | `host` | binds the tunnel IP directly; no NAT/port mapping |
-| `ports` | none | the port must not be published |
-| `restart` | `unless-stopped` | survives host/daemon restarts |
-| `mem_limit` / `cpus` | `256m` / `0.5` | guard rails, not a sizing promise |
-| `user` | `0:0` | stock root-owned DB/WAL and socket access |
-| `group_add` | `${CONSOLE_GID}` | keeps the `console` GID available for non-root switching |
-| volumes | DB rw, run rw, sidecar rw | in-place SQLite writes + datagram client + durable sidecar |
-
-The run-dir mount is read/write because a unix datagram client needs **write**
-permission on the socket path (mode `0660`, group `console`). The directory
-mount (rather than a single-file mount) also lets the socket be recreated by a
-Kamailio restart without recreating the console container.
-
----
-
-## 7. Verify, then expose
+Build local images once:
 
 ```bash
-docker ps --filter name=voip-edge-console
+docker build -f Dockerfile.console -t voip-edge-console:0.1.11 .
+docker build -f Dockerfile.rtpengine -t voip-edge-rtpengine:latest .
+```
+
+Or set `CONSOLE_IMAGE` / `RTPENGINE_IMAGE` to published GHCR images.
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+Kamailio starts with `WITH_CONSOLE`, so the console can use the RPC socket.
+TLS is opt-in: add `"-A", "WITH_TLS"` to the Kamailio `command` and uncomment
+both TLS mounts; see `docs/tls.md`.
+
+## 5. Verify
+
+```bash
+docker exec voip-edge kamcmd uptime
+docker exec voip-edge kamcmd dispatcher.list
+docker exec voip-edge kamcmd mtree.list tenantdom
+docker exec voip-edge kamcmd permissions.trustedDump
+docker exec voip-edge kamcmd rtpengine.show all
 docker exec voip-edge-console curl -fsS http://100.64.0.9:8080/health
-# {"status":"ok"}
-
-docker logs --tail 50 voip-edge-console
-# structured JSON lines; no traceback, no "database is locked"
 ```
 
-Then open the console through Pangolin (section 7.1), sign in with
-`CONSOLE_TOKEN`, and check the status strip: edge reachable (or the expected
-unreachable banner), read-only state, pending reloads, sidecar state.
+Register a phone and test phone → home, home → phone, PSTN and emergency.
+The console Live page shows edge and reload state.
 
-### 7.1 Pangolin SSO resource
+## 6. Pangolin
 
-Pangolin UI labels vary by version; this is the same resource pattern used in
-the edge-stack `DEPLOY.md` §C, applied to HTTP instead of SIP.
+1. SIP overlay: enable native WireGuard routing on the home Newt client. The
+   dispatcher row points at the home LAN IP, e.g.
+   `sip:10.0.0.10:5060;transport=tcp`. The site must route that subnet.
+2. Console: create an HTTP resource for `http://100.64.0.9:8080` and enable
+   SSO. Never publish the console port.
+3. Add the home's observed tunnel source IP to the console Trusted table.
 
-1. **Pangolin UI → Resources → New resource** (or the equivalent in your
-   Pangolin version).
-2. Name it for the console, e.g. `voip-console`.
-3. Protocol: **HTTP**.
-4. Target: `http://100.64.0.9:8080` (the console's host-networked bind).
-   Do not point it at a Docker bridge address; there is no published port.
-   The Pangolin proxy must be able to reach the host tunnel address; if it
-   runs bridge-networked, add host-gateway routing rather than publishing
-   `8080`.
-5. Public hostname: the console hostname you will use, e.g.
-   `console.example.net` (or an internal-only name if your Pangolin site is
-   private).
-6. Enable **authentication / SSO** on the resource and attach the same identity
-   provider used for the other protected resources. Restrict it to the operator
-   account(s).
-7. Terminate TLS at Pangolin and set `CONSOLE_SECURE_COOKIE=1` in `.env`.
-8. Do **not** create a public TCP port-forward for `8080`, and do not add a
-   bypass rule for the UI. The console token is a second factor when console
-   OIDC is off (break-glass only in `both`), not a reason to skip SSO.
-9. If (and only if) your Pangolin health checking needs it, add a path rule
-   that bypasses SSO for exactly `/health`. The Docker healthcheck runs inside
-   the container and does not need this.
+## 7. Homer (optional)
 
-Smoke test from outside the tunnel:
+Kamailio and rtpengine already send HEP to `127.0.0.1:9060`; no restart is
+needed when Homer starts or stops.
 
-- an unauthenticated request must land on the Pangolin/IdP login, not on the
-  console login form;
-- after SSO, the console is usable without a second token prompt when console
-  OIDC is enabled; token-only (`token`/`both`) deployments show the token form;
-- `/health` reveals only `{"status":"ok"}`.
+```bash
+docker compose --profile homer up -d
+docker compose --profile homer stop heplify-server homer-app homer-db
+```
 
-### 7.2 Healthcheck semantics
+- UI: `http://127.0.0.1:9080` (default `admin` / `sipcapture`; change it).
+  Expose only through Pangolin SSO.
+- Retention: `HOMER_RETENTION_DAYS` (default 7).
+- Data: named volume `homer-db-data`; not in console backups.
+- Permanent stop: optionally `docker exec voip-edge kamcmd siptrace.status off`.
 
-The Docker healthcheck is **console liveness only**:
+## 8. Non-root console (optional)
 
-- it curls `http://${CONSOLE_BIND}:${CONSOLE_PORT}/health`;
-- `/health` is unauthenticated, does not open the DB, and never calls
-  Kamailio;
-- it returns 200 even when Kamailio is down or the RPC socket is missing.
+The default is root because the Kamailio DB, WAL/SHM files and RPC socket are
+root-owned. To use `10001`:
 
-That is intentional. A Kamailio outage must leave the container **healthy** so
-the operator can still load the console, see the banner and queue writes. If
-the healthcheck probed the edge, Docker would restart-loop the console exactly
-when it is needed. Kamailio state belongs in the status strip and in
-`core.uptime`, never in the container exit code.
+1. Build with `--build-arg CONSOLE_GID=<host console gid>`.
+2. Make that group resolvable inside the Kamailio container and set
+   `dgram_group "console"`.
+3. Grant the console user write access to `${EDGE_HOME}/kamailio/db`,
+   `${EDGE_HOME}/console` and the RPC socket.
+4. Set `user: "10001:<gid>"` on the console service.
 
-If you bind `0.0.0.0` (not recommended for this deployment), the healthcheck
-URL must be overridden to `127.0.0.1`: curling the wildcard address is not
-portable.
+Keep the root default if that is fragile.
 
----
-
-## 8. Non-root alternative (optional)
-
-The image is built with a non-root `console` user (UID/GID default 10001). To
-run it that way, all of these must be true:
-
-1. **Socket group, in both containers.** Host `console` GID, the console image
-   build arg and the Kamailio container's `/etc/group` must agree:
-   ```bash
-   getent group console                      # e.g. 995
-   docker build --build-arg CONSOLE_GID=995 \
-     -t voip-edge-console:0.1.11 .
-   ```
-   `dgram_group "console"` is resolved by name inside `voip-edge`. The stock
-   image may not contain that name, and `group_add` does not create one. Build
-   a thin Kamailio image for the edge service:
-   ```dockerfile
-   FROM ghcr.io/kamailio/kamailio:6.1.5-trixie
-   ARG CONSOLE_GID=995
-   RUN groupadd --gid "${CONSOLE_GID}" console
-   ```
-   (or use a group name/GID that already exists in both images and set
-   `dgram_group` to it). Confirm after restart:
-   ```bash
-   ls -l "${EDGE_RUN}/kamailio_rpc.sock"
-   # srw-rw---- 1 root console ...
-   ```
-2. **Sidecar.** `chown -R 10001:995 "${EDGE_HOME}/console"`.
-3. **DB and WAL/SHM.** Kamailio creates `edge.sqlite`, `edge.sqlite-wal` and
-   `edge.sqlite-shm` as `root:root` with umask 022. Giving the console user
-   write access requires either:
-   - a common group plus Kamailio running with a group-writable umask (for
-     example start it with `umask 0002`), so new WAL/SHM files are `0660`; or
-   - filesystem ACLs with a default ACL on `${EDGE_HOME}/kamailio/db`, so
-     files created by Kamailio are writable by the console UID regardless of
-     umask (e.g. `setfacl -m u:10001:rwx -m d:u:10001:rwx .../db`).
-4. **Runtime user.** Add `user: "10001:995"` to the compose service and keep
-   `group_add: ["995"]`. Remove the default `user: "0:0"` line.
-5. **Root-owned backups.** The backup files are created by the console; the
-   directory must be writable by the console user.
-6. **TLS key readability.** `deploy/acme/deploy-certs.sh` writes `sip.key` as
-   `0600`. If Kamailio runs non-root, either run the acme hook with
-   `KAM_UID=<kamailio uid> KAM_GID=<kamailio gid>` (the hook chowns the release)
-   or use a shared group with `0640` and add the Kamailio user to it. Keep the
-   key out of world-readable paths either way.
-
-If any of these is fragile on your host, keep the root default. Running this
-single-purpose container as root on a host that already runs Kamailio as root
-does not add a new trust boundary; the console still binds only the tunnel IP
-and is behind Pangolin SSO.
-
----
-
-## 9. Rollout and rollback
-
-Plan §10 rollout order:
-
-1. Lab first.
-2. Redeploy `voip-edge` with `WITH_CONSOLE` (approved one-time blip), bring up
-   the console with `CONSOLE_READONLY=1`.
-3. Create the Pangolin SSO resource and verify reads + status strip.
-4. Set `CONSOLE_READONLY=0` and onboard `beta` / `gamma` through the
-   wizard as the acceptance of record.
-
-Before enabling writes, take/keep a backup (the wizard takes one automatically
-before its apply). For upgrades, stop the console, deploy the new pinned image,
-and start with `CONSOLE_READONLY=1` until reads and the status strip are
-verified.
-
-Rollback is image-tag based: set `image:` back to the previous
-`voip-edge-console:<version>` and redeploy. The console never changes the
-Kamailio schema; its own sidecar migrations are forward-only (see
-`docs/ops/releases.md`). Database recovery is a separate, stopped-stack
-procedure: `docs/ops/backups.md`.
-
----
-
-## 10. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| container healthy but page says edge unreachable | `ls -l ${EDGE_RUN}/kamailio_rpc.sock`, group/mode, `CONSOLE_RPC_SOCK`, `docker logs voip-edge` for jsonrpcs errors |
-| socket is `root:root 0660` and the console is non-root | `dgram_group` could not resolve inside the Kamailio container; add the `console` group there (section 8) or use the root console default |
-| `PermissionError` / `database is locked` on save | DB/WAL ownership vs the runtime user; one writer only; keep the root default or align UID/GID + ACLs |
-| container restarts repeatedly | it should not: `/health` is independent of Kamailio. Check the uvicorn traceback in logs, port bind conflict on `100.64.0.9:8080`, or a missing `.env` value |
-| healthcheck fails but the UI works | `CONSOLE_BIND` is probably `0.0.0.0`; bind the tunnel IP or override the healthcheck URL |
-| SSO login works, console rejects the token | `CONSOLE_TOKEN` mismatch/typo, or `.env` not reloaded (restart the container) |
-| parked homes disappeared after a container rebuild | the `${EDGE_HOME}/console` volume is missing or was not preserved; restore the sidecar per `docs/ops/backups.md` |
-| pending-reload banner after a save | expected when Kamailio is down: the intent is persisted and the status strip shows the pending count; the fault detail is in the logs/pending row. Fix the edge/socket and wait for the sweeper or restart the console |
+| console healthy, page says edge unreachable | RPC socket mode/group; `docker logs voip-edge` |
+| `database is locked` | DB/WAL ownership, one writer, root default |
+| REGISTER 403 | tenant domain, suffix, mtree row |
+| "Unknown Origin" | `trusted.src_ip` does not match the site tunnel IP |
+| dispatcher sets empty after reload | seed DB before first start; restart once |
+| one-way audio | rtpengine down, RTP ports, Pangolin route |
+| TLS handshake fails | `WITH_TLS`, mounts, `tls.cfg`, ACME logs |
+
+## 10. More
+
+- `docs/operations.md` — day-2 operations.
+- `docs/tls.md` — ACME and renewal.
+- `docs/ops/backups.md` — backup and restore.
+- `docs/ops/releases.md` — versioning and rollback.

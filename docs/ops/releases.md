@@ -1,107 +1,56 @@
 # Releases and versioning
 
-The console ships as one immutable container image. Code, templates, vendored
-static assets and `console/tables.yaml` are all **baked into that image**; none
-of them is mounted at runtime. The compose file chooses an image tag, and that
-tag is the unit of release and rollback.
+The console ships as one immutable image. Code, templates, static assets and
+`console/tables.yaml` are baked in; nothing is mounted at runtime.
 
-## Version source
+`pyproject.toml` is the version source. The image carries the same version:
+`voip-edge-console:<version>`. The rtpengine image tracks the upstream source
+release (`mr26.3.1.2` by default), not the console version.
 
-`pyproject.toml` is the human-readable version source:
+## Rebuild needed
 
-```toml
-[project]
-name = "voip-edge"
-version = "0.1.11"
-```
+- `console/*.py`, `console/rules/*`, `console/tables.yaml`
+- `web/templates/*`, `web/static/*`
+- `pyproject.toml`, `Dockerfile.console`, pinned dependencies
 
-The Python project is `voip-edge`; the image keeps the service name and must
-carry the same version: `voip-edge-console:0.1.11`. The same version is
-published to GHCR as `ghcr.io/<owner>/voip-edge-console:0.1.11`; see
-[GitHub Packages](packages.md). The same `v<version>` tag also publishes the
-rtpengine image from [`Dockerfile.rtpengine`](../../Dockerfile.rtpengine), but
-that image is tagged with the **upstream rtpengine source release**
-(`mr26.3.1.2` by default), not with the console version. Use an immutable
-version tag (optionally pinned by digest in production), never `latest` for a
-deployment that needs rollback.
+Not part of the image: `.env`, `compose.yaml` volume/resource/healthcheck
+changes, docs.
 
-## What requires a rebuild
+## Bump
 
-Rebuild the image, bump the version and update `compose.yml` when any of these
-change:
-
-- `console/*.py`, `console/rules/*` or any other Python module;
-- `console/tables.yaml` (descriptor grammar, validators, reloads, help text);
-- `web/templates/*` or `web/static/*` (including newly vendored htmx/PicoCSS);
-- `pyproject.toml`, `Dockerfile.console` or the pinned dependency versions.
-
-Not part of the image and safe to change without a rebuild:
-
-- `.env` / stack environment values (restart the container after changing
-  them; settings are read at import);
-- `compose.yml` volume paths, resource limits and healthcheck settings;
-- docs.
-
-`tables.yaml` is intentionally not a runtime mount: a descriptor edit that
-silently diverges from the code (or from the DB's `version` bookkeeping rows)
-is a deployment fault, not a config tweak. Any startup consistency mismatch
-refuses all writes (reads remain available) until it is fixed.
-
-## Bump procedure
-
-1. **Pick the next version** with semantic versioning. Until 1.0, use
-   `0.MINOR.PATCH`; bump MINOR for a feature set, PATCH for fixes or
-   packaging/docs-only changes.
-2. **Update `pyproject.toml`** and add the entry to `CHANGELOG.md` under
-   `Unreleased`, then move it to the new version on release.
-3. **Run the suite** from the repo virtualenv (no network):
+1. Bump `pyproject.toml`; update `CHANGELOG.md`.
+2. Run:
    ```bash
    .venv/bin/python -m pytest -q
    .venv/bin/python -m compileall console
+   ./tools/check-privacy.sh --all
    ```
-   The current baseline is **786 passed, 1 deselected**. Run the privacy guard
-   (`tools/check-privacy.sh --all`) and, before a deployment, the live gate
-   (`tests/live/run-live.sh`).
-4. **Build once** from a clean checkout:
+   Baseline: **786 passed, 1 deselected**.
+3. Build once:
    ```bash
    docker build -f Dockerfile.console \
      --build-arg CONSOLE_GID="$(getent group console | cut -d: -f3)" \
      -t voip-edge-console:<version> .
    ```
-   Or use Arcane → Images → Build with the same `Dockerfile.console` and tag. Tag
-   `voip-edge-console:<version>`; keep the previous tag on the host for
-   rollback.
-5. **Update `compose.yml`** `image:` to the new tag (and optionally pin the
-   digest). Do not change `console/tables.yaml` through a mount.
-6. **Deploy with `CONSOLE_READONLY=1`** first. Verify `/health`, the login,
-   the Homes list, the status strip, and the Audit & backups page. Then set
-   `CONSOLE_READONLY=0`.
-7. **Tag the source release** if you use git (`v<version>`), and archive the
-   `CHANGELOG.md` entry.
+4. Update `compose.yaml` (or `.env` `CONSOLE_IMAGE`) and deploy with
+   `CONSOLE_READONLY=1`. Verify `/health`, login, Homes, status, backups.
+5. Enable writes, tag the source release.
 
-## Compatibility and rollback
+## Rollback
 
-- **Kamailio schema:** the console never changes `edge.sqlite`'s schema; it
-  edits rows in place. There is no edge migration step in a release.
-- **Sidecar schema:** `console.sqlite` is migrated forward with
-  `PRAGMA user_version` at startup. A newer image may migrate it to a schema an
-  older image does not understand. Before rolling back, either restore the
-  sidecar copy taken before the upgrade or accept that the old image may refuse
-  the sidecar. The console reports `SidecarUnavailable` rather than corrupting
-  it.
-- **Database:** a release does not imply a restore. If a release goes wrong,
-  roll back the image first; restore `edge.sqlite` only through the
-  stopped-stack runbook (`docs/ops/backups.md`).
-- **Old images:** keep at least the immediately previous tag. Image retention is
-  independent of backup rotation (keep-5).
+- **Image:** set the previous tag and redeploy.
+- **Edge schema:** the console never changes it.
+- **Sidecar:** migrations are forward-only. Restore the pre-upgrade sidecar
+  copy or accept that the older image may refuse it.
+- **Database:** restore only through `docs/ops/backups.md`, with the stack
+  stopped.
+- Keep at least the previous image tag.
 
-## Release checklist (short)
+## Checklist
 
-- [ ] version bumped in `pyproject.toml` + `CHANGELOG.md`
-- [ ] `pytest -q` and `compileall console` pass
-- [ ] console image built once and tagged with the version
-- [ ] `v<version>` pushed; both GHCR workflows succeed
-- [ ] `compose.yml` image tag updated (and previous tag retained)
-- [ ] `CONSOLE_READONLY=1` deploy verified
-- [ ] Pangolin SSO resource still reachable and `/health` unchanged
-- [ ] `CONSOLE_READONLY=0` after read verification
+- [ ] version bumped; changelog updated
+- [ ] tests, compileall and privacy guard pass
+- [ ] console image built and tagged
+- [ ] `v<version>` pushed; both GHCR workflows pass
+- [ ] `compose.yaml`/`.env` image tag updated
+- [ ] read-only deploy verified; then writes enabled

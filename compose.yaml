@@ -1,0 +1,184 @@
+# One stack: Kamailio, rtpengine, ACME, cert reloader, console, optional Homer.
+# Runtime files: ${EDGE_HOME}; deploy steps: docs/ops/deploy.md.
+
+services:
+  console:
+    image: ${CONSOLE_IMAGE:-voip-edge-console:0.1.11}
+    build:
+      context: .
+      dockerfile: Dockerfile.console
+      args:
+        CONSOLE_UID: ${CONSOLE_UID:-10001}
+        CONSOLE_GID: ${CONSOLE_GID:-10001}
+    container_name: voip-edge-console
+    network_mode: host
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    env_file:
+      - .env
+    environment:
+      CONSOLE_DB_PATH: /data/edge.sqlite
+      CONSOLE_SIDECAR_DIR: /var/lib/console
+      CONSOLE_RPC_SOCK: /run/kamailio/kamailio_rpc.sock
+    volumes:
+      - ${EDGE_HOME:?set EDGE_HOME}/kamailio/db:/data:rw
+      - ${EDGE_RUN:-/run/kamailio-edge}:/run/kamailio:rw
+      - ${EDGE_HOME:?set EDGE_HOME}/console:/var/lib/console:rw
+    user: "0:0"
+    group_add:
+      - "${CONSOLE_GID:-10001}"
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS \"http://$${CONSOLE_BIND:-127.0.0.1}:$${CONSOLE_PORT:-8080}/health\" >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  kamailio:
+    image: ghcr.io/kamailio/kamailio:6.1.5-trixie
+    container_name: voip-edge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - rtpengine
+    environment:
+      SHM_MEMORY: ${SHM_MEMORY:-256}
+      PKG_MEMORY: ${PKG_MEMORY:-64}
+    command: ["-f", "/etc/kamailio/voip-edge/kamailio.cfg", "-A", "WITH_CONSOLE"]
+    volumes:
+      - ${EDGE_HOME:?set EDGE_HOME}/kamailio:/etc/kamailio/voip-edge:rw
+      - ${EDGE_HOME:?set EDGE_HOME}/kamailio/routes:/etc/kamailio/routes:ro
+      - ${EDGE_RUN:-/run/kamailio-edge}:/run/kamailio
+      # TLS: add "-A", "WITH_TLS" to command and uncomment both lines.
+      # - ${EDGE_HOME}/kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro
+      # - ${EDGE_HOME}/tls:/etc/kamailio/tls:ro
+
+  rtpengine:
+    image: ${RTPENGINE_IMAGE:-voip-edge-rtpengine:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.rtpengine
+      args:
+        RTPE_VERSION: ${RTPE_VERSION:-mr26.3.1.2}
+    container_name: voip-rtpengine
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ${EDGE_HOME:?set EDGE_HOME}/rtpengine.conf:/etc/rtpengine/rtpengine.conf:ro
+
+  acme:
+    image: neilpang/acme.sh:3.1.6
+    container_name: voip-acme
+    restart: unless-stopped
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/run.sh"]
+    environment:
+      AUTO_UPGRADE: "0"
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      ACME_DOMAINS: ${ACME_DOMAINS:?set ACME_DOMAINS}
+      ACME_CERT_NAME: ${ACME_CERT_NAME:?set ACME_CERT_NAME}
+      ACME_SERVER: ${ACME_SERVER:-letsencrypt}
+      ACME_KEYLENGTH: ${ACME_KEYLENGTH:-2048}
+      ACME_DNSSLEEP: ${ACME_DNSSLEEP:-60}
+      ACME_DNS_PROVIDER: ${ACME_DNS_PROVIDER:-dns_nsupdate}
+      ACME_FORCE_ISSUE: ${ACME_FORCE_ISSUE:-0}
+      NSUPDATE_SERVER: ${NSUPDATE_SERVER:-}
+      NSUPDATE_SERVER_PORT: ${NSUPDATE_SERVER_PORT:-53}
+      NSUPDATE_ZONE: ${NSUPDATE_ZONE:-}
+      NSUPDATE_KEY: ${NSUPDATE_KEY:-/run/secrets/technitium_tsig}
+      NSUPDATE_OPT: ${NSUPDATE_OPT:-}
+      Technitium_Server: ${Technitium_Server:-}
+      Technitium_Token: ${Technitium_Token:-}
+    volumes:
+      - ${EDGE_HOME:?set EDGE_HOME}/acme/data:/acme.sh
+      - ${EDGE_HOME:?set EDGE_HOME}/tls:/tls
+      - ./deploy/acme/run.sh:/run.sh:ro
+      - ./deploy/acme/deploy-certs.sh:/deploy-certs.sh:ro
+    secrets:
+      - technitium_tsig
+
+  cert-reloader:
+    image: ghcr.io/kamailio/kamailio:6.1.5-trixie
+    container_name: voip-cert-reloader
+    restart: unless-stopped
+    depends_on:
+      - kamailio
+      - acme
+    entrypoint: ["/bin/sh", "/watch-certs.sh"]
+    volumes:
+      - ${EDGE_HOME:?set EDGE_HOME}/tls:/certs:ro
+      - ${EDGE_RUN:-/run/kamailio-edge}:/run/kamailio
+      - ./deploy/watch-certs.sh:/watch-certs.sh:ro
+
+  # Optional capture: docker compose --profile homer up -d
+  # HEP stays fire-and-forget when these services are stopped.
+  homer-db:
+    image: postgres:17.11-alpine
+    profiles: ["homer"]
+    container_name: voip-homer-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: ${HOMER_DB_PASS:-homer}
+    volumes:
+      - homer-db-data:/var/lib/postgresql/data
+      - ./homer/init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  heplify-server:
+    image: ghcr.io/sipcapture/heplify-server:1.60.9
+    profiles: ["homer"]
+    container_name: voip-heplify-server
+    restart: unless-stopped
+    depends_on:
+      homer-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:9060:9060/udp"
+    environment:
+      HEPLIFYSERVER_HEPADDR: "0.0.0.0:9060"
+      HEPLIFYSERVER_DBSHEMA: homer7
+      HEPLIFYSERVER_DBDRIVER: postgres
+      HEPLIFYSERVER_DBADDR: "homer-db:5432"
+      HEPLIFYSERVER_DBUSER: root
+      HEPLIFYSERVER_DBPASS: ${HOMER_DB_PASS:-homer}
+      HEPLIFYSERVER_DBDATATABLE: homer_data
+      HEPLIFYSERVER_DBCONFTABLE: homer_config
+      HEPLIFYSERVER_DBROTATE: "true"
+      HEPLIFYSERVER_DBDROPDAYS: ${HOMER_RETENTION_DAYS:-7}
+      HEPLIFYSERVER_LOGLVL: info
+      HEPLIFYSERVER_LOGSTD: "true"
+
+  homer-app:
+    image: ghcr.io/sipcapture/homer-app:1.5.21
+    profiles: ["homer"]
+    container_name: voip-homer-app
+    restart: unless-stopped
+    depends_on:
+      homer-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:9080:80"
+    environment:
+      DB_HOST: homer-db
+      DB_USER: root
+      DB_PASS: ${HOMER_DB_PASS:-homer}
+
+volumes:
+  homer-db-data:
+
+secrets:
+  technitium_tsig:
+    file: ${EDGE_HOME:?set EDGE_HOME}/acme/technitium_tsig

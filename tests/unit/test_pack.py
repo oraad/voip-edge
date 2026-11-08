@@ -1,6 +1,6 @@
 """Golden vectors for the packed mtree columns (plan §5.1/§5.2, task T0).
 
-The literal strings here come from the real seed (kamailio-edge/kamailio/db/seed.sql)
+The literal strings here come from the real seed (kamailio/db/seed.sql)
 so a regression in separator handling is visible without a database.
 """
 from __future__ import annotations

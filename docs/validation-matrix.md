@@ -1,5 +1,8 @@
 # Validation matrix (plan §5.2 → §9)
 
+> Historical reference. Current deployment and operations are in
+> `docs/ops/deploy.md` and `docs/operations.md`.
+
 Status: **scaffold**. T4 owns this document's completion. `TODO` means the
 traceability cell has not been filled in yet; several rules are covered by
 tests whose ids have not been mapped here. Treat the matrix as an index, not

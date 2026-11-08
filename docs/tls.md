@@ -1,73 +1,46 @@
-# TLS at the edge — acme.sh, deploy scripts, hot reload
+# TLS at the edge
 
-Phone-facing TLS terminates at Kamailio (`tls:PUBIP:5061`, `kamailio/tls.cfg`).
-The edge↔home hop stays cleartext inside the WireGuard/Pangolin tunnel — there
-is deliberately no TLS there.
+Kamailio terminates phone-facing TLS on `tls:PUBIP:5061`; edge↔home stays
+cleartext inside the tunnel.
 
-## Components (all in `deploy/`)
+## Components
 
-| File | Role |
+| Path | Role |
 |---|---|
-| `acme/run.sh` | acme.sh container entrypoint: issues the cert if missing (DNS-01 via nsupdate/RFC2136 or the Technitium API), installs it into the container's `/tls`, registers the deploy hook, then runs the acme cron every 12 h. |
-| `acme/deploy-certs.sh` | `--reloadcmd` target: writes a timestamped release directory under `/tls/releases/`, re-points the stable `current` symlink via busybox-safe `ln -sfn`, and keeps `sip.crt`/`sip.key` pointing through it. Both live paths always resolve inside one release, so Kamailio never reads a new certificate with an old key. Keeps the five newest releases. |
-| `watch-certs.sh` | `cert-reloader` container: watches `/certs/.renewed` and calls `kamcmd -s unix:/run/kamailio/kamailio_ctl tls.reload`. No docker.sock, no restart. |
-| `acme-deploy-hook.sh` | Standalone fallback for non-compose setups: sync certs from an acme.sh volume into Kamailio's TLS dir and reload only when files changed. |
+| `deploy/acme/run.sh` | Issue/renew via DNS-01, install into `/tls` |
+| `deploy/acme/deploy-certs.sh` | Atomic release dir, stable symlink, keep 5 |
+| `deploy/watch-certs.sh` | Watch `.renewed`, call `kamcmd tls.reload` |
+| `deploy/acme-deploy-hook.sh` | Non-compose fallback |
 
-`kamailio/tls.cfg` expects the live pair at `/etc/kamailio/tls/sip.{crt,key}`
-(container paths; host paths are whatever you mount there).
+## Configure
 
-## Configuration
+Set in `.env`:
 
-Copy `deploy/acme.env.example` and set at least:
+- `ACME_EMAIL`, `ACME_DOMAINS`, `ACME_CERT_NAME`. Include each
+  `sip.<client>` SAN; wildcards cover one label only. `ACME_CERT_NAME` is the
+  first `ACME_DOMAINS` entry.
+- `NSUPDATE_SERVER` plus `${EDGE_HOME}/acme/technitium_tsig`, or
+  `ACME_DNS_PROVIDER=dns_technitium` with `Technitium_Server` and
+  `Technitium_Token`.
 
-- `ACME_EMAIL`, `ACME_DOMAINS` (wildcard **and** per-tenant `sip.<client>` SANs —
-  Let's Encrypt wildcards cover one label only), `ACME_CERT_NAME` = the **first**
-  `ACME_DOMAINS` entry.
-- DNS-01 target: `NSUPDATE_SERVER` + a TSIG key file mounted as a docker secret
-  (`NSUPDATE_KEY=/run/secrets/technitium_tsig`), or the Technitium API
-  (`ACME_DNS_PROVIDER=dns_technitium`, `Technitium_Server`, `Technitium_Token`).
+Enable TLS: add `"-A", "WITH_TLS"` to the Kamailio `command` in `compose.yaml`
+and uncomment both TLS mounts. Recreate Kamailio.
 
-Secrets never enter this repo:
+## Promote staging
 
-- the TSIG file is gitignored and the pre-commit guard refuses `*technitium_tsig*`;
-- `deploy/*.env`, `deploy/acme.env` and any `.env` are refused;
-- certificate/key material (`*.crt`, `*.key`, `*.pem`) is refused.
+1. `ACME_SERVER=letsencrypt`, `ACME_FORCE_ISSUE=1`.
+2. `docker compose up -d --force-recreate acme`.
+3. Check `docker logs voip-acme` for `Cert success`.
+4. Set `ACME_FORCE_ISSUE=0`.
 
-## Staging → live promotion
+## Renew and add a tenant
 
-`ACME_SERVER=letsencrypt_test` writes a *staging* certificate that run.sh will
-happily re-install on every start (it only checks that a cert exists). To
-promote:
+Renewal is automatic. `deploy-certs.sh` writes `sip.key` as `0600`; for
+non-root Kamailio set `KAM_UID`/`KAM_GID` or use a shared group.
 
-1. set `ACME_SERVER=letsencrypt`, `ACME_FORCE_ISSUE=1`;
-2. recreate the acme container (`docker compose up -d --force-recreate acme`);
-3. watch `docker logs` for `Cert success`, verify with `openssl s_client`;
-4. set `ACME_FORCE_ISSUE=0` again (otherwise every recreate re-issues and can
-   hit Let's Encrypt duplicate-certificate limits).
-
-## Key ownership (non-root Kamailio)
-
-`deploy-certs.sh` writes `sip.key` as `0600`. If Kamailio/the cert reloader does
-not run as root, set `KAM_UID`/`KAM_GID` in the acme container so the release
-is chowned to that account, or use a shared group with `0640` and add the
-Kamailio user to it. Otherwise `tls.reload` fails with a permission error after
-a successful renewal. See `docs/ops/deploy.md` §8.6.
-
-## Renewal visibility
-
-Renewal failures are logged by the acme container but not alerted. Add an
-external check on `notAfter` (e.g. `openssl x509 -enddate`) and watch for
-`tls.reload failed` in the cert-reloader logs; the watcher now retries a failed
-reload instead of dropping it.
-
-## Adding a tenant's TLS name
-
-1. Append `,sip.<client>.home.example.net` to `ACME_DOMAINS`.
-2. One-shot reissue: `ACME_FORCE_ISSUE=1`, recreate the acme container (`docker compose up -d --force-recreate acme`), watch
-   `docker logs <acme>` for `Cert success`.
-3. Set `ACME_FORCE_ISSUE=0` again.
-4. The deploy hook + cert-reloader install and hot-reload the new certificate
-   (no Kamailio restart; new handshakes pick it up).
+Add `,sip.<client>.home.example.net` to `ACME_DOMAINS`, force reissue, then
+reset `ACME_FORCE_ISSUE=0`. `cert-reloader` installs and reloads without a
+Kamailio restart.
 
 ## Verify
 
@@ -75,16 +48,6 @@ reload instead of dropping it.
 openssl s_client -connect <PUBIP>:5061 \
   -servername sip.<client>.home.example.net -verify_return_error </dev/null \
   2>&1 | grep -E 'Verify return|subject=|issuer='
-# expect: Verify return code: 0, LE issuer, the tenant SAN in the chain
 ```
 
-## Failure modes worth knowing
-
-- **`no tls engine` at startup**: the `tls` module failed to load — check the
-  `WITH_TLS` define and that `tls.cfg` + cert files exist before enabling it.
-- **Renewal fired but handshakes still show the old cert**: `tls.cfg` paths and
-  the mounted directory disagree; `tls.reload` only re-reads what `tls.cfg`
-  names.
-- **Cert expired after a rebuild**: `create-db.sh` resets the DB, not TLS, but
-  restoring an old `certs/` snapshot can reintroduce an expired pair — compare
-  `notAfter` before restoring.
+Expect code 0 and the tenant SAN. Watch `notAfter` and `tls.reload failed`.

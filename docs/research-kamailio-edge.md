@@ -1,5 +1,8 @@
 # Kamailio as Edge Proxy in Front of Downstream Registrar/PBX Servers
 
+> Historical reference. Current deployment and operations are in
+> `docs/ops/deploy.md` and `docs/operations.md`.
+
 Research notes: how to run Kamailio as a pure edge/proxy tier in front of one or more
 tenant registrar/PBX nodes (Asterisk, FreeSWITCH, another Kamailio, …) where the
 **downstream Registrar remains the single source of truth** for accounts and contacts.

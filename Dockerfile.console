@@ -6,7 +6,7 @@
 #   * ONE uvicorn worker. Reload serialization, reload/queue state, the
 #     transaction write-lock and session state are process-local, so a second
 #     worker would corrupt behaviour (not merely duplicate work).
-#   * host networking is used by compose.yml; the app binds CONSOLE_BIND.
+#   * host networking is used by compose.yaml; the app binds CONSOLE_BIND.
 #   * console/tables.yaml is baked in with the code; changing it requires a
 #     rebuild, never a runtime mount.
 #   * /health is console liveness only and always answers 200, even when
@@ -16,8 +16,8 @@
 #   docker build -f Dockerfile.console -t voip-edge-console:0.1.11 \
 #     --build-arg CONSOLE_GID="$(getent group console | cut -d: -f3)" .
 #
-# The image defaults to the non-root "console" user. The stock edge stack runs
-# Kamailio (and its root-owned SQLite WAL/SHM files) as root, so compose.yml
+# The image defaults to the non-root "console" user. The stack runs
+# Kamailio (and its root-owned SQLite WAL/SHM files) as root, so compose.yaml
 # deliberately overrides the runtime user to 0:0; see docs/ops/deploy.md for
 # the non-root alternative (matching UID/GID plus ACL/umask work).
 

@@ -1,182 +1,85 @@
-# Operations runbook — VoIP Edge Console
+# Operations
 
-Operator-facing skeleton. It covers the console only; the edge stack (Kamailio,
-Pangolin, TLS, rtpengine) is documented in
-the edge-stack `DEPLOY.md`. Do not copy that file here — link to
-it so the two deployment stories cannot drift.
+Day-2 tasks for the whole stack. First deploy: `docs/ops/deploy.md`. TLS:
+`docs/tls.md`. Backups: `docs/ops/backups.md`.
 
-The console is a single-process FastAPI app. Run exactly one instance
-(`workers=1`); reload serialization, sidecar state and the write lock are
-process-local.
+The console runs one uvicorn worker. Reload serialization, queues, locks and
+session state are process-local.
 
-## Environment
+## Edge services
 
-All values are read at import from the process environment; restart the console
-after changing them. Defaults below come from `console/settings.py`; the
-production values in the notes come from plan §10. `CONSOLE_SECURE_COOKIE`,
-`CONSOLE_SESSION_TTL` and `CONSOLE_LOGIN_RATE` are implementation extensions
-from plan §2.
+```bash
+docker compose ps
+docker logs -f voip-edge
+docker logs -f voip-rtpengine
+docker exec voip-edge kamcmd uptime
+docker exec voip-edge kamcmd dispatcher.list
+docker exec voip-edge kamcmd mtree.list tenantdom
+docker exec voip-edge kamcmd permissions.trustedDump
+docker exec voip-edge kamcmd rtpengine.show all
+```
 
-| Variable | Default | Purpose / production note |
-|---|---|---|
-| `CONSOLE_TOKEN` | random per process | Shared login token. **Set a strong value in production.** If unset/blank a random token is generated, so no one can sign in. The token is a second factor in front of Pangolin SSO only when console OIDC is not enabled; with OIDC on it is the break-glass alternative (and only in `both` mode). |
-| `CONSOLE_SECRET` | random per process | Session/flow cookie signing secret. **Set an explicit random value.** It is never derived from the token; a generated secret invalidates sessions on restart. |
-| `CONSOLE_BIND` | `127.0.0.1` | Production: `100.64.0.9` (host-networked container, reachable only through Pangolin). |
-| `CONSOLE_PORT` | `8080` | Pangolin resource target port. |
-| `CONSOLE_DB_PATH` | `edge.sqlite` | Absolute path to the mounted Kamailio DB, e.g. `/data/edge.sqlite` (host: `${EDGE_HOME}/kamailio/db/edge.sqlite`). Never point at a copy. |
-| `CONSOLE_SIDECAR_DIR` | `console-data` | Directory for `console.sqlite` and backups. Production: `/var/lib/console` (host: `${EDGE_HOME}/console`). The directory must exist. |
-| `CONSOLE_RPC_SOCK` | `/run/kamailio/kamailio_rpc.sock` | Kamailio `jsonrpcs` unix datagram socket; the console needs read/write access and the shared `console` group. |
-| `CONSOLE_RPC_TIMEOUT_MS` | `2000` | Per-RPC timeout. A timeout is surfaced as an unreachable edge, not a crash. |
-| `CONSOLE_THROTTLE_TENANTDOM` | not read | Reserved. Per-table throttles are authoritative in `console/tables.yaml` (`reload.throttle_seconds`, 5 s per table). |
-| `CONSOLE_ALLOWED_SUFFIXES` | `home.example.net` | Comma-separated allowed home suffixes. Keep in sync with `TENANTSUFFIXRE` in `kamailio/kamailio.cfg`; the edge also enforces it before the mtree lookup. |
-| `CONSOLE_POLL_MS` | `15000` | Live-dashboard polling interval. In the lab use ~500 ms; never use `wait_for_timeout` in tests. |
-| `CONSOLE_READONLY` | `0` | `1` gates every mutating route, disables action buttons and shows the read-only banner. Use for the first production session. |
-| `CONSOLE_TLS_LIVE` | `1` | Enables the wizard's mandatory TLS-SAN notice (`ACME_DOMAINS` + force-reissue). |
-| `CONSOLE_SECURE_COOKIE` | `0` | Set `1` when Pangolin terminates HTTPS; adds `Secure` to the session cookie. |
-| `CONSOLE_SESSION_TTL` | `43200` | Absolute session lifetime in seconds (12 h); there is no sliding refresh. |
-| `CONSOLE_LOGIN_RATE` | `5` | Failed auth attempts per minute per IP before a 429. |
-| `CONSOLE_SWEEPER_INTERVAL` | `30` | Seconds between lifecycle-intent/reload sweeps; `0` disables (tests use 0). |
-| `CONSOLE_ENFORCE_CAPABILITIES` | `0` | `1` refuses park/destroy up front when `htable.delete` is proven unavailable. Set `1` in production. |
-| `OIDC_ALLOW_ANY` | `0` | Explicitly allow any authenticated subject when no group/email-domain allowlist is configured. SSO fails closed without it. |
-| `OIDC_INSECURE` | `0` | Allow `http://` issuer/endpoints for loopback development only. |
+Routing tables are memory-cached. After an out-of-band DB edit, run the
+matching reload (`mtree.reload`, `dispatcher.reload`, `dialplan.reload`,
+`permissions.trustedReload`). The console reloads after its own saves.
 
-### OIDC configuration
+Never replace `edge.sqlite` under a running Kamailio. Restore only through
+`docs/ops/backups.md`.
 
-The full SSO surface is `CONSOLE_AUTH_MODE`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
-`OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, `OIDC_SCOPES`,
-`OIDC_POST_LOGOUT_URI`, `OIDC_ALLOWED_GROUPS`,
-`OIDC_ALLOWED_EMAIL_DOMAINS`, `OIDC_PROVIDER_NAME`, `OIDC_ALLOW_ANY` and
-`OIDC_INSECURE`; see `.env.example` for defaults and `docs/oidc.md` for the
-provider registration and threat model.
+Homer is optional:
 
-## Backups and restore
+```bash
+docker compose --profile homer ps
+docker compose --profile homer logs -f heplify-server
+docker compose --profile homer stop heplify-server homer-app homer-db
+```
 
-Backups use `console.backups.create_backup`: the SQLite online backup API, never
-a file copy of a running database. Each backup is `edge-<UTC>-<tag>.sqlite`
-with a sibling `.console.sqlite.bak` (WAL-safe sidecar copy, including parked
-snapshots) and a readable `.parked.json` dump. Rotation keeps the newest **5
-globally** and removes all three companions together. A backup is taken before
-every edge-mutating lifecycle operation (park, restore, active destroy) and
-before wizard apply; parked destroy only removes the sidecar snapshot.
+Stopping Homer does not affect SIP or media. To stop HEP mirroring:
+`docker exec voip-edge kamcmd siptrace.status off`.
 
-Backups live in the configured backup directory (the deployment convention is
-`${CONSOLE_SIDECAR_DIR}/backups`). The `.parked.json` file is disaster-recovery
-evidence for parked homes; it is not imported automatically into the sidecar.
+## Console settings
 
-### Restore procedure
+All settings are in `.env`; the annotated list is `.env.example`. Restart the
+console after a change. Critical values:
 
-**Never hot-swap the database.** A running Kamailio or console can hold WAL
-state and will lose writes or corrupt the file if the inode is replaced under it.
+| Variable | Note |
+|---|---|
+| `CONSOLE_TOKEN` | login token; set explicitly |
+| `CONSOLE_SECRET` | session signing secret; set explicitly |
+| `CONSOLE_BIND` | tunnel address, e.g. `100.64.0.9` |
+| `CONSOLE_READONLY` | `1` gates every write |
+| `CONSOLE_ALLOWED_SUFFIXES` | keep in sync with `TENANTSUFFIXRE` |
+| `CONSOLE_AUTH_MODE` | `both`, `oidc` or `token` |
+| `CONSOLE_ENFORCE_CAPABILITIES` | `1` refuses unsafe lifecycle actions |
 
-1. Choose the backup: newest suitable `edge-*.sqlite`, or the specific tag taken
-   before the failed operation.
-2. Stop the writers: `voip-edge-console`, then `voip-edge` (Kamailio). Confirm
-   neither container is running.
-3. Preserve the current file (rename or copy it aside); do not overwrite it.
-4. Replace `edge.sqlite` with the chosen backup. Remove stale
-   `edge.sqlite-wal` and `edge.sqlite-shm` files from the old database; they do
-   not belong to the restored file.
-5. Start `voip-edge` first, then `voip-edge-console`. The console re-asserts
-   `journal_mode=WAL` and `busy_timeout` on startup.
-6. Verify: `/health` returns 200, the Homes list reads, the status strip shows
-   the edge reachable, and no pending reloads remain. If a reload is still
-   pending after Kamailio is up, the startup sweeper will re-issue it.
-7. Keep `console.sqlite` and its parked snapshots unless the sidecar itself is
-   being recovered. Do not copy `.parked.json` into `edge.sqlite`.
+## Lifecycle
 
-A backup failure must abort the operation before any edge mutation. If you see
-`BackupError`, fix the path/permissions and retry the lifecycle action; do not
-proceed without a backup.
+Each operation writes a durable intent in `console.sqlite`. The sweeper resumes
+the oldest unfinished intent at startup and every 30 s (0 disables). A failed
+step records `last_error`; fix the cause, the sweeper retries.
 
-## Tenant lifecycle
+- **Park:** backup → snapshot → delete routing rows → reload → purge regcache.
+- **Restore:** collision check → backup → guarded inserts → reload.
+- **Destroy:** park sequence, then discard the snapshot (active home), or
+  delete the snapshot only (parked home).
 
-All lifecycle work is durable and resumable. Each operation writes an intent
-row in `console.sqlite`; the process sweeper resumes the oldest unfinished
-intent at startup and every 30 s. A failed step keeps its last committed state
-and records `last_error`; the sweeper retries it and the Audit page shows the
-error. There is no separate Retry button. In read-only mode or while the schema
-check has flagged a mismatch, the sweeper pauses lifecycle resumes and reload
-reissues; re-enable writes (or fix the schema) and restart/wait to resume.
+Read-only mode and schema mismatch pause lifecycle resumes and reload reissues.
+A backup failure aborts before any edge mutation.
 
-### Park (active home)
+## Reloads
 
-UI: Homes → home → **Park**. One warning-styled confirmation (not typed).
+Saves commit to SQLite immediately and enqueue a reload. The worker coalesces
+per table; one RPC per table per window. A pending row survives console
+restarts and is re-issued by the sweeper.
 
-Sequence: backup → snapshot into `console_parked` → delete that home's registry,
-landline, dispatcher and trusted rows → reload all four tables → purge every
-regcache key ending `@<domain>` → dump-verify zero → done. Reload runs **before**
-purge so new registrations are rejected at the mtree level before cleanup. A
-residual in-flight REGISTER is accepted; it ages out at its autoexpire TTL and
-no delayed re-sweep is scheduled.
+If Kamailio is down, writes still work and the status strip counts pending
+reloads. Fix the edge/socket and wait for the sweep, or restart the console.
+Old data stays active until the reload succeeds.
 
-Operator expectation, verified manually in the lab: calls already in progress
-finish; new requests receive 403/404. Do not promise this from console tests.
+## Exposure
 
-### Restore (parked home)
+Bind the console to the tunnel address and expose it only through Pangolin
+SSO. Set `CONSOLE_SECURE_COOKIE=1` behind HTTPS. `/health` is public and always
+200; it reveals only `{"status":"ok"}`.
 
-UI: Parked section → **Restore**. Collision check blocks on any of the five
-classes: domain, tenantid, landline digits, dispatcher set ids, trusted
-`src_ip`; the error names the colliding row. Then a backup, guarded inserts
-(never `OR REPLACE`) and reloads. Optionally run `/wizard/verify/<domain>` as
-a DB-only post-restore checklist; the Homes coherence column is still a
-placeholder.
-
-### Destroy
-
-- **Active home:** type the full domain to confirm. Runs the park sequence
-  (including regcache purge), then discards the snapshot on success.
-- **Parked home:** normal consequence-naming confirmation; deletes the snapshot
-  only.
-- Shared dialplan partitions (for example 10 and 90) are never deleted; the
-  console does not add a post-destroy “unreferenced partition” indicator.
-
-If the sidecar is unreadable, destructive operations are refused before
-`edge.sqlite` is touched; browsing continues.
-
-## Reload troubleshooting
-
-Reloads are **scheduled → applied (RPC accepted) → failed**; live verification
-is manual via Live or `/wizard/verify/<domain>` (there is no verify RPC). A save commits to the
-database immediately; the reload is enqueued. Per-table windows coalesce saves;
-the window starts at the first save and is not extended by later saves. Exactly
-one RPC is sent per table per window, serialized by `ReloadWorker`.
-
-### Pending reloads
-
-- `console_pending_reload` in `console.sqlite` persists `table` +
-  `enqueued_at` while Kamailio is unreachable. A console restart loses nothing.
-- The sweeper re-derives the RPC and params from the descriptor and re-issues
-  the reload on its next pass.
-- Symptom: the status strip shows a pending count, writes still work. Fix the
-  edge or socket, then wait for the sweep (or restart the console). The sweeper
-  is paused in read-only/schema-mismatch mode (see Tenant lifecycle).
-- A JSON-RPC reload fault is recorded in the worker's pending-reload error and
-  the structured logs; the status strip shows the pending count. There is no
-  per-save toast. Old data remains active — fix the data/RPC and save again.
-
-### Live polling stops on a down edge
-
-`GET /live/partial` always returns 200 with the banner. When the edge is
-unreachable it adds `HX-Stop-Polling: true`, so htmx stops hammering the dead
-socket. Polling resumes on the next page load or navigation back to Live. This
-is intentional; it is not a console crash.
-
-The Docker healthcheck tests console liveness only (`/health` is 200 even when
-Kamailio is down). A healthy container does **not** mean the edge is reachable;
-read the status strip / `core.uptime` surface.
-
-## Exposure and Pangolin SSO
-
-Production binds `100.64.0.9:8080` on host networking and is exposed only
-through a Pangolin resource with SSO in front. The console token is a second
-factor only when console OIDC is not enabled; with OIDC on it is the break-glass
-alternative. Do not publish the port directly or bypass the resource.
-
-- Terminate TLS at Pangolin and set `CONSOLE_SECURE_COOKIE=1`.
-- `/health` is intentionally unauthenticated so the container healthcheck and
-  Pangolin can probe liveness; it reveals only `{"status":"ok"}`.
-- First production session: `CONSOLE_READONLY=1`, verify reads and the status
-  strip, then enable writes.
-- Follow the existing Pangolin resource pattern in
-  the edge-stack `DEPLOY.md` §C and the concrete steps in
-  `docs/ops/deploy.md` rather than inventing a second exposure path.
+Start with `CONSOLE_READONLY=1`, verify reads and status, then enable writes.

@@ -1,15 +1,18 @@
-# AGENTS.md — VoIP Edge Console
+# AGENTS.md — VoIP Edge
 
 ## What this repo is
 
-An operator web console for the Kamailio edge proxy. It edits the five routing
-tables in the edge SQLite database (homes, landlines, route sets, number rules,
-trusted sources), drives Kamailio reloads over the `jsonrpcs` unix datagram,
-and owns tenant lifecycle (park/restore/destroy) plus online backups.
+A complete self-hosted SIP edge plus its operator console. One `compose.yaml`
+runs Kamailio, rtpengine, ACME, the cert reloader and the FastAPI console. The
+console edits the five routing tables in `edge.sqlite` (homes, landlines,
+route sets, number rules, trusted sources), drives Kamailio reloads over the
+`jsonrpcs` unix datagram, and owns tenant lifecycle (park/restore/destroy)
+plus online backups.
 
-- Spec: `docs/plan.md` (v2) · validation matrix: `docs/validation-matrix.md`
-- Operator runbook: `docs/operations.md` · design artifact: `docs/wireframe.html`
-- Edge-stack deployment (Kamailio, Pangolin, TLS): the edge-stack `DEPLOY.md`
+- First deploy: `docs/ops/deploy.md` · operations: `docs/operations.md`
+- TLS: `docs/tls.md` · backups: `docs/ops/backups.md`
+- Spec: `docs/plan.md` · validation matrix: `docs/validation-matrix.md`
+- Design artifact: `docs/wireframe.html`
 
 Do not edit `docs/wireframe.html` as part of implementation work; it is the
 design reference, not a template source.
@@ -45,7 +48,13 @@ design reference, not a template source.
 | `console/backups.py` | Online SQLite backup, keep-5 global rotation, `.parked.json` dump |
 | `console/sidecar.py` | `console.sqlite` schema/migrations, audit, snapshots, intents, pending reloads |
 | `console/security.py` | Session cookie, CSRF, login rate limit |
+| `console/oidc.py` | OIDC discovery/JWKS cache, PKCE flow, ID-token validation, RP logout |
+| `console/capabilities.py` | Advisory Kamailio RPC capability probe with TTL cache |
+| `console/rpc_lock.py` | Process-wide lock serializing every Kamailio RPC call |
+| `console/validators.py`, `console/rules/` | Named validator registry and per-table rule modules |
+| `console/observability.py` | Structured, redacted JSON log lines |
 | `console/homes_ui.py`, `console/tables_ui.py`, `console/live.py` | Homes landing, generic read browser, live dashboard routes |
+| `console/forms_ui.py`, `console/lifecycle_ui.py`, `console/system_ui.py`, `console/wizard_ui.py` | Create/edit forms, lifecycle actions, audit/backups/system pages, onboarding wizard |
 | `console/tables.yaml` | The five table descriptors (grammar v1) |
 | `console/derivations.py` | Named `derived:` field rules (e.g. landline `ds_onnet`) |
 | `web/templates/`, `web/static/` | Jinja2 templates; vendored htmx/PicoCSS and `app.js` |
@@ -118,23 +127,27 @@ templates or another lane's files.
 These are additive to the conventions above; they do not relax the
 descriptor/SQLite/reload rules.
 
-- **One process.** `uvicorn --workers 1` is a hard requirement. Reload
+- **One process.** The console runs `uvicorn --workers 1`. Reload
   serialization, the coalescing queue, the write lock and session state are
-  process-local. Never add a second worker or a multi-process manager to the
-  image or compose service.
+  process-local. Never add a second console worker or a multi-process manager.
 - **The image is the release.** `console/`, `web/` and `console/tables.yaml`
   are copied into the image; `tables.yaml` is **baked**, never a runtime mount.
   Changing code, templates, static assets, descriptors or dependencies means a
   rebuild and a new version tag (`docs/ops/releases.md`), not a restart.
-- **Host networking.** `compose.yml` uses `network_mode: host` and no `ports:`;
-  the console binds `${CONSOLE_BIND}:${CONSOLE_PORT}` (`100.64.0.9:8080` in
-  production) and is exposed only through Pangolin SSO. The token is a second
-  factor only when console OIDC is not enabled; otherwise it is break-glass
-  (and only in `both` mode).
+- **One stack.** `compose.yaml` runs Kamailio, rtpengine, ACME, the cert
+  reloader and the console. Kamailio, rtpengine and the console use
+  `network_mode: host`; ACME and the reloader use the default bridge. Homer
+  (PostgreSQL, heplify-server, homer-app) is optional under the `homer`
+  profile. No service publishes ports except Homer on loopback.
+- **Host networking.** The console binds `${CONSOLE_BIND}:${CONSOLE_PORT}`
+  (`100.64.0.9:8080` in production) and is exposed only through Pangolin SSO.
+  The token is a second factor only when console OIDC is not enabled;
+  otherwise it is break-glass (and only in `both` mode).
 - **Mounts.** DB `rw` (in-place SQLite + WAL/SHM), `${EDGE_RUN}` `rw` (unix
   datagram client needs write on the socket path), `${EDGE_HOME}/console` `rw`
-  (sidecar + backups). Never point `CONSOLE_DB_PATH` at a copy, and never
-  hot-swap the DB (`docs/ops/backups.md`).
+  (sidecar + backups), `${EDGE_HOME}/kamailio` `rw` for the edge config/DB.
+  Never point `CONSOLE_DB_PATH` at a copy, and never hot-swap the DB
+  (`docs/ops/backups.md`).
 - **Healthcheck is console liveness only.** `/health` is public and always 200,
   even when Kamailio is unreachable; its state belongs in the status strip, not
   the container exit code. Do not add an RPC probe to the healthcheck or Docker
@@ -142,14 +155,14 @@ descriptor/SQLite/reload rules.
 - **Group story.** Kamailio creates the jsonrpcs datagram socket as
   `0660 root:console` (`dgram_group "console"`). `dgram_group` is resolved by
   name **inside the Kamailio container**, so the name must exist in that
-  container's `/etc/group`; Docker `group_add` does not create it. The stock
-  stack runs Kamailio and its DB/WAL as root, so `compose.yml` runs the console
+  container's `/etc/group`; Docker `group_add` does not create it. The stack
+  runs Kamailio and its DB/WAL as root, so `compose.yaml` runs the console
   as `0:0` by default (a `0660 root:root` socket is still usable). The non-root
   recipe needs a matching GID in both containers plus DB ACL/umask work; see
   `docs/ops/deploy.md`.
-- **Env surface is single-source.** `.env.example` mirrors plan §10. Note that
-  `CONSOLE_THROTTLE_TENANTDOM` is reserved but not read yet; throttles come from
-  `console/tables.yaml`. Restart after changing env values (read at import).
+- **Env surface is single-source.** `.env.example` covers the whole stack,
+  including ACME and image tags. Restart after changing env values (read at
+  import).
 - **Testing a packaging change.** Run `.venv/bin/python -m pytest` (baseline
   **786 passed, 1 deselected**), `.venv/bin/python -m compileall console`
   (offline smoke), and `./tools/check-privacy.sh --all`. Do not put `pytest` or

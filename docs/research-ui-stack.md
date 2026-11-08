@@ -1,5 +1,8 @@
 # Web Admin Console Stack Research (Nov 2026)
 
+> Historical reference. Current deployment and operations are in
+> `docs/ops/deploy.md` and `docs/operations.md`.
+
 Research digest for a lightweight, single-operator web admin console for the Kamailio SIP edge proxy: Python backend, SQLite CRUD (incl. "packed" comma-joined record columns rendered as structured validated forms), Kamailio RPC calls, small Docker image, minimal JavaScript.
 
 ## Q1 — Framework recommendation

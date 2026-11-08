@@ -1,5 +1,8 @@
 # Review notes: accepted risks and follow-ups (v0.1.10)
 
+> Historical reference. Current deployment and operations are in
+> `docs/ops/deploy.md` and `docs/operations.md`.
+
 The final independent gates (security, correctness, SIP/config and
 operations/privacy) returned **GO** at 786 tests, with the live
 park/restore journey passing. The entries below are **intentional** for this

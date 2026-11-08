@@ -2,7 +2,7 @@
 
 The schema is the *exact* Kamailio edge schema for the five tables the console
 describes in ``console/tables.yaml`` plus the ``version`` bookkeeping table
-(``kamailio-edge/kamailio/db/seed.sql``).  Only tests use this module; the
+(``kamailio/db/seed.sql``).  Only tests use this module; the
 console itself never creates or replaces a database file.
 
 Usage::

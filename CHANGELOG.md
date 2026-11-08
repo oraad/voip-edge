@@ -11,6 +11,10 @@ carry fixes.
 
 ### Added
 
+- Optional Homer capture in the stack under the `homer` profile: PostgreSQL,
+  heplify-server and homer-app. Kamailio `siptrace` sends SIP over HEP;
+  rtpengine sends RTCP and control traffic. Stopping the profile does not
+  affect SIP, media or the console.
 - `Dockerfile.rtpengine` is now part of this repository, together with
   `.github/workflows/publish-rtpengine.yml`, so the rtpengine image is built and
   published from the same `v*` release tag as the console. The image is tagged
@@ -19,6 +23,11 @@ carry fixes.
 
 ### Changed
 
+- The repository is standalone: `compose.yaml` now runs Kamailio, rtpengine,
+  ACME, the cert reloader and the console as one stack. The previous
+  edge-stack is no longer referenced or required.
+- `deploy/acme.env.example` was folded into `.env.example`; there is one env
+  file for the stack.
 - README rewritten as an overview and installation guide focused on the
   project's purpose and usage.
 

@@ -17,7 +17,10 @@ cd "$ROOT"
 MODE=staged
 if [ "${1:-}" = "--all" ]; then
     MODE=all
-    FILES=$(git ls-files -co --exclude-standard)
+    # Tracked-but-deleted files have no worktree content and cannot leak.
+    FILES=$(git ls-files -co --exclude-standard | while IFS= read -r f; do
+        [ -e "$f" ] && printf '%s\n' "$f"
+    done)
 else
     FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 fi
@@ -46,7 +49,7 @@ while IFS= read -r f; do
             echo "privacy: refusing key/cert material: $f" >&2; fail=1 ;;
         *tsig*|*TSIG*|*/tls/*|tls/*|acme/*|*/acme/data/*|*/certs/*|certs/*|*console-data/*|*/backups/*|backups/*)
             echo "privacy: refusing secret/state path: $f" >&2; fail=1 ;;
-        .env.example|*/.env.example|deploy/acme.env.example|*/deploy/acme.env.example)
+        .env.example|*/.env.example)
             : ;;  # reviewed templates only; other .env.example files are blocked
         .env|.env.*|*.env|*.env.*|*/.env|*/.env.*|.envrc|*/.envrc)
             echo "privacy: refusing env file: $f" >&2; fail=1 ;;

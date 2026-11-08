@@ -4,8 +4,8 @@ Nothing here starts a process at import time.  The live test is marked
 ``live`` and skipped when the Kamailio binary, the edge repository or the
 ``sqlite3`` CLI is missing, so the default unit/API suite stays portable.
 
-The helpers intentionally mirror ``kamailio-edge/tests/run-lab.sh``: the same
-seed file, ``-A`` overrides, fake voip-stack and scripted UAC.
+The helpers use the same seed file, ``-A`` overrides, fake voip-stack and
+scripted UAC as the edge lab.
 """
 from __future__ import annotations
 
