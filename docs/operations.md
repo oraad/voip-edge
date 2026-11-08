@@ -55,6 +55,17 @@ console after a change. Critical values:
 | `CONSOLE_AUTH_MODE` | `both`, `oidc` or `token` |
 | `CONSOLE_ENFORCE_CAPABILITIES` | `1` refuses unsafe lifecycle actions |
 
+## Home checks
+
+The Homes list computes a DB-only coherence badge for each home. It never calls
+Kamailio. Open `/homes/<domain>` for the full checklist, the PBX and PSTN
+targets, any last reload failure, and the registered phones.
+
+`Run live checks` calls `core.uptime`, `dispatcher.list`,
+`permissions.trustedDump` and `regcache` for that home. It is on demand so the
+detail page still renders when the edge is down. The onboarding
+`/wizard/verify/<domain>` page remains available and uses the same checks.
+
 ## Lifecycle
 
 Each operation writes a durable intent in `console.sqlite`. The sweeper resumes

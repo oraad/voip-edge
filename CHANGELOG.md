@@ -17,6 +17,9 @@ carry fixes.
   same tenant-domain rules.
 - The wizard states the required PBX edge trunk and shows the literal edge
   address from optional `EDGE_TRUNK_HOST` / `EDGE_TRUNK_PORT` settings.
+- The Homes list shows a DB-only coherence badge and links each home to a
+  detail page with the full checklist, PBX/PSTN targets, last reload failure,
+  registered phones and an on-demand live probe.
 - Step 4 separates edge→PBX and PBX→edge checks, verifies the PSTN route set
   when the home has a trunk, and lists the manual call tests the edge cannot
   perform. An on-demand probe reads Kamailio's loaded dispatcher and trusted
