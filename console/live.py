@@ -37,7 +37,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from . import settings as settings_module
-from .rpc import flatten_htable_dump
+from .rpc import RPCFault, flatten_htable_dump
+from .uptime import format_uptime
 from .security import CSRF_COOKIE, is_authenticated, read_session
 
 __all__ = [
@@ -50,7 +51,6 @@ __all__ = [
 NO_STORE = {"Cache-Control": "no-store"}
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "web" / "templates"
 
-_UPTIME_KEYS = ("uptime", "UPTIME", "up_time", "UP_TIME", "uptime_seconds")
 
 
 # ---------------------------------------------------------------------------
@@ -430,22 +430,7 @@ def build_dispatcher_view(list_result: Any) -> list[dict[str, Any]]:
 
 
 def _uptime_text(result: Any) -> str | None:
-    if result is None:
-        return None
-    if isinstance(result, str):
-        return result.strip() or None
-    if isinstance(result, (int, float)) and not isinstance(result, bool):
-        return f"{result} s"
-    if isinstance(result, dict):
-        for key in _UPTIME_KEYS:
-            if key in result:
-                return _uptime_text(result[key])
-        if not result:
-            return None
-        if len(result) == 1:
-            return _uptime_text(next(iter(result.values())))
-        return str(result)
-    return str(result)
+    return format_uptime(result)
 
 
 def edge_health(rpc: Any) -> dict[str, Any]:
@@ -481,6 +466,12 @@ def _load_live_state(rpc: Any) -> dict[str, Any]:
         try:
             listing = rpc.call("dispatcher.list")
             dispatchers = build_dispatcher_view(listing)
+        except RPCFault as exc:
+            # An empty dispatcher table is an empty state, not a failure.
+            if "No Destination Sets" in str(exc):
+                dispatchers = []
+            else:
+                data_errors.append(f"route-set probes unavailable: {exc}")
         except Exception as exc:
             data_errors.append(f"route-set probes unavailable: {exc}")
 

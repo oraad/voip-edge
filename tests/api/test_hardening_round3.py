@@ -15,7 +15,7 @@ from console.app import create_app
 
 def test_vendored_static_assets_are_served(client):
     for path in (
-        "/static/pico.min.css",
+        "/static/app.css",
         "/static/htmx.min.js",
         "/static/app.js",
     ):

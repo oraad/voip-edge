@@ -57,10 +57,10 @@ def test_homes_full_page_has_nav_empty_state_and_table(auth_client):
     assert "Landline" in response.text
 
     # Status strip (the edge chip depends on the shared capability cache).
-    assert "edge health" in response.text
+    assert "Edge control" in response.text
     assert any(
         label in response.text
-        for label in ("not wired yet", "edge reachable", "edge unreachable")
+        for label in ("Unknown", "Online", "Offline", "Degraded")
     )
     assert "pending reloads" in response.text
     assert "read-only" in response.text

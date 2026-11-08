@@ -8,7 +8,8 @@ tenant data. The rules below keep the two separate.
 - Live databases: `kamailio/db/*.sqlite*` (the `db/edge.sqlite` in the edge
   deployment holds tenants, registrations-adjacent state and phone numbers).
 - TLS material: `*.key`, `*.crt`, `*.cer`, `*.pem`, acme state, TSIG keys.
-- Runtime state: `console-data/`, `backups/`, `tls/`, `acme/`.
+- Runtime state: `console-data/`, `backups/`, `tls/`, `acme/data/`,
+  `acme/technitium_tsig`.
 - Environment files with tokens (`*.env`, `.env`).
 - Anything listed in **your local** `tools/private-deny.txt` — the file is
   gitignored because it contains the values it protects.

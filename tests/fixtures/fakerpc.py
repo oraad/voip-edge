@@ -93,6 +93,7 @@ class FakeRPC:
         self.replies: dict[str, Any] = {}
         self.calls: list[Call] = []
         self.request_ids: list[Any] = []
+        self.last_client_addr: Any = None
         self.active = 0
         self.max_concurrency = 0
 
@@ -245,6 +246,7 @@ class FakeRPC:
         request_id = request.get("id")
 
         with self._lock:
+            self.last_client_addr = addr
             self.calls.append(Call(method, params, time.monotonic()))
             self.request_ids.append(request_id)
             self.active += 1

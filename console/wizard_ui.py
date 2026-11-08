@@ -80,7 +80,7 @@ DEFAULT_SIP_PORT = 5060
 
 #: Visible wizard fields per step (used to decide which values travel hidden).
 STEP_VISIBLE: dict[int, frozenset[str]] = {
-    1: frozenset({"domain", "landline", "ring_group", "label"}),
+    1: frozenset({"domain", "domain_mode", "domain_subdomain", "domain_base", "landline", "ring_group", "label"}),
     2: frozenset({"lan_ip", "wire_ip", "has_pstn", "override_public_ip"}),
     3: frozenset(),
     4: frozenset(),
@@ -124,6 +124,9 @@ class WizardDraft:
     """Everything the wizard carries between steps (stateless, hidden inputs)."""
 
     domain: str = ""
+    domain_mode: str = "suffix"
+    domain_subdomain: str = ""
+    domain_base: str = ""
     landline: str = ""
     ring_group: str = ""
     label: str = ""
@@ -141,6 +144,9 @@ class WizardDraft:
         """Flat string mapping (hidden inputs and tests)."""
         return {
             "domain": self.domain,
+            "domain_mode": self.domain_mode,
+            "domain_subdomain": self.domain_subdomain,
+            "domain_base": self.domain_base,
             "landline": self.landline,
             "ring_group": self.ring_group,
             "label": self.label,
@@ -177,7 +183,15 @@ def draft_from_form(form: Mapping[str, list[str]]) -> WizardDraft:
 
     # Canonical field names first; the aliases keep older forms/tests working
     # without duplicating the draft anywhere.
-    domain = one("domain") or one("tprefix")
+    mode = one("domain_mode").strip().lower()
+    if mode not in ("suffix", "custom"):
+        mode = "custom"  # legacy forms post only the full domain
+    subdomain = one("domain_subdomain").strip().strip(".")
+    base_domain = one("domain_base").strip().strip(".")
+    if mode == "suffix" and subdomain and base_domain:
+        domain = f"{subdomain}.{base_domain}"
+    else:
+        domain = one("domain") or one("tprefix")
     landline = one("landline") or one("cli")
     ring_group = one("ring_group") or one("target")
     lan_ip = one("lan_ip") or one("voip_stack_ip")
@@ -186,6 +200,9 @@ def draft_from_form(form: Mapping[str, list[str]]) -> WizardDraft:
 
     return WizardDraft(
         domain=domain.strip(),
+        domain_mode=mode,
+        domain_subdomain=subdomain,
+        domain_base=base_domain,
         landline=landline.strip(),
         ring_group=ring_group.strip(),
         label=one("label").strip(),
@@ -1021,6 +1038,21 @@ def _render(
 ) -> HTMLResponse:
     from . import settings as settings_module
 
+    base_domains = list(settings_module.settings.allowed_suffixes)
+    if not base_domains:
+        draft = replace(draft, domain_mode="custom", domain_base="")
+    else:
+        if draft.domain_mode not in ("suffix", "custom"):
+            draft = replace(draft, domain_mode="suffix")
+        if draft.domain_mode == "suffix" and not draft.domain_base:
+            draft = replace(draft, domain_base=base_domains[0])
+    if draft.domain:
+        domain_preview = draft.domain
+    elif draft.domain_mode == "suffix" and draft.domain_subdomain and draft.domain_base:
+        domain_preview = f"{draft.domain_subdomain}.{draft.domain_base}"
+    else:
+        domain_preview = "—"
+
     tableset = _tableset()
     errors = errors or {}
     warnings = warnings or {}
@@ -1053,6 +1085,8 @@ def _render(
         "wire_hint": wire_ip_hint(draft.domain),
         "tls_live": bool(settings_module.settings.tls_live),
         "tls_domain": draft.domain,
+        "base_domains": base_domains,
+        "domain_preview": domain_preview,
         "reload_warnings": list(reload_warnings),
     }
     return request.app.state.templates.TemplateResponse(

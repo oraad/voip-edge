@@ -24,14 +24,13 @@ export EDGE_RUN=/run/kamailio-edge
 mkdir -p "$EDGE_HOME"/{kamailio,console,tls,acme/data} "$EDGE_RUN"
 
 cp -r kamailio/* "$EDGE_HOME/kamailio/"
-cp rtpengine/rtpengine.conf "$EDGE_HOME/rtpengine.conf"
 DOCKER=1 "$EDGE_HOME/kamailio/db/create-db.sh"
 ```
 
 Edit `$EDGE_HOME/kamailio/kamailio.cfg`: `PUBIP`, `WGIP`, `WGSOCK`
 (`udp:<WGIP>:5060`), `PUBDOM`. `WGIP` and `WGSOCK` change together.
 
-Edit `$EDGE_HOME/rtpengine.conf`:
+Edit `rtpengine/rtpengine.conf`:
 
 ```ini
 interface = internal/<WGIP>;public/<PUBIP>
@@ -82,13 +81,13 @@ docker compose ps
 ```
 
 Kamailio starts with `WITH_CONSOLE`, so the console can use the RPC socket.
-TLS is opt-in: add `"-A", "WITH_TLS"` to the Kamailio `command` and uncomment
+TLS is opt-in: add `-A WITH_TLS` to the Kamailio `entrypoint` and uncomment
 both TLS mounts; see `docs/tls.md`.
 
 ## 5. Verify
 
 ```bash
-docker exec voip-edge kamcmd uptime
+docker exec voip-edge kamcmd core.uptime
 docker exec voip-edge kamcmd dispatcher.list
 docker exec voip-edge kamcmd mtree.list tenantdom
 docker exec voip-edge kamcmd permissions.trustedDump

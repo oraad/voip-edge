@@ -1,17 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Delete {{ object_name }} — VoIP Edge Console{% endblock %}
 {% block content %}
-<style>
-  .delete-panel { border:1px solid var(--destructive); border-left-width:4px;
-                  border-radius:10px; padding:14px 18px; margin-bottom:16px; }
-  .btn.danger { background:var(--destructive); border-color:var(--destructive);
-                color:#fff; font-weight:600; }
-  .delete-details { margin:0; }
-  .delete-details div { padding:5px 0; border-bottom:1px solid var(--border); }
-  .delete-details div:last-child { border-bottom:none; }
-  .delete-details dt { font-size:.8em; color:var(--muted-foreground); }
-  .delete-details dd { margin:2px 0 0; }
-</style>
+
 
 <section id="delete-shell">
   <p class="meta"><a href="{{ cancel_url }}">← Back to {{ table_label }}</a></p>

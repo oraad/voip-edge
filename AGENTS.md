@@ -57,7 +57,7 @@ design reference, not a template source.
 | `console/forms_ui.py`, `console/lifecycle_ui.py`, `console/system_ui.py`, `console/wizard_ui.py` | Create/edit forms, lifecycle actions, audit/backups/system pages, onboarding wizard |
 | `console/tables.yaml` | The five table descriptors (grammar v1) |
 | `console/derivations.py` | Named `derived:` field rules (e.g. landline `ds_onnet`) |
-| `web/templates/`, `web/static/` | Jinja2 templates; vendored htmx/PicoCSS and `app.js` |
+| `web/templates/`, `web/static/` | Jinja2 templates; vendored htmx, token-based `app.css`, `app.js` |
 | `tests/` | `unit/`, `api/`, `fixtures/`; `live/` is the real-Kamailio gate; `e2e/` is a reserved placeholder |
 
 ## Run the tests
@@ -171,9 +171,9 @@ descriptor/SQLite/reload rules.
 
 ## TLS
 
-Edge TLS is automated: `deploy/acme/run.sh` (issue/renew, DNS-01) →
-`deploy/acme/deploy-certs.sh` (atomic live install + marker) →
-`deploy/watch-certs.sh` (`kamcmd tls.reload`). Secrets (TSIG, API tokens) live
+Edge TLS is automated: `acme/run.sh` (issue/renew, DNS-01) →
+`acme/deploy-certs.sh` (atomic live install + marker) →
+`acme/watch-certs.sh` (`kamcmd tls.reload`). Secrets (TSIG, API tokens) live
 only in env/docker-secrets, never in git. See `docs/tls.md`.
 
 ## Privacy

@@ -27,8 +27,8 @@ def test_tenant_suffix_gate_uses_a_substdef_not_a_define():
 
 
 def test_both_call_paths_reference_the_suffix_gate():
-    invite = (ROOT / "kamailio" / "routes" / "invite.cfg").read_text()
-    register = (ROOT / "kamailio" / "routes" / "register.cfg").read_text()
+    invite = (ROOT / "kamailio" / "invite.cfg").read_text()
+    register = (ROOT / "kamailio" / "register.cfg").read_text()
     assert '=~ "TENANTSUFFIXRE$"' in invite
     assert '=~ "TENANTSUFFIXRE$"' in register
     # REGISTER must check the To domain before the mtree prefix match.
@@ -36,15 +36,15 @@ def test_both_call_paths_reference_the_suffix_gate():
 
 
 def test_cert_promotion_avoids_gnu_only_mv_T():
-    script = (ROOT / "deploy" / "acme" / "deploy-certs.sh").read_text()
+    script = (ROOT / "acme" / "deploy-certs.sh").read_text()
     assert "mv -Tf" not in script
     assert 'ln -sfn "releases/$TAG" "$LIVE/current"' in script
 
 
 def test_indialog_and_phone_media_guards_are_present():
-    misc = (ROOT / "kamailio" / "routes" / "misc.cfg").read_text()
-    invite = (ROOT / "kamailio" / "routes" / "invite.cfg").read_text()
-    media = (ROOT / "kamailio" / "routes" / "media.cfg").read_text()
+    misc = (ROOT / "kamailio" / "misc.cfg").read_text()
+    invite = (ROOT / "kamailio" / "invite.cfg").read_text()
+    media = (ROOT / "kamailio" / "media.cfg").read_text()
     assert "Unknown Dialog Source" in misc
     assert "s.substr,4,0" in misc
     assert "does not match regcache flow" in invite

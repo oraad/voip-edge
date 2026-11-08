@@ -134,14 +134,14 @@ def _pending_reload_count() -> tuple[int | None, str | None]:
 
 
 def _edge_status(caps: Mapping[str, Any] | None) -> tuple[str, str, str]:
-    """Return ``(state, label, tone)`` for the edge-health chip."""
+    """Return ``(state, label, tone)`` for the edge-control chip."""
     if not caps:
-        return "unknown", "not wired yet", "muted"
+        return "unknown", "Unknown", "muted"
     if caps.get("reachable") is False or caps.get("unknown") is True:
-        return "unreachable", "edge unreachable", "err"
+        return "unreachable", "Offline", "err"
     if caps.get("ok") is True:
-        return "ok", "edge reachable", "ok"
-    return "degraded", "edge reachable · capability mismatch", "warn"
+        return "ok", "Online", "ok"
+    return "degraded", "Degraded", "warn"
 
 
 def build_status(app: Any = None) -> dict[str, Any]:

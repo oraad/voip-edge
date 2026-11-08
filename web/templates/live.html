@@ -2,11 +2,7 @@
 {% block title %}Live — VoIP Edge Console{% endblock %}
 {% block content %}
 {% if not fragment|default(false) %}
-<style>
-  .chip.err { color: var(--destructive); }
-  .live-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 20px; }
-  @media (max-width: 760px) { .live-grid { grid-template-columns:1fr; } }
-</style>
+
 <div id="live-dashboard" hx-get="/live/partial" hx-trigger="every {{ poll_ms }}ms" hx-swap="innerHTML"
      aria-live="off">
 {% endif %}
@@ -18,15 +14,15 @@
       Auto-refresh never moves your scroll position.</div>
   </div>
   {% if reachable %}
-  <span class="chip ok">edge reachable · uptime <strong>{{ uptime or "unknown" }}</strong></span>
+  <span class="chip ok">Edge control: <strong>Online</strong> · up <strong>{{ uptime or "unknown" }}</strong></span>
   {% else %}
-  <span class="chip warn">edge unreachable</span>
+  <span class="chip warn">Edge control: <strong>Offline</strong></span>
   {% endif %}
 </div>
 
 {% if not reachable %}
 <div class="errsummary" role="alert">
-  <b>edge unreachable</b> — the console could not reach Kamailio over the RPC socket.
+  <b>Edge control offline</b> — the console could not reach Kamailio over the RPC socket.
   Writes are unaffected; live state will reappear after the edge recovers and this page is reloaded.
   <div class="meta">Polling stops while the edge is down (HX-Stop-Polling), so an outage
     does not turn into a repeated timeout loop.</div>

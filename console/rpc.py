@@ -48,13 +48,21 @@ class RPCFault(ConsoleError):
         super().__init__(f"{method} failed ({code}): {message}")
 
 
-def _bind_client_socket(sock: socket.socket) -> str | None:
+def _bind_client_socket(sock: socket.socket, reply_dir: str | None = None) -> str | None:
     """Bind the client so Kamailio can send the reply back.
 
-    Linux autobinds an abstract address for ``bind("")`` (and for an explicit
-    ``\\0``-prefixed name), which needs no filesystem cleanup.  Older/safer
-    platforms get a temporary path, returned so the caller can unlink it.
+    Without *reply_dir*, Linux autobinds an abstract address for ``bind("")``
+    (and for an explicit ``\\0``-prefixed name), which needs no filesystem
+    cleanup.  Abstract addresses are scoped to the caller's network namespace,
+    so a console on a Docker bridge must use *reply_dir*: a directory shared
+    with Kamailio (for example the ``/run/kamailio`` bind mount).  The caller
+    receives the path so it can unlink the socket after the call.
     """
+    if reply_dir:
+        os.makedirs(reply_dir, exist_ok=True)
+        path = os.path.join(reply_dir, f"voip-console-rpc-{uuid.uuid4().hex}.sock")
+        sock.bind(path)
+        return path
     try:
         sock.bind(b"\x00voip-console-rpc-" + uuid.uuid4().hex.encode("ascii"))
         return None
@@ -68,9 +76,12 @@ def _bind_client_socket(sock: socket.socket) -> str | None:
 class UnixDatagramRPC:
     """Synchronous JSON-RPC 2.0 client over an AF_UNIX SOCK_DGRAM socket."""
 
-    def __init__(self, sock_path: str, timeout_ms: int = 2000) -> None:
+    def __init__(
+        self, sock_path: str, timeout_ms: int = 2000, reply_dir: str | None = None
+    ) -> None:
         self.sock_path = str(sock_path)
         self.timeout_ms = int(timeout_ms)
+        self.reply_dir = str(reply_dir) if reply_dir else None
         self._id_lock = threading.Lock()
         self._next_id = 0
 
@@ -101,7 +112,7 @@ class UnixDatagramRPC:
             with RPC_LOCK:
                 sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
                 sock.settimeout(self.timeout_ms / 1000.0)
-                reply_path = _bind_client_socket(sock)
+                reply_path = _bind_client_socket(sock, self.reply_dir)
                 sock.connect(self.sock_path)
                 sock.send(payload)
                 raw = sock.recv(_MAX_REPLY)

@@ -31,12 +31,11 @@ Prepare runtime files once:
 export EDGE_HOME=/opt/voip-edge
 mkdir -p "$EDGE_HOME"/{kamailio,console,tls,acme/data} /run/kamailio-edge
 cp -r kamailio/* "$EDGE_HOME/kamailio/"
-cp rtpengine/rtpengine.conf "$EDGE_HOME/rtpengine.conf"
 DOCKER=1 "$EDGE_HOME/kamailio/db/create-db.sh"
 ```
 
 Edit `$EDGE_HOME/kamailio/kamailio.cfg` (`PUBIP`, `WGIP`, `WGSOCK`,
-`PUBDOM`) and `$EDGE_HOME/rtpengine.conf` (`interface`).
+`PUBDOM`) and `rtpengine/rtpengine.conf` (`interface`).
 
 ```bash
 docker compose up -d

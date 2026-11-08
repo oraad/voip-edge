@@ -525,6 +525,7 @@ def create_app() -> FastAPI:
         return UnixDatagramRPC(
             settings_module.settings.rpc_sock,
             timeout_ms=settings_module.settings.rpc_timeout_ms,
+            reply_dir=settings_module.settings.rpc_reply_dir or None,
         )
 
     app.state.rpc_factory = _default_rpc

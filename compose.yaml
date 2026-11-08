@@ -52,12 +52,13 @@ services:
     environment:
       SHM_MEMORY: ${SHM_MEMORY:-256}
       PKG_MEMORY: ${PKG_MEMORY:-64}
-    command: ["-f", "/etc/kamailio/voip-edge/kamailio.cfg", "-A", "WITH_CONSOLE"]
+    # The upstream image entrypoint hard-codes `kamailio -DD -E -m .. -M ..`
+    # and ignores CMD, so the config path and -A flags must be in entrypoint.
+    entrypoint: ["/bin/sh", "-c", "exec kamailio -DD -E -m $${SHM_MEMORY} -M $${PKG_MEMORY} -f /etc/kamailio/voip-edge/kamailio.cfg -A WITH_CONSOLE"]
     volumes:
       - ${EDGE_HOME:?set EDGE_HOME}/kamailio:/etc/kamailio/voip-edge:rw
-      - ${EDGE_HOME:?set EDGE_HOME}/kamailio/routes:/etc/kamailio/routes:ro
       - ${EDGE_RUN:-/run/kamailio-edge}:/run/kamailio
-      # TLS: add "-A", "WITH_TLS" to command and uncomment both lines.
+      # TLS: add "-A", "WITH_TLS" to the entrypoint and uncomment both lines.
       # - ${EDGE_HOME}/kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro
       # - ${EDGE_HOME}/tls:/etc/kamailio/tls:ro
 
@@ -72,7 +73,7 @@ services:
     network_mode: host
     restart: unless-stopped
     volumes:
-      - ${EDGE_HOME:?set EDGE_HOME}/rtpengine.conf:/etc/rtpengine/rtpengine.conf:ro
+      - ./rtpengine/rtpengine.conf:/etc/rtpengine/rtpengine.conf:ro
 
   acme:
     image: neilpang/acme.sh:3.1.6
@@ -100,8 +101,8 @@ services:
     volumes:
       - ${EDGE_HOME:?set EDGE_HOME}/acme/data:/acme.sh
       - ${EDGE_HOME:?set EDGE_HOME}/tls:/tls
-      - ./deploy/acme/run.sh:/run.sh:ro
-      - ./deploy/acme/deploy-certs.sh:/deploy-certs.sh:ro
+      - ./acme/run.sh:/run.sh:ro
+      - ./acme/deploy-certs.sh:/deploy-certs.sh:ro
     secrets:
       - technitium_tsig
 
@@ -116,7 +117,7 @@ services:
     volumes:
       - ${EDGE_HOME:?set EDGE_HOME}/tls:/certs:ro
       - ${EDGE_RUN:-/run/kamailio-edge}:/run/kamailio
-      - ./deploy/watch-certs.sh:/watch-certs.sh:ro
+      - ./acme/watch-certs.sh:/watch-certs.sh:ro
 
   # Optional capture: docker compose --profile homer up -d
   # HEP stays fire-and-forget when these services are stopped.

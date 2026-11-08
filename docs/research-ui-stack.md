@@ -2,6 +2,10 @@
 
 > Historical reference. Current deployment and operations are in
 > `docs/ops/deploy.md` and `docs/operations.md`.
+>
+> UI note (2026): the console no longer uses PicoCSS. It uses a custom
+> token-based design system in `web/static/app.css` with dark/light themes and
+> responsive layouts. The framework comparison below is historical.
 
 Research digest for a lightweight, single-operator web admin console for the Kamailio SIP edge proxy: Python backend, SQLite CRUD (incl. "packed" comma-joined record columns rendered as structured validated forms), Kamailio RPC calls, small Docker image, minimal JavaScript.
 

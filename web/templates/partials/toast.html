@@ -1,28 +1,4 @@
-<style>
-  /* Self-contained so a toast also works as a standalone htmx fragment. */
-  .toast { border:1px solid var(--border, #d7dbe3);
-           border-left:4px solid var(--info, #1f6aa5);
-           background:var(--muted, #f3f5f8); border-radius:8px;
-           padding:10px 14px; font-size:.9em; margin-bottom:14px;
-           display:flex; justify-content:space-between; gap:12px;
-           align-items:flex-start; flex-wrap:wrap; }
-  .toast.ok { border-left-color:var(--success, #1f7a45); }
-  .toast.error { border-left-color:var(--destructive, #b3261e); }
-  .toast .badge { display:inline-block; font-size:.75em; font-weight:600;
-                  padding:2px 8px; border-radius:999px; white-space:nowrap; }
-  .toast .b-warn { background:color-mix(in srgb, var(--warning, #8a6100) 18%, transparent);
-                   color:var(--warning, #8a6100); }
-  .toast .b-tone { background:color-mix(in srgb, var(--info, #1f6aa5) 14%, transparent);
-                   color:var(--info, #1f6aa5); }
-  .toast .b-tone.applied {
-    background:color-mix(in srgb, var(--success, #1f7a45) 16%, transparent);
-    color:var(--success, #1f7a45); }
-  .toast .b-tone.failed {
-    background:color-mix(in srgb, var(--destructive, #b3261e) 14%, transparent);
-    color:var(--destructive, #b3261e); }
-  .toast ul { margin:6px 0 0 16px; padding:0; font-size:.94em; }
-  .toast a { color:inherit; }
-</style>
+
 <div class="toast {{ 'ok' if tone in ('applied', 'verified', 'success') else ('error' if tone in ('failed', 'error') else '') }}"
      data-tone="{{ tone }}"
      role="status"

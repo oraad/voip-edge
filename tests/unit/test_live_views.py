@@ -8,7 +8,12 @@ from __future__ import annotations
 
 import pytest
 
-from console.live import build_dispatcher_view, build_regcache_view, edge_health
+from console.live import (
+    _load_live_state,
+    build_dispatcher_view,
+    build_regcache_view,
+    edge_health,
+)
 from console.rpc import UnixDatagramRPC
 from tests.fixtures.fakerpc import FakeRPC
 
@@ -283,3 +288,14 @@ def test_edge_health_never_raises_on_a_broken_client():
 
     assert edge_health(Broken()) == {"reachable": False, "uptime": None}
     assert edge_health(None) == {"reachable": False, "uptime": None}
+
+
+def test_empty_dispatcher_table_is_not_a_live_error(fake):
+    fake.script("core.uptime", {"uptime": "1 day"})
+    fake.script("htable.dump", {"NRSETS": 0, "RECORDS": []})
+    fake.fault("dispatcher.list", code=500, message="No Destination Sets")
+
+    state = _load_live_state(fake)
+
+    assert state["dispatchers"] == []
+    assert state["data_errors"] == []

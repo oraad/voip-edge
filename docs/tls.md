@@ -7,10 +7,10 @@ cleartext inside the tunnel.
 
 | Path | Role |
 |---|---|
-| `deploy/acme/run.sh` | Issue/renew via DNS-01, install into `/tls` |
-| `deploy/acme/deploy-certs.sh` | Atomic release dir, stable symlink, keep 5 |
-| `deploy/watch-certs.sh` | Watch `.renewed`, call `kamcmd tls.reload` |
-| `deploy/acme-deploy-hook.sh` | Non-compose fallback |
+| `acme/run.sh` | Issue/renew via DNS-01, install into `/tls` |
+| `acme/deploy-certs.sh` | Atomic release dir, stable symlink, keep 5 |
+| `acme/watch-certs.sh` | Watch `.renewed`, call `kamcmd tls.reload` |
+| `acme/acme-deploy-hook.sh` | Non-compose fallback |
 
 ## Configure
 
@@ -23,7 +23,7 @@ Set in `.env`:
   `ACME_DNS_PROVIDER=dns_technitium` with `Technitium_Server` and
   `Technitium_Token`.
 
-Enable TLS: add `"-A", "WITH_TLS"` to the Kamailio `command` in `compose.yaml`
+Enable TLS: add `-A WITH_TLS` to the Kamailio `entrypoint` in `compose.yaml`
 and uncomment both TLS mounts. Recreate Kamailio.
 
 ## Promote staging

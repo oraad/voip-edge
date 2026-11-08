@@ -124,7 +124,8 @@ def test_live_full_page_has_doctype_nav_polling_and_rows(
     assert 'hx-swap="innerHTML"' in text
 
     # Health and both live panels.
-    assert "edge reachable" in text
+    assert "Edge control" in text
+    assert "Online" in text
     assert "6 days, 3 hours" in text
     assert "Registered phones" in text
     assert "Route set probes" in text
@@ -175,7 +176,7 @@ def test_live_partial_when_edge_is_down_is_200_banner_and_stops_polling(
 
     response = auth_client.get("/live/partial")
     assert response.status_code == 200
-    assert "edge unreachable" in response.text
+    assert "Edge control offline" in response.text
     assert response.headers.get("HX-Stop-Polling") == "true"
 
 
@@ -189,7 +190,7 @@ def test_live_full_page_when_edge_is_down_is_200_with_banner(
     response = auth_client.get("/live")
     assert response.status_code == 200
     assert "<!doctype" in response.text.lower()
-    assert "edge unreachable" in response.text
+    assert "Edge control offline" in response.text
     assert "HX-Stop-Polling" not in response.headers
 
 
@@ -202,5 +203,5 @@ def test_live_when_rpc_is_not_configured_still_renders_the_banner(
 
     response = auth_client.get("/live/partial")
     assert response.status_code == 200
-    assert "edge unreachable" in response.text
+    assert "Edge control offline" in response.text
     assert response.headers.get("HX-Stop-Polling") == "true"

@@ -11,6 +11,14 @@ carry fixes.
 
 ### Added
 
+- The onboarding wizard offers two domain input methods: a subdomain field
+  plus a base-domain dropdown built from `CONSOLE_ALLOWED_SUFFIXES`, or the
+  existing full custom-domain input. The composed domain is validated by the
+  same tenant-domain rules.
+- `CONSOLE_RPC_REPLY_DIR`: bind the console's JSON-RPC reply socket to a
+  filesystem path in a directory shared with Kamailio. This lets the console
+  run on a Docker bridge instead of `network_mode: host`; abstract socket
+  replies are scoped to the caller's network namespace.
 - Optional Homer capture in the stack under the `homer` profile: PostgreSQL,
   heplify-server and homer-app. Kamailio `siptrace` sends SIP over HEP;
   rtpengine sends RTCP and control traffic. Stopping the profile does not
@@ -23,6 +31,17 @@ carry fixes.
 
 ### Changed
 
+- Replaced PicoCSS with a token-based design system in `web/static/app.css`:
+  dark-first surfaces, light theme toggle, responsive sidebar and topbar,
+  icons, summary cards, consistent tables, forms, badges and dialogs. Page-
+  local style blocks were removed so the theme is centralized.
+- ACME scripts moved from `deploy/` to `acme/`; Compose mounts
+  `acme/` scripts and `rtpengine/rtpengine.conf` relative to the repo.
+- Kamailio route configs flattened from `kamailio/routes/` into
+  `kamailio/`; the includes and static guards use the flat paths.
+- The Kamailio Compose service overrides the image entrypoint, because
+  the upstream entrypoint ignores `command:` and would start with the
+  default config.
 - The repository is standalone: `compose.yaml` now runs Kamailio, rtpengine,
   ACME, the cert reloader and the console as one stack. The previous
   edge-stack is no longer referenced or required.
@@ -30,6 +49,15 @@ carry fixes.
   file for the stack.
 - README rewritten as an overview and installation guide focused on the
   project's purpose and usage.
+
+### Fixed
+
+- Sidebar navigation no longer inherits PicoCSS's flex row and overflow across
+  the main content. The console layout now uses an explicit block nav, starts
+  content directly under the status strip, and has a responsive single-column
+  mobile layout.
+- The live page treats Kamailio's `No Destination Sets` dispatcher reply as an
+  empty state instead of a red data-load error.
 
 ## [0.1.11] - 2026-11-06
 

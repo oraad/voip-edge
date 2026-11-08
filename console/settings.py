@@ -27,6 +27,10 @@ class Settings:
     db_path: str = os.environ.get("CONSOLE_DB_PATH", "edge.sqlite")
     sidecar_dir: str = os.environ.get("CONSOLE_SIDECAR_DIR", "console-data")
     rpc_sock: str = os.environ.get("CONSOLE_RPC_SOCK", "/run/kamailio/kamailio_rpc.sock")
+    # When set, bind the RPC reply socket to a filesystem path in this directory
+    # instead of an abstract socket. Required when the console is not host-
+    # networked: abstract addresses are scoped to the caller's network namespace.
+    rpc_reply_dir: str = os.environ.get("CONSOLE_RPC_REPLY_DIR", "")
     # behaviour
     rpc_timeout_ms: int = int(os.environ.get("CONSOLE_RPC_TIMEOUT_MS", "2000"))
     throttle_seconds: dict[str, int] = field(default_factory=lambda: {

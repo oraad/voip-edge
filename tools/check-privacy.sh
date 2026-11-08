@@ -47,6 +47,8 @@ while IFS= read -r f; do
             echo "privacy: refusing database/backup file: $f" >&2; fail=1 ;;
         *.key|*.pem|*.crt|*.cer|*.p12|*.pfx|*.jks|*.keystore|*privkey*|*fullchain*)
             echo "privacy: refusing key/cert material: $f" >&2; fail=1 ;;
+        acme/*.sh|*/acme/*.sh)
+            : ;;  # ACME helper scripts are safe; keys, data and TSIG stay blocked
         *tsig*|*TSIG*|*/tls/*|tls/*|acme/*|*/acme/data/*|*/certs/*|certs/*|*console-data/*|*/backups/*|backups/*)
             echo "privacy: refusing secret/state path: $f" >&2; fail=1 ;;
         .env.example|*/.env.example)

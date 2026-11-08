@@ -1,7 +1,10 @@
 """Unit tests for console.rpc — JSON-RPC 2.0 over a unix datagram socket."""
 from __future__ import annotations
 
+import shutil
+import tempfile
 import time
+from pathlib import Path
 
 import pytest
 
@@ -79,6 +82,22 @@ def test_missing_socket_path_raises_kamailio_unavailable(tmp_path):
 
     with pytest.raises(KamailioUnavailable):
         rpc.call("core.version")
+
+
+def test_reply_socket_uses_shared_directory_when_configured(fake):
+    """A bridge-networked console must bind its reply socket on a shared path."""
+    fake.script("core.version", "kamailio 6.1.5")
+    reply_dir = tempfile.mkdtemp(prefix="vr-", dir="/tmp")
+    try:
+        rpc = UnixDatagramRPC(
+            fake.sock_path, timeout_ms=250, reply_dir=reply_dir
+        )
+        assert rpc.call("core.version") == "kamailio 6.1.5"
+        assert fake.last_client_addr is not None
+        assert reply_dir in str(fake.last_client_addr)
+        assert not list(Path(reply_dir).glob("voip-console-rpc-*.sock"))
+    finally:
+        shutil.rmtree(reply_dir, ignore_errors=True)
 
 
 def test_garbled_reply_raises_kamailio_unavailable(fake, rpc):

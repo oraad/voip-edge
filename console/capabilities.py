@@ -34,6 +34,7 @@ import time
 from typing import Any, Mapping
 
 from .errors import KamailioUnavailable
+from .uptime import format_uptime
 from .rpc import RPCFault
 
 __all__ = [
@@ -81,18 +82,7 @@ def _checks() -> tuple[tuple[str, list[Any]], ...]:
 
 
 def _uptime_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, Mapping):
-        for key in ("uptime", "UPTIME", "up_time", "UP_TIME", "uptime_seconds"):
-            if value.get(key) is not None:
-                return str(value[key])[:80]
-        return None
-    try:
-        text = str(value).strip()
-    except Exception:  # pragma: no cover - defensive
-        return None
-    return text[:80] or None
+    return format_uptime(value)
 
 
 def _blank_result() -> dict[str, bool]:

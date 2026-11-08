@@ -11,7 +11,7 @@ from __future__ import annotations
 import sqlite3
 
 from console import descriptors
-from console.wizard_ui import WizardDraft, plan_writes, validate_step
+from console.wizard_ui import WizardDraft, draft_from_form, plan_writes, validate_step
 from tests.fixtures import seeddb
 
 TABLESET = descriptors.load()
@@ -170,3 +170,52 @@ def test_validate_step2_rejects_a_missing_or_bad_network(tmp_path):
     assert errors["wire_ip"]
     assert any("literal IPv4" in message for message in errors["lan_ip"])
     assert any("wire-observed" in message for message in errors["wire_ip"])
+
+
+# ---------------------------------------------------------------------------
+# domain input modes
+# ---------------------------------------------------------------------------
+def test_draft_from_form_composes_subdomain_and_base_domain():
+    draft = draft_from_form(
+        {
+            "domain_mode": ["suffix"],
+            "domain_subdomain": ["sip.echo"],
+            "domain_base": ["home.example.net"],
+        }
+    )
+    assert draft.domain == "sip.echo.home.example.net"
+    assert draft.domain_mode == "suffix"
+    assert draft.domain_subdomain == "sip.echo"
+    assert draft.domain_base == "home.example.net"
+
+
+def test_draft_from_form_custom_domain_wins():
+    draft = draft_from_form(
+        {
+            "domain_mode": ["custom"],
+            "domain": ["sip.delta.home.example.net"],
+            "domain_subdomain": ["ignored"],
+            "domain_base": ["home.example.net"],
+        }
+    )
+    assert draft.domain == "sip.delta.home.example.net"
+    assert draft.domain_mode == "custom"
+
+
+def test_draft_from_form_legacy_full_domain_is_custom():
+    draft = draft_from_form({"domain": ["sip.delta.home.example.net"]})
+    assert draft.domain == "sip.delta.home.example.net"
+    assert draft.domain_mode == "custom"
+
+
+def test_draft_as_form_carries_domain_mode_state():
+    draft = WizardDraft(
+        domain="sip.echo.home.example.net",
+        domain_mode="suffix",
+        domain_subdomain="sip.echo",
+        domain_base="home.example.net",
+    )
+    form = draft.as_form()
+    assert form["domain_mode"] == "suffix"
+    assert form["domain_subdomain"] == "sip.echo"
+    assert form["domain_base"] == "home.example.net"

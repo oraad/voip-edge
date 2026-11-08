@@ -16,6 +16,29 @@
   {% if not status.readonly %}<a class="btn pri" href="/wizard">+ Onboard a home</a>{% endif %}
 </div>
 
+<section class="stats" aria-label="Edge summary">
+  <div class="stat">
+    <span class="stat-label">Edge control</span>
+    <strong>{{ status.edge_text|default('Unknown') }}</strong>
+    <span class="{{ status.edge_tone|default('muted') }}">{% if status.uptime %}Kamailio RPC · up {{ status.uptime }}{% else %}Kamailio RPC{% endif %}</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Homes</span>
+    <strong>{{ homes|length }}</strong>
+    <span>{{ 'no tenants yet' if not homes else 'active tenants' }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Pending reloads</span>
+    <strong>{% if status.pending_reloads is not none %}{{ status.pending_reloads }}{% else %}unknown{% endif %}</strong>
+    <span>queue</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Mode</span>
+    <strong>{{ 'Read-only' if status.readonly else 'Read/Write' }}</strong>
+    <span>operator control</span>
+  </div>
+</section>
+
 {% if homes %}
 <p class="meta">{{ homes|length }} home{{ "" if homes|length == 1 else "s" }}</p>
 {% else %}
@@ -65,6 +88,7 @@
     </tbody>
   </table>
 </div>
+
 {% if parked %}
 <h2>Parked</h2>
 <div class="panel" style="padding:0; overflow-x:auto">

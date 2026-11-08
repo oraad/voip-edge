@@ -475,3 +475,30 @@ def test_wizard_rejects_cross_home_landline_prefix(seeded_db, auth_client):
     response = auth_client.post("/wizard/step1", data=payload)
     assert response.status_code == 422
     assert "shadow" in response.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# domain input modes
+# ---------------------------------------------------------------------------
+def test_wizard_get_offers_domain_modes(seeded_db, auth_client):
+    response = auth_client.get("/wizard")
+    assert response.status_code == 200
+    assert 'name="domain_mode"' in response.text
+    assert 'value="suffix"' in response.text
+    assert 'value="custom"' in response.text
+    assert "home.example.net" in response.text
+
+
+def test_wizard_accepts_subdomain_and_base_domain(seeded_db, auth_client):
+    payload = {
+        "domain_mode": "suffix",
+        "domain_subdomain": "sip.echo",
+        "domain_base": "home.example.net",
+        "landline": "06666666",
+        "ring_group": "home",
+        "label": "Home echo",
+    }
+    response = auth_client.post("/wizard/step1", data=payload)
+    assert response.status_code == 200, response.text
+    assert 'id="field-lan_ip"' in response.text
+    assert "sip.echo.home.example.net" in response.text
