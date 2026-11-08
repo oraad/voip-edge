@@ -5,6 +5,7 @@ import html
 import re
 import sqlite3
 from dataclasses import replace
+from urllib.parse import unquote
 
 from console import number_rules, settings as settings_module
 
@@ -140,3 +141,21 @@ def test_preview_returns_generated_pattern(auth_client):
     )
     assert response.status_code == 200
     assert "^(112|911)$" in response.text
+
+
+def test_emergency_form_can_create_the_first_partition(empty_db, auth_client, app):
+    app.state.worker = RecordingWorker()
+
+    page = auth_client.get("/number-rules")
+    assert 'name="dpid" type="number"' in page.text
+    assert 'value="10"' in page.text
+
+    response = auth_client.post(
+        "/number-rules/emergency",
+        data={"dpid": "10", "numbers": "112"},
+    )
+    assert response.status_code == 303, response.text
+    assert "not assigned as an emergency partition" in unquote(
+        response.headers["location"]
+    )
+    assert len(_rows(empty_db, "^112$")) == 1

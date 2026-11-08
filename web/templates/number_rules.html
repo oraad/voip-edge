@@ -55,7 +55,6 @@
 <section class="panel">
   <h2 style="margin-top:0">Add emergency numbers</h2>
   <p class="sub">Calls to these numbers go to the selected homes' PSTN trunk.</p>
-  {% if emergency_partitions %}
   <form method="post" action="/number-rules/emergency"
           hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
           hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
@@ -63,11 +62,16 @@
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="emergency-dpid">Applies to</label>
+      {% if emergency_partitions %}
       <select id="emergency-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
         {% for entry in emergency_partitions %}
         <option value="{{ entry.dpid }}">Emergency · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
         {% endfor %}
       </select>
+      {% else %}
+      <input id="emergency-dpid" name="dpid" type="number" min="1" value="{{ values.get('dpid', '10') }}" {% if status.readonly %}disabled{% endif %}>
+      <div class="hint">No home uses an emergency partition yet. Create it here, then set the home's Emergency dialplan to this id.</div>
+      {% endif %}
     </div>
     <div class="field">
       <label for="emergency-numbers">Emergency numbers</label>
@@ -87,16 +91,12 @@
       <span class="meta">Creates one rule in the selected partition.</span>
     </div>
   </form>
-  {% else %}
-  <p class="meta">No home uses an emergency partition yet. Assign a partition in a home's <b>Emergency dialplan</b> field first.</p>
-  {% endif %}
 </section>
 
 {% elif tab == "blocked" %}
 <section class="panel">
   <h2 style="margin-top:0">Add blocked numbers or ranges</h2>
   <p class="sub">Matches return 403 before any trunk decision.</p>
-  {% if blocked_partitions %}
   <form method="post" action="/number-rules/blocked"
           hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
           hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
@@ -104,11 +104,16 @@
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="blocked-dpid">Applies to</label>
+      {% if blocked_partitions %}
       <select id="blocked-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
         {% for entry in blocked_partitions %}
         <option value="{{ entry.dpid }}">Blocked · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
         {% endfor %}
       </select>
+      {% else %}
+      <input id="blocked-dpid" name="dpid" type="number" min="1" value="{{ values.get('dpid', '90') }}" {% if status.readonly %}disabled{% endif %}>
+      <div class="hint">No home uses a blocked-destinations partition yet. Create it here, then set it in the home's call policy flags.</div>
+      {% endif %}
     </div>
     <div class="field">
       <label for="blocked-mode">Match</label>
@@ -150,9 +155,6 @@
       <span class="meta">Creates one rule in the selected partition.</span>
     </div>
   </form>
-  {% else %}
-  <p class="meta">No home uses a blocked-destinations partition yet. Assign one in a home's call policy flags first.</p>
-  {% endif %}
 </section>
 
 {% else %}

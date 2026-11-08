@@ -386,8 +386,14 @@ async def add_emergency(request: Request, conn: sqlite3.Connection = Depends(db.
         partition = int(dpid)
     except ValueError:
         partition = 0
-    if partition not in emergency:
-        errors["dpid"] = ["Choose an emergency partition assigned to a home."]
+    warning = ""
+    if partition <= 0:
+        errors["dpid"] = ["Enter a positive partition id."]
+    elif partition not in emergency:
+        warning = (
+            f"Partition {partition} is not assigned as an emergency partition; "
+            "set it on the home after saving."
+        )
     if errors:
         return _render(
             request, conn=conn, tab="emergency", values=values, errors=errors,
@@ -399,6 +405,7 @@ async def add_emergency(request: Request, conn: sqlite3.Connection = Depends(db.
         tab="emergency",
         values=_base_values(partition, number_rules.exact_pattern(numbers), description),
         label="Emergency numbers",
+        warning=warning,
     )
 
 
@@ -447,8 +454,14 @@ async def add_blocked(request: Request, conn: sqlite3.Connection = Depends(db.ge
         partition = int(dpid)
     except ValueError:
         partition = 0
-    if partition not in blocked:
-        errors["dpid"] = ["Choose a blocked-destinations partition assigned to a home."]
+    warning = ""
+    if partition <= 0:
+        errors["dpid"] = ["Enter a positive partition id."]
+    elif partition not in blocked:
+        warning = (
+            f"Partition {partition} is not assigned as a blocked-destinations "
+            "partition; set it on the home after saving."
+        )
     if not generated and not errors:
         errors["pattern"] = ["Enter a match pattern or the numbers to block."]
     if errors:
@@ -464,6 +477,7 @@ async def add_blocked(request: Request, conn: sqlite3.Connection = Depends(db.ge
             partition, generated, description or "Blocked numbers"
         ),
         label="Blocked rule",
+        warning=warning,
     )
 
 
