@@ -18,12 +18,12 @@
     <span>database coherence</span>
   </div>
   <div class="stat">
-    <span class="stat-label">On-net set</span>
+    <span class="stat-label">On-net route set</span>
     <strong>{{ onnet or "—" }}</strong>
     <span>{{ onnet_targets|length }} target{{ "" if onnet_targets|length == 1 else "s" }}</span>
   </div>
   <div class="stat">
-    <span class="stat-label">PSTN</span>
+    <span class="stat-label">PSTN route set</span>
     <strong>{{ "not configured" if not pstn else pstn }}</strong>
     <span>{{ pstn_targets|length }} target{{ "" if pstn_targets|length == 1 else "s" }}</span>
   </div>
@@ -80,7 +80,7 @@
   <h2 id="pbx-title" style="margin-top:0">PBX trunk</h2>
   <dl>
     <div class="detailfield">
-      <dt>Edge → PBX on-net target</dt>
+      <dt>Edge → PBX destination</dt>
       <dd>
         {% for target in onnet_targets %}<span class="mono">{{ target }}</span>{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
         <span class="meta" style="display:block">Set {{ onnet or "—" }}. Literal IPv4, TCP.</span>
@@ -120,7 +120,7 @@
   {% if not status.readonly %}
   <a class="btn pri" href="{{ edit_url }}">Edit</a>
   {% endif %}
-  <a class="btn" href="{{ raw_url }}">View</a>
+  <a class="btn" href="{{ raw_url }}">View registry row</a>
   {% if not status.readonly %}
   <a class="btn" href="{{ park_url }}">Park…</a>
   <a class="btn" href="{{ destroy_url }}">Destroy…</a>

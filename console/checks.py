@@ -435,12 +435,16 @@ def verify_state(
 
 
 def verify_checklist(
-    conn: sqlite3.Connection | None, domain: str
+    conn: sqlite3.Connection | None,
+    domain: str,
+    state: tuple[Any, dict[str, Any], str] | None = None,
 ) -> dict[str, Any]:
     """DB-only coherence checklist for the verify step (no RPC, no N+1)."""
     items: list[dict[str, Any]] = []
 
-    registry, values, source_ip = verify_state(conn, domain)
+    registry, values, source_ip = (
+        verify_state(conn, domain) if state is None else state
+    )
 
     items.append(
         {

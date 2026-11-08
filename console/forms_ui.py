@@ -239,7 +239,7 @@ def _diff_rows(
             diff.append(
                 {
                     "field": field.name,
-                    "label": _humanize(field.name),
+                    "label": _field_label(field),
                     "submitted": before_text,
                     "current": after_text,
                 }
@@ -309,6 +309,14 @@ class _RecheckFailed(Exception):
     def __init__(self, errors: dict[str, list[str]]):
         self.errors = errors
         super().__init__("recheck failed")
+
+
+def _field_label(field) -> str:
+    return field.label or _humanize(field.name)
+
+
+def _table_label(descriptor) -> str:
+    return descriptor.label or _humanize(descriptor.table)
 
 
 def _submit_label(mode: str) -> str:
@@ -463,7 +471,7 @@ def _reference_label(
         if text and text != str(subject) and text not in details:
             details.append(text)
 
-    label = f"{_humanize(descriptor.table)} {subject}"
+    label = f"{_table_label(descriptor)} {subject}"
     if details:
         label += f" ({' · '.join(details[:2])})"
     return label
@@ -655,11 +663,11 @@ def _object_view(
         if not subject:
             subject = f"#{key}"
 
-    object_name = f"{_humanize(descriptor.table)} {subject}"
+    object_name = f"{_table_label(descriptor)} {subject}"
     details = [
         {
             "name": field.name,
-            "label": _humanize(field.name),
+            "label": _field_label(field),
             "value": "" if values.get(field.name) is None else values.get(field.name),
             "mono": field.type in MONO_TYPES,
         }
@@ -1040,7 +1048,7 @@ def _field_views(
         views.append(
             {
                 "name": field.name,
-                "label": _humanize(field.name),
+                "label": _field_label(field),
                 "help": field.help,
                 "extra_hint": extra_hint,
                 "widget": field.widget,
@@ -1072,7 +1080,7 @@ def _summary(
             flat.append(
                 {
                     "field": field.name,
-                    "label": _humanize(field.name),
+                    "label": _field_label(field),
                     "message": message,
                 }
             )
@@ -1142,13 +1150,13 @@ def _render(
             "nav": "tables",
             "fragment": _wants_fragment(request),
             "table": descriptor.table,
-            "table_label": _humanize(descriptor.table),
+            "table_label": _table_label(descriptor),
             "mode": mode,
             "key": "" if key is None else str(key),
             "form_title": (
-                f"New {_humanize(descriptor.table)}"
+                f"New {_table_label(descriptor)}"
                 if mode == "create"
-                else f"Edit {_humanize(descriptor.table)}: {key}"
+                else f"Edit {_table_label(descriptor)}: {key}"
             ),
             "action": _action(descriptor, mode, key),
             "cancel_url": f"/tables/{descriptor.table}",
@@ -1182,7 +1190,7 @@ def _render_interruption(
             "nav": "tables",
             "fragment": _wants_fragment(request),
             "table": descriptor.table,
-            "table_label": _humanize(descriptor.table),
+            "table_label": _table_label(descriptor),
             "mode": mode,
             "key": "" if key is None else str(key),
             "action": _action(descriptor, mode, key),
@@ -1218,7 +1226,7 @@ def _render_conflict(
             "nav": "tables",
             "fragment": _wants_fragment(request),
             "table": descriptor.table,
-            "table_label": _humanize(descriptor.table),
+            "table_label": _table_label(descriptor),
             "key": "" if key is None else str(key),
             "action": _action(descriptor, "edit", key),
             "cancel_url": f"/tables/{descriptor.table}",
@@ -1274,7 +1282,7 @@ def _render_delete_confirm(
             "nav": "tables",
             "fragment": _wants_fragment(request),
             "table": descriptor.table,
-            "table_label": _humanize(descriptor.table),
+            "table_label": _table_label(descriptor),
             "key": "" if key is None else str(key),
             "action": f"/tables/{descriptor.table}/{quote(str(key), safe='')}/delete",
             "cancel_url": f"/tables/{descriptor.table}",
@@ -1312,7 +1320,7 @@ def _render_delete_blocked(
             "nav": "tables",
             "fragment": _wants_fragment(request),
             "table": descriptor.table,
-            "table_label": _humanize(descriptor.table),
+            "table_label": _table_label(descriptor),
             "key": "" if key is None else str(key),
             "cancel_url": f"/tables/{descriptor.table}",
             "references": reference_views,
@@ -1527,7 +1535,7 @@ def _row_identifier(
     if key_field is not None:
         identifier = values.get(key_field.name) or original_key
         return str(identifier)
-    return f"{_humanize(descriptor.table)} #{original_key}"
+    return f"{_table_label(descriptor)} #{original_key}"
 
 
 async def _submit(

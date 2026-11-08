@@ -11,6 +11,11 @@ carry fixes.
 
 ### Added
 
+- Table and field descriptors now carry operator-facing `label` values; table
+  browser, forms and delete pages use them instead of humanizing column names.
+  The registry-row link on the home detail page is `View registry row`; the
+  redundant list action is gone.
+
 - The onboarding wizard offers two domain input methods: a subdomain field
   plus a base-domain dropdown built from `TENANT_ALLOWED_SUFFIXES`, or the
   existing full custom-domain input. The composed domain is validated by the

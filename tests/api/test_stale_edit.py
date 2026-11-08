@@ -104,7 +104,7 @@ def test_stale_edit_returns_409_with_diff_and_preserved_values(
     assert "home" in page
     assert 'name="target" value="home"' in response.text
     # Small field diff: only the changed field is listed.
-    assert "Target" in page
+    assert "Ring group / extension" in page
     assert "submitted" in page.lower()
     assert "current" in page.lower()
     # Two explicit actions.

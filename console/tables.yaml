@@ -11,6 +11,7 @@ tables:
   # tvalue = tenantid,ds_onnet,ds_pstn,cli,label,dpid,flags
   # -------------------------------------------------------------------------
   tenant_registry:
+    label: Homes
     table: tenant_registry
     storage: packed
     key: tprefix
@@ -31,6 +32,7 @@ tables:
         on_missing: error
     fields:
       - name: tprefix
+        label: Domain
         column: tprefix
         type: domain
         validator: tenant_domain
@@ -40,6 +42,7 @@ tables:
         show_in_list: true
         form_order: 0
       - name: tenantid
+        label: Home ID
         pack_position: 0
         type: str
         validator: tenantid_unique
@@ -49,6 +52,7 @@ tables:
         show_in_list: true
         form_order: 1
       - name: ds_onnet
+        label: On-net route set
         pack_position: 1
         type: int
         validator: set_exists_onnet
@@ -58,6 +62,7 @@ tables:
         show_in_list: true
         form_order: 2
       - name: ds_pstn
+        label: PSTN route set
         pack_position: 2
         type: int
         validator: pstn_set_exists_or_zero
@@ -67,6 +72,7 @@ tables:
         show_in_list: true
         form_order: 3
       - name: cli
+        label: Landline
         pack_position: 3
         type: digits
         validator: cli_unique
@@ -76,6 +82,7 @@ tables:
         show_in_list: true
         form_order: 4
       - name: label
+        label: Display label
         pack_position: 4
         type: label
         validator: label_pack_safe
@@ -85,6 +92,7 @@ tables:
         show_in_list: true
         form_order: 5
       - name: dpid
+        label: Emergency dialplan
         pack_position: 5
         type: int
         validator: dpid_exists
@@ -94,6 +102,7 @@ tables:
         show_in_list: false
         form_order: 6
       - name: flags
+        label: Call policy flags
         pack_position: 6
         type: str
         validator: flags_valid
@@ -108,6 +117,7 @@ tables:
   # tvalue = tenantid,target,ds_onnet,ih_on
   # -------------------------------------------------------------------------
   tenant_landline:
+    label: Landlines
     table: tenant_landline
     storage: packed
     key: tprefix
@@ -125,6 +135,7 @@ tables:
         on_missing: error
     fields:
       - name: tprefix
+        label: Landline prefix
         column: tprefix
         type: digits
         validator: landline_digits
@@ -134,6 +145,7 @@ tables:
         show_in_list: true
         form_order: 0
       - name: tenantid
+        label: Home ID
         pack_position: 0
         type: str
         validator: tenant_exists
@@ -143,6 +155,7 @@ tables:
         show_in_list: true
         form_order: 1
       - name: target
+        label: Ring group / extension
         pack_position: 1
         type: label
         validator: target_identifier
@@ -152,6 +165,7 @@ tables:
         show_in_list: true
         form_order: 2
       - name: ds_onnet
+        label: On-net route set
         pack_position: 2
         type: int
         validator: null
@@ -163,6 +177,7 @@ tables:
         show_in_list: true
         form_order: 3
       - name: ih_on
+        label: Inter-home calls
         pack_position: 3
         type: enum01
         validator: enum01
@@ -177,6 +192,7 @@ tables:
   # Standard Kamailio dispatcher table (real columns, auto id PK)
   # -------------------------------------------------------------------------
   dispatcher:
+    label: Route sets
     table: dispatcher
     storage: columns
     delete_policy: blocked_if_refs
@@ -186,6 +202,7 @@ tables:
       throttle_seconds: 5
     fields:
       - name: setid
+        label: Route-set ID
         column: setid
         type: int
         validator: setid_int
@@ -195,6 +212,7 @@ tables:
         show_in_list: true
         form_order: 0
       - name: destination
+        label: Destination
         column: destination
         type: sip_uri
         validator: destination_ipv4_required
@@ -204,6 +222,7 @@ tables:
         show_in_list: true
         form_order: 1
       - name: flags
+        label: State flags
         column: flags
         type: int
         validator: dispatcher_flags
@@ -214,6 +233,7 @@ tables:
         show_in_list: false
         form_order: 2
       - name: priority
+        label: Priority
         column: priority
         type: int
         validator: priority_int
@@ -224,6 +244,7 @@ tables:
         show_in_list: false
         form_order: 3
       - name: attrs
+        label: Attributes
         column: attrs
         type: str
         validator: attrs_udp_warning
@@ -233,6 +254,7 @@ tables:
         show_in_list: false
         form_order: 4
       - name: description
+        label: Description
         column: description
         type: label
         validator: null
@@ -246,6 +268,7 @@ tables:
   # Standard Kamailio dialplan table (match-only identity rewrite)
   # -------------------------------------------------------------------------
   dialplan:
+    label: Number rules
     table: dialplan
     storage: columns
     delete_policy: blocked_if_refs
@@ -255,6 +278,7 @@ tables:
       throttle_seconds: 5
     fields:
       - name: dpid
+        label: Partition ID
         column: dpid
         type: int
         validator: dpid_int
@@ -264,6 +288,7 @@ tables:
         show_in_list: true
         form_order: 0
       - name: pr
+        label: Priority
         column: pr
         type: int
         validator: pr_int
@@ -274,6 +299,7 @@ tables:
         show_in_list: false
         form_order: 1
       - name: match_op
+        label: Match operator
         column: match_op
         type: int
         validator: match_op_locked
@@ -285,6 +311,7 @@ tables:
         show_in_list: false
         form_order: 2
       - name: match_exp
+        label: Match pattern
         column: match_exp
         type: regex
         validator: regex_compiles
@@ -294,6 +321,7 @@ tables:
         show_in_list: true
         form_order: 3
       - name: match_len
+        label: Match length
         column: match_len
         type: int
         validator: match_len_zero
@@ -304,6 +332,7 @@ tables:
         show_in_list: false
         form_order: 4
       - name: subst_exp
+        label: Substitution pattern
         column: subst_exp
         type: regex
         validator: identity_locked
@@ -315,6 +344,7 @@ tables:
         show_in_list: false
         form_order: 5
       - name: repl_exp
+        label: Replacement
         column: repl_exp
         type: regex
         validator: identity_locked
@@ -326,6 +356,7 @@ tables:
         show_in_list: false
         form_order: 6
       - name: attrs
+        label: Attributes
         column: attrs
         type: str
         validator: attrs_free_text
@@ -339,6 +370,7 @@ tables:
   # Standard Kamailio permissions "trusted" table
   # -------------------------------------------------------------------------
   trusted:
+    label: Trusted sources
     table: trusted
     storage: columns
     delete_policy: blocked_if_refs
@@ -352,6 +384,7 @@ tables:
         on_missing: error
     fields:
       - name: src_ip
+        label: Source IP
         column: src_ip
         type: ipv4
         validator: trusted_src_ip
@@ -361,6 +394,7 @@ tables:
         show_in_list: true
         form_order: 0
       - name: proto
+        label: Protocol
         column: proto
         type: str
         validator: proto_any_locked
@@ -372,6 +406,7 @@ tables:
         show_in_list: false
         form_order: 1
       - name: from_pattern
+        label: From pattern
         column: from_pattern
         type: str
         validator: null
@@ -381,6 +416,7 @@ tables:
         show_in_list: false
         form_order: 2
       - name: ruri_pattern
+        label: R-URI pattern
         column: ruri_pattern
         type: str
         validator: null
@@ -390,6 +426,7 @@ tables:
         show_in_list: false
         form_order: 3
       - name: tag
+        label: Home domain
         column: tag
         type: domain
         validator: tag_options
@@ -400,6 +437,7 @@ tables:
         show_in_list: true
         form_order: 4
       - name: priority
+        label: Priority
         column: priority
         type: int
         validator: priority_int

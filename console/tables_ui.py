@@ -49,10 +49,18 @@ def _humanize(name: str) -> str:
     return name.replace("_", " ").replace("-", " ").title()
 
 
+def _field_label(field: descriptors.Field) -> str:
+    return field.label or _humanize(field.name)
+
+
+def _table_label(descriptor: descriptors.Descriptor) -> str:
+    return descriptor.label or _humanize(descriptor.table)
+
+
 def _column_view(field: descriptors.Field) -> dict[str, object]:
     return {
         "name": field.name,
-        "label": _humanize(field.name),
+        "label": _field_label(field),
         "mono": field.type in MONO_TYPES,
     }
 
@@ -142,7 +150,7 @@ def table_list(
             "nav": "tables",
             "fragment": _wants_fragment(request),
             "table": descriptor.table,
-            "table_label": _humanize(descriptor.table),
+            "table_label": _table_label(descriptor),
             "columns": columns,
             "rows": rows,
             "corrupt_rows": corrupt,
@@ -191,7 +199,7 @@ def table_detail(
     fields = [
         {
             "name": field.name,
-            "label": _humanize(field.name),
+            "label": _field_label(field),
             "help": field.help,
             "mono": field.type in MONO_TYPES,
             "value": values.get(field.name, ""),
@@ -206,7 +214,7 @@ def table_detail(
             "nav": "tables",
             "fragment": _wants_fragment(request),
             "table": descriptor.table,
-            "table_label": _humanize(descriptor.table),
+            "table_label": _table_label(descriptor),
             "key": key,
             "deletable": descriptor.delete_policy != "lifecycle",
             "fields": fields,

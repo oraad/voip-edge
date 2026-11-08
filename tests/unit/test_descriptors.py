@@ -322,3 +322,12 @@ def test_validate_against_db_reports_a_missing_table(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert any("tenant_landline" in p for p in problems)
+
+
+def test_descriptor_and_field_labels_are_explicit():
+    tables = load()
+    registry = tables.tables["tenant_registry"]
+    assert registry.label == "Homes"
+    assert registry.field("tprefix").label == "Domain"
+    assert registry.field("ds_onnet").label == "On-net route set"
+    assert tables.tables["dispatcher"].label == "Route sets"

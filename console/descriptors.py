@@ -36,11 +36,21 @@ AUTO_PK = "id"
 
 _TABLESET_KEYS = frozenset({"version", "tables"})
 _DESCRIPTOR_KEYS = frozenset(
-    {"table", "storage", "key", "fields", "reload", "delete_policy", "cross_refs"}
+    {
+        "table",
+        "label",
+        "storage",
+        "key",
+        "fields",
+        "reload",
+        "delete_policy",
+        "cross_refs",
+    }
 )
 _FIELD_KEYS = frozenset(
     {
         "name",
+        "label",
         "column",
         "pack_position",
         "type",
@@ -64,6 +74,7 @@ _CROSS_REF_KEYS = frozenset({"field", "ref", "on_missing"})
 @dataclass(frozen=True)
 class Field:
     name: str
+    label: str = ""
     column: str | None = None
     pack_position: int | None = None
     type: str = "str"
@@ -103,6 +114,7 @@ class Descriptor:
     key: str | None
     fields: list[Field]
     reload: Reload
+    label: str = ""
     delete_policy: str = "blocked_if_refs"
     cross_refs: list[CrossRef] = dataclass_field(default_factory=list)
 
@@ -261,6 +273,7 @@ def _parse_field(raw_field: Any, where: str) -> Field:
 
     return Field(
         name=name,
+        label=_optional_text(raw_field, "label", where) or "",
         column=column,
         pack_position=pack_position,
         type=field_type,
@@ -408,6 +421,7 @@ def _parse_descriptor(name: str, raw_desc: Any) -> Descriptor:
 
     return Descriptor(
         table=table,
+        label=_optional_text(raw_desc, "label", where) or "",
         storage=storage,
         key=key,
         fields=fields,

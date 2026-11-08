@@ -88,7 +88,7 @@ def test_detail_lists_descriptor_fields_and_help(seeded_db, auth_client):
     assert domain in page
     assert "01111111" in page
     # Labels + help come from tables.yaml, not from route code.
-    assert "Tprefix" in page
+    assert "Domain" in page
     assert "Home SIP domain" in page
     assert "create-only" in page
     assert "Read-only" in page
@@ -177,3 +177,15 @@ def test_full_page_and_fragment_modes(seeded_db, auth_client, path):
 
     # Content is the same in both modes.
     assert "sip.alpha.home.example.net" in html.unescape(fragment.text)
+
+
+def test_detail_uses_operator_facing_labels(seeded_db, auth_client):
+    page = auth_client.get(
+        "/tables/tenant_registry/sip.alpha.home.example.net"
+    )
+    text = html.unescape(page.text)
+    assert "Domain" in text
+    assert "On-net route set" in text
+    assert "PSTN route set" in text
+    assert "Tprefix" not in text
+    assert "Ds Onnet" not in text

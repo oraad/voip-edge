@@ -219,7 +219,7 @@ def home_detail(
 
     onnet = int_or_none(values.get("ds_onnet"))
     pstn = int_or_none(values.get("ds_pstn"))
-    checklist = verify_checklist(conn, domain)
+    checklist = verify_checklist(conn, domain, state=(registry, values, source_ip))
 
     reload_errors = _reload_messages(request)
 
