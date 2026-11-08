@@ -276,18 +276,6 @@ def _save(
     errors, warnings = _validate_row(values, conn)
     if warning:
         warnings.append(warning)
-    if conn is not None and not errors:
-        try:
-            existing = conn.execute(
-                "SELECT id FROM dialplan WHERE dpid = ? AND match_exp = ?",
-                (values["dpid"], values["match_exp"]),
-            ).fetchone()
-        except sqlite3.Error:
-            existing = None
-        if existing is not None:
-            errors.setdefault("pattern", []).append(
-                f"This rule already exists (row {existing[0]})."
-            )
     if errors:
         return _render(
             request,
@@ -299,21 +287,40 @@ def _save(
             status_code=422,
         )
 
+    duplicate_id = None
     with db.write_transaction(conn):
-        conn.execute(
-            "INSERT INTO dialplan "
-            "(dpid, pr, match_op, match_exp, match_len, subst_exp, repl_exp, attrs) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                values["dpid"],
-                values["pr"],
-                1,
-                values["match_exp"],
-                0,
-                "^(.*)$",
-                "\\1",
-                values["attrs"],
-            ),
+        existing = conn.execute(
+            "SELECT id FROM dialplan WHERE dpid = ? AND match_exp = ?",
+            (values["dpid"], values["match_exp"]),
+        ).fetchone()
+        if existing is not None:
+            duplicate_id = existing[0]
+        else:
+            conn.execute(
+                "INSERT INTO dialplan "
+                "(dpid, pr, match_op, match_exp, match_len, subst_exp, repl_exp, attrs) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    values["dpid"],
+                    values["pr"],
+                    1,
+                    values["match_exp"],
+                    0,
+                    "^(.*)$",
+                    "\\1",
+                    values["attrs"],
+                ),
+            )
+    if duplicate_id is not None:
+        errors = {"pattern": [f"This rule already exists (row {duplicate_id})."]}
+        return _render(
+            request,
+            conn=conn,
+            tab=tab,
+            values=values,
+            errors=errors,
+            warnings=warnings,
+            status_code=422,
         )
 
     try:
