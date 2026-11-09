@@ -29,3 +29,9 @@ def test_console_shell_has_independent_scroll_regions():
     assert "grid-template-rows: auto minmax(0, 1fr);" in css
     assert "height: 100vh;" in css
     assert "overflow-y: auto;" in css
+
+
+def test_main_column_fills_the_remaining_width():
+    css = _css()
+    assert "max-width: none;" in css
+    assert "min-width: 0;" in css

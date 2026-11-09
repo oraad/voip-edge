@@ -178,7 +178,8 @@ p {
 
 .main {
   width: 100%;
-  max-width: 1180px;
+  max-width: none;
+  min-width: 0;
   padding: 26px 28px 32px;
   overflow-y: auto;
 }
