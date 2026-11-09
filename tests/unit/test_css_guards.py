@@ -22,3 +22,10 @@ def test_stats_rule_keeps_its_selector():
 
 def test_danger_links_use_the_danger_color():
     assert "a.danger" in _css()
+
+
+def test_console_shell_has_independent_scroll_regions():
+    css = _css()
+    assert "grid-template-rows: auto minmax(0, 1fr);" in css
+    assert "height: 100vh;" in css
+    assert "overflow-y: auto;" in css

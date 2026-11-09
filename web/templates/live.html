@@ -43,16 +43,18 @@
     <h2 id="live-registrations-title">Registered phones (edge cache)</h2>
     {% if registrations %}
     <div style="overflow-x:auto">
-      <table>
+      <table class="phones-table">
         <thead>
-          <tr><th scope="col">AOR</th><th scope="col">Transport</th><th scope="col">Flow</th></tr>
+          <tr><th scope="col">Phone</th><th scope="col">Transport</th></tr>
         </thead>
         <tbody>
           {% for reg in registrations %}
           <tr>
-            <td class="mono">{{ reg.aor }}</td>
-            <td>{{ reg.transport|upper }}</td>
-            <td class="mono">{{ reg.flow }}</td>
+            <td>
+              <div class="phone-aor mono">{{ reg.aor }}</div>
+              <div class="phone-flow mono">{{ reg.flow }}</div>
+            </td>
+            <td><span class="chip {{ 'ok' if reg.transport == 'tls' else 'muted' }}">{{ reg.transport|upper }}</span></td>
           </tr>
           {% endfor %}
         </tbody>

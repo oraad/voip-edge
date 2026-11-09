@@ -128,6 +128,8 @@ def test_live_full_page_has_doctype_nav_polling_and_rows(
     assert "Online" in text
     assert "6 days, 3 hours" in text
     assert "Registered phones" in text
+    assert "phones-table" in text
+    assert "phone-flow" in text
     assert "Route set probes" in text
 
     # Rows from the scripted fake replies.

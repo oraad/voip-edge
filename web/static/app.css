@@ -116,8 +116,9 @@ p {
 .app {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
-  min-height: 100vh;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
 }
 
 .statusbar {
@@ -172,13 +173,14 @@ p {
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 18px 12px;
-  min-height: calc(100vh - 56px);
+  overflow-y: auto;
 }
 
 .main {
   width: 100%;
   max-width: 1180px;
   padding: 26px 28px 32px;
+  overflow-y: auto;
 }
 
 .login-main {
@@ -1093,8 +1095,29 @@ details summary {
 
 .live-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 0 18px;
+}
+
+.phones-table {
+  table-layout: fixed;
+}
+
+.phones-table th:last-child,
+.phones-table td:last-child {
+  width: 96px;
+}
+
+.phone-aor {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.phone-flow {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
 }
 
 /* ------------------------------------------------------------------ login */
@@ -1112,6 +1135,9 @@ details summary {
 @media (max-width: 820px) {
   .app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    height: auto;
+    overflow: visible;
   }
 
   .nav {
@@ -1119,6 +1145,11 @@ details summary {
     padding: 12px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  .main {
+    overflow: visible;
   }
 
   .nav a {
