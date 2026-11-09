@@ -1120,6 +1120,24 @@ details summary {
   overflow-wrap: anywhere;
 }
 
+.probes-table {
+  table-layout: fixed;
+}
+
+.probes-table th:first-child,
+.probes-table td:first-child {
+  width: 56px;
+}
+
+.probes-table th:last-child,
+.probes-table td:last-child {
+  width: 128px;
+}
+
+.probes-table td:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+
 /* ------------------------------------------------------------------ login */
 
 .login-main h1 {
