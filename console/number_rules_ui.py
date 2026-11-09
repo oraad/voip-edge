@@ -167,6 +167,7 @@ def _render(
             "partitions": list(catalog.values()),
             "emergency_partitions": [p for p in catalog.values() if "emergency" in p["roles"]],
             "blocked_partitions": [p for p in catalog.values() if "blocked" in p["roles"]],
+            "custom_partitions": [p for p in catalog.values() if "custom" in p["roles"]],
             "groups": groups,
             "values": values or {},
             "errors": errors or {},
@@ -449,7 +450,7 @@ async def add_blocked(request: Request, conn: sqlite3.Connection = Depends(db.ge
         else:
             errors["mode"] = ["Choose a valid match type."]
     except ValueError as exc:
-        errors["numbers"] = [str(exc)]
+        errors["range" if mode == "range" else "numbers"] = [str(exc)]
     try:
         partition = int(dpid)
     except ValueError:

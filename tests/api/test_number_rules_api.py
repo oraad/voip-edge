@@ -159,3 +159,22 @@ def test_emergency_form_can_create_the_first_partition(empty_db, auth_client, ap
         response.headers["location"]
     )
     assert len(_rows(empty_db, "^112$")) == 1
+
+
+def test_emergency_partition_error_is_visible(seeded_db, auth_client):
+    response = auth_client.post(
+        "/number-rules/emergency", data={"dpid": "0", "numbers": "112"}
+    )
+    assert response.status_code == 422
+    assert "Enter a positive partition id" in _text(response.text)
+    assert 'aria-invalid="true"' in response.text
+
+
+def test_custom_priority_error_is_visible(seeded_db, auth_client):
+    response = auth_client.post(
+        "/number-rules/custom",
+        data={"dpid": "55", "priority": "0", "pattern": "^777$"},
+    )
+    assert response.status_code == 422
+    assert "Priority" in _text(response.text)
+    assert "between 1 and 100" in _text(response.text)

@@ -11,30 +11,42 @@
 </div>
 
 {% if saved %}
-<div class="warnsummary" role="status" style="border-color:var(--ok,#2e7d32)">
+<div class="warnsummary ok" role="status">
   <b>Saved</b> — {{ saved }}
+</div>
+{% endif %}
+
+{% if errors %}
+<div class="errsummary" role="alert">
+  <b>Fix {{ errors.values()|map('length')|sum }} issue{{ "" if errors.values()|map('length')|sum == 1 else "s" }} before saving</b>
+  <ul>
+    {% for field, messages in errors.items() %}
+    {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+    {% endfor %}
+  </ul>
 </div>
 {% endif %}
 
 {% if warnings %}
 <div class="warnsummary" role="status">
   <b>Warning</b>
-  <ul style="margin:7px 0 0 17px; padding:0">
+  <ul>
     {% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}
   </ul>
 </div>
 {% endif %}
 
-<div class="tlsnotice" role="note">
+<div class="banner" role="note">
   <b>Only assigned partitions affect calls.</b>
   A home's emergency partition and its blocked-destinations partition are the
   only dialplan partitions the edge consults. A custom rule in an unused
   partition is stored but inert.
 </div>
 
-<div class="actions" style="display:flex; gap:8px; flex-wrap:wrap; margin:14px 0">
+{% if partitions %}
+<div class="chiprow" aria-label="Partitions">
   {% for entry in partitions %}
-  <span class="chip">
+  <span class="chip wrap">
     <strong>Partition {{ entry.dpid }}</strong>
     · {{ entry.role_text }}
     {% if entry.homes %}· {{ entry.homes|join(", ") }}{% endif %}
@@ -42,46 +54,50 @@
   </span>
   {% endfor %}
 </div>
+{% endif %}
 
-<div class="steps" role="list" aria-label="Number rule types">
+<nav class="steps" aria-label="Number rule types">
   {% for name, label in tabs %}
-  <a role="listitem" class="{% if name == tab %}c{% endif %}"
+  <a class="{% if name == tab %}c{% endif %}"
      href="/number-rules?tab={{ name }}"
      {% if name == tab %}aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
-</div>
+</nav>
 
 {% if tab == "emergency" %}
 <section class="panel">
-  <h2 style="margin-top:0">Add emergency numbers</h2>
+  <h2>Add emergency numbers</h2>
   <p class="sub">Calls to these numbers go to the selected homes' PSTN trunk.</p>
-  <form method="post" action="/number-rules/emergency"
-          hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
-          hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
+  <form method="post" action="/number-rules/emergency" novalidate
+        hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
+        hx-target="#rule-preview" hx-swap="innerHTML" hx-params="not csrf_token">
     <input type="hidden" name="kind" value="emergency">
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="emergency-dpid">Applies to</label>
       {% if emergency_partitions %}
-      <select id="emergency-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
+      <select id="emergency-dpid" name="dpid" {% if errors.get("dpid") %}aria-invalid="true"{% endif %} {% if status.readonly %}disabled{% endif %}>
         {% for entry in emergency_partitions %}
-        <option value="{{ entry.dpid }}">Emergency · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
+        <option value="{{ entry.dpid }}"{% if values.get('dpid')|string == entry.dpid|string %} selected{% endif %}>Emergency · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
         {% endfor %}
       </select>
       {% else %}
-      <input id="emergency-dpid" name="dpid" type="number" min="1" value="{{ values.get('dpid', '10') }}" {% if status.readonly %}disabled{% endif %}>
+      <input id="emergency-dpid" name="dpid" type="number" min="1" class="number" value="{{ values.get('dpid', '10') }}" {% if status.readonly %}disabled{% endif %}>
       <div class="hint">No home uses an emergency partition yet. Create it here, then set the home's Emergency dialplan to this id.</div>
       {% endif %}
+      {% for message in errors.get("dpid", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="emergency-numbers">Emergency numbers</label>
-      <textarea id="emergency-numbers" name="numbers" rows="4" spellcheck="false" {% if status.readonly %}disabled{% endif %}>{{ values.get("numbers", "") }}</textarea>
-      <div class="hint">One number per line or comma-separated. Digits only.</div>
-      {% for message in errors.get("numbers", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
+      <textarea id="emergency-numbers" name="numbers" rows="4" spellcheck="false"
+                {% if errors.get("numbers") %}aria-invalid="true" aria-describedby="emergency-numbers-hint emergency-numbers-err"{% endif %}
+                {% if status.readonly %}disabled{% endif %}>{{ values.get("numbers", "") }}</textarea>
+      <div class="hint" id="emergency-numbers-hint">One number per line or comma-separated. Digits only.</div>
+      {% for message in errors.get("numbers", []) %}<div class="errtxt" id="emergency-numbers-err">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="emergency-description">Description <span class="meta">(optional)</span></label>
-      <input id="emergency-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
+      <input id="emergency-description" name="description" type="text" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
     </div>
     <div class="preview" id="rule-preview" role="status" aria-live="polite">
       <span class="hint">Enter values to preview the pattern.</span>
@@ -95,57 +111,65 @@
 
 {% elif tab == "blocked" %}
 <section class="panel">
-  <h2 style="margin-top:0">Add blocked numbers or ranges</h2>
+  <h2>Add blocked numbers or ranges</h2>
   <p class="sub">Matches return 403 before any trunk decision.</p>
-  <form method="post" action="/number-rules/blocked"
-          hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
-          hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
+  <form method="post" action="/number-rules/blocked" novalidate
+        hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
+        hx-target="#rule-preview" hx-swap="innerHTML" hx-params="not csrf_token">
     <input type="hidden" name="kind" value="blocked">
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="blocked-dpid">Applies to</label>
       {% if blocked_partitions %}
-      <select id="blocked-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
+      <select id="blocked-dpid" name="dpid" {% if errors.get("dpid") %}aria-invalid="true"{% endif %} {% if status.readonly %}disabled{% endif %}>
         {% for entry in blocked_partitions %}
-        <option value="{{ entry.dpid }}">Blocked · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
+        <option value="{{ entry.dpid }}"{% if values.get('dpid')|string == entry.dpid|string %} selected{% endif %}>Blocked · partition {{ entry.dpid }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
         {% endfor %}
       </select>
       {% else %}
-      <input id="blocked-dpid" name="dpid" type="number" min="1" value="{{ values.get('dpid', '90') }}" {% if status.readonly %}disabled{% endif %}>
+      <input id="blocked-dpid" name="dpid" type="number" min="1" class="number" value="{{ values.get('dpid', '90') }}" {% if status.readonly %}disabled{% endif %}>
       <div class="hint">No home uses a blocked-destinations partition yet. Create it here, then set it in the home's call policy flags.</div>
       {% endif %}
+      {% for message in errors.get("dpid", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="blocked-mode">Match</label>
       <select id="blocked-mode" name="mode" {% if status.readonly %}disabled{% endif %}>
-        <option value="exact">Exactly these numbers</option>
-        <option value="prefix">Numbers starting with</option>
-        <option value="range">Number range</option>
-        <option value="custom">Custom pattern</option>
+        <option value="exact"{% if values.get('mode', 'exact') == 'exact' %} selected{% endif %}>Exactly these numbers</option>
+        <option value="prefix"{% if values.get('mode') == 'prefix' %} selected{% endif %}>Numbers starting with</option>
+        <option value="range"{% if values.get('mode') == 'range' %} selected{% endif %}>Number range</option>
+        <option value="custom"{% if values.get('mode') == 'custom' %} selected{% endif %}>Custom pattern</option>
       </select>
+      {% for message in errors.get("mode", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="blocked-numbers">Numbers or prefixes</label>
-      <textarea id="blocked-numbers" name="numbers" rows="4" spellcheck="false" {% if status.readonly %}disabled{% endif %}>{{ values.get("numbers", "") }}</textarea>
-      <div class="hint">Used by exact and starting-with modes. One per line or comma-separated.</div>
+      <textarea id="blocked-numbers" name="numbers" rows="4" spellcheck="false"
+                {% if errors.get("numbers") %}aria-invalid="true" aria-describedby="blocked-numbers-hint blocked-numbers-err"{% endif %}
+                {% if status.readonly %}disabled{% endif %}>{{ values.get("numbers", "") }}</textarea>
+      <div class="hint" id="blocked-numbers-hint">Used by exact and starting-with modes. One per line or comma-separated.</div>
+      {% for message in errors.get("numbers", []) %}<div class="errtxt" id="blocked-numbers-err">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
-      <label>Range</label>
-      <div class="rowactions">
-        <input name="range_start" placeholder="Start, e.g. 90000000" value="{{ values.get('range_start', '') }}" {% if status.readonly %}disabled{% endif %}>
-        <input name="range_end" placeholder="End, e.g. 90009999" value="{{ values.get('range_end', '') }}" {% if status.readonly %}disabled{% endif %}>
+      <label for="blocked-range-start">Range</label>
+      <div class="grid2">
+        <input id="blocked-range-start" name="range_start" type="text" class="mono" aria-label="Range start" placeholder="Start, e.g. 90000000" value="{{ values.get('range_start', '') }}" {% if status.readonly %}disabled{% endif %}>
+        <input id="blocked-range-end" name="range_end" type="text" class="mono" aria-label="Range end" placeholder="End, e.g. 90009999" value="{{ values.get('range_end', '') }}" {% if status.readonly %}disabled{% endif %}>
       </div>
       <div class="hint">Same digit length. Used by the range mode.</div>
+      {% for message in errors.get("range", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="blocked-pattern">Custom pattern</label>
-      <input id="blocked-pattern" name="pattern" class="mono" value="{{ values.get('pattern', '') }}" {% if status.readonly %}disabled{% endif %}>
-      <div class="hint">Regex used by the custom mode. Use Advanced for complex rules.</div>
-      {% for message in errors.get("pattern", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
+      <input id="blocked-pattern" name="pattern" type="text" class="mono" value="{{ values.get('pattern', '') }}"
+             {% if errors.get("pattern") %}aria-invalid="true" aria-describedby="blocked-pattern-hint blocked-pattern-err"{% endif %}
+             {% if status.readonly %}disabled{% endif %}>
+      <div class="hint" id="blocked-pattern-hint">Regex used by the custom mode. Use Advanced for complex rules.</div>
+      {% for message in errors.get("pattern", []) %}<div class="errtxt" id="blocked-pattern-err">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="blocked-description">Description <span class="meta">(optional)</span></label>
-      <input id="blocked-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
+      <input id="blocked-description" name="description" type="text" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
     </div>
     <div class="preview" id="rule-preview" role="status" aria-live="polite">
       <span class="hint">Enter values to preview the pattern.</span>
@@ -159,38 +183,45 @@
 
 {% else %}
 <section class="panel">
-  <h2 style="margin-top:0">Add a custom rule</h2>
+  <h2>Add a custom rule</h2>
   <p class="sub">A custom regex in a partition. It only affects calls when a home uses that partition.</p>
-  <form method="post" action="/number-rules/custom"
-          hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
-          hx-target="#rule-preview" hx-swap="innerHTML" hx-include="closest form">
+  <form method="post" action="/number-rules/custom" novalidate
+        hx-get="/number-rules/preview" hx-trigger="input changed delay:300ms, change"
+        hx-target="#rule-preview" hx-swap="innerHTML" hx-params="not csrf_token">
     <input type="hidden" name="kind" value="custom">
     {% if csrf %}<input type="hidden" name="csrf_token" value="{{ csrf }}">{% endif %}
     <div class="field">
       <label for="custom-dpid">Partition</label>
-      {% if partitions %}
-      <select id="custom-dpid" name="dpid" {% if status.readonly %}disabled{% endif %}>
-        {% for entry in partitions %}
-        <option value="{{ entry.dpid }}">Partition {{ entry.dpid }} · {{ entry.role_text }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
+      {% if custom_partitions %}
+      <select id="custom-dpid" name="dpid" {% if errors.get("dpid") %}aria-invalid="true"{% endif %} {% if status.readonly %}disabled{% endif %}>
+        {% for entry in custom_partitions %}
+        <option value="{{ entry.dpid }}"{% if values.get('dpid')|string == entry.dpid|string %} selected{% endif %}>Partition {{ entry.dpid }} · {{ entry.role_text }}{% if entry.homes %} · {{ entry.homes|join(", ") }}{% endif %}</option>
         {% endfor %}
       </select>
       {% else %}
-      <input id="custom-dpid" name="dpid" inputmode="numeric" placeholder="Partition ID" {% if status.readonly %}disabled{% endif %}>
+      <input id="custom-dpid" name="dpid" type="number" min="1" class="number" value="{{ values.get('dpid', '') }}" placeholder="Partition ID" {% if status.readonly %}disabled{% endif %}>
+      <div class="hint">Unused partitions are stored but inert until a home uses them.</div>
       {% endif %}
+      {% for message in errors.get("dpid", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="custom-priority">Priority</label>
-      <input id="custom-priority" name="priority" type="number" min="1" max="100" value="{{ values.get('priority', '1') }}" {% if status.readonly %}disabled{% endif %}>
+      <input id="custom-priority" name="priority" type="number" min="1" max="100" class="number" value="{{ values.get('priority', '1') }}"
+             {% if errors.get("priority") %}aria-invalid="true" aria-describedby="custom-priority-err"{% endif %}
+             {% if status.readonly %}disabled{% endif %}>
+      {% for message in errors.get("priority", []) %}<div class="errtxt" id="custom-priority-err">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="custom-pattern">Match pattern</label>
-      <input id="custom-pattern" name="pattern" class="mono" value="{{ values.get('pattern', '') }}" {% if status.readonly %}disabled{% endif %} placeholder="^(0900|0901)">
-      <div class="hint">Regex matched against the dialed number. Use Advanced for complex edits.</div>
-      {% for message in errors.get("pattern", []) %}<div class="errtxt">{{ message }}</div>{% endfor %}
+      <input id="custom-pattern" name="pattern" type="text" class="mono" value="{{ values.get('pattern', '') }}"
+             {% if errors.get("pattern") %}aria-invalid="true" aria-describedby="custom-pattern-hint custom-pattern-err"{% endif %}
+             {% if status.readonly %}disabled{% endif %} placeholder="^(0900|0901)">
+      <div class="hint" id="custom-pattern-hint">Regex matched against the dialed number. Use Advanced for complex edits.</div>
+      {% for message in errors.get("pattern", []) %}<div class="errtxt" id="custom-pattern-err">{{ message }}</div>{% endfor %}
     </div>
     <div class="field">
       <label for="custom-description">Description <span class="meta">(optional)</span></label>
-      <input id="custom-description" name="description" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
+      <input id="custom-description" name="description" type="text" value="{{ values.get('description', '') }}" {% if status.readonly %}disabled{% endif %}>
     </div>
     <div class="preview" id="rule-preview" role="status" aria-live="polite">
       <span class="hint">Enter values to preview the pattern.</span>
@@ -203,27 +234,25 @@
 {% endif %}
 
 <section class="panel">
-  <h2 style="margin-top:0">{{ tab|capitalize }} rules</h2>
+  <h2>{{ tab|capitalize }} rules</h2>
   {% if groups[tab] %}
-  <div style="overflow-x:auto">
-    <table>
-      <thead><tr><th scope="col">Rule</th><th scope="col">Partition</th><th scope="col">Priority</th><th scope="col">Description</th><th scope="col"><span class="meta">Actions</span></th></tr></thead>
-      <tbody>
-        {% for rule in groups[tab] %}
-        <tr>
-          <td class="mono">{{ rule.summary }}</td>
-          <td>{{ rule.dpid }}</td>
-          <td>{{ rule.priority }}</td>
-          <td>{{ rule.description or "—" }}</td>
-          <td class="rowactions">
-            <a href="{{ rule.edit_url }}">Edit</a>
-            <a class="danger" href="{{ rule.delete_url }}">Delete</a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <table>
+    <thead><tr><th scope="col">Rule</th><th scope="col">Partition</th><th scope="col">Priority</th><th scope="col">Description</th><th scope="col">Actions</th></tr></thead>
+    <tbody>
+      {% for rule in groups[tab] %}
+      <tr>
+        <td class="mono">{{ rule.summary }}</td>
+        <td>{{ rule.dpid }}</td>
+        <td>{{ rule.priority }}</td>
+        <td>{{ rule.description or "—" }}</td>
+        <td><div class="rowactions">
+          <a href="{{ rule.edit_url }}">Edit</a>
+          <a class="danger" href="{{ rule.delete_url }}">Delete</a>
+        </div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% else %}
   <p class="meta">No {{ tab }} rules yet.</p>
   {% endif %}

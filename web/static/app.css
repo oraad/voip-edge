@@ -305,6 +305,17 @@ p {
   white-space: nowrap;
 }
 
+.chip.wrap {
+  white-space: normal;
+}
+
+.chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
 .chip strong {
   color: var(--text);
   font-weight: 650;
@@ -609,6 +620,11 @@ a.danger {
   font-size: 0.88rem;
 }
 
+.warnsummary.ok {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+}
+
 .tlsnotice {
   margin: 10px 0 16px;
   padding: 12px 16px;
@@ -829,6 +845,38 @@ input.number {
   font-size: 0.78rem;
 }
 
+.preview {
+  margin: 10px 0 4px;
+  padding: 8px 11px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 0.82rem;
+}
+
+.preview code {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+input.mono,
+textarea.mono,
+select.mono {
+  font-family: var(--font-mono);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .hint.create-only {
   color: var(--info);
 }
@@ -947,6 +995,28 @@ input.number {
 }
 
 .steps span.c {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--primary-foreground);
+  font-weight: 650;
+}
+
+.steps a {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.steps a:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.steps a.c {
   border-color: var(--accent-strong);
   background: var(--accent-strong);
   color: var(--primary-foreground);
