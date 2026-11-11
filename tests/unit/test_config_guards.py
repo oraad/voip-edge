@@ -65,6 +65,22 @@ def test_indialog_relays_guard_loops_and_pin_the_overlay():
     assert "Loop Detected" in misc.split("t_relay")[0]  # guard precedes relay
     assert 'xlog("L_WARN"' in misc
     assert "route(TUNNEL_SOCKET)" in misc  # conditional pin inside WITHINDLG
-    assert "100\\.64\\." in misc            # destination-scoped, not blanket
     assert '!is_method("ACK") || !t_check_trans()' in misc  # ACK exemption
     assert "Unknown Dialog Source" in misc  # flow check stays intact
+
+
+def test_indialog_guard_compares_exact_hosts_and_pins_the_full_overlay():
+    misc = (ROOT / "kamailio" / "misc.cfg").read_text()
+    # Own-address detection compares the resolved destination host for exact
+    # equality: a substring match would 482 prefix-colliding flows, e.g. peer
+    # 100.64.0.90 against edge .0.9 or public 203.0.113.100 against a .10 edge.
+    assert "$(du{uri.host})" in misc
+    assert "$var(dhost) == PUBIP || $var(dhost) == WGIP" in misc
+    assert '[@:]" + PUBIP' not in misc
+    match = re.search(r'\$var\(dhost\) =~ "\^(100\\.[^"]+)"', misc)
+    assert match, "overlay pin must anchor the destination host from its start"
+    overlay = re.compile("^" + match.group(1))
+    assert overlay.search("100.64.10.5")   # WireGuard peer
+    assert overlay.search("100.89.0.42")   # tunnel pools inside 100.64.0.0/10
+    assert not overlay.search("100.128.1.1")  # beyond the /10 boundary
+    assert not overlay.search("10.89.0.42")
