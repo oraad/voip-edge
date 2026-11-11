@@ -57,3 +57,14 @@ def test_trusted_sources_record_pbx_heartbeat():
     cfg = (ROOT / "kamailio" / "kamailio.cfg").read_text()
     assert '"trunkseen=>size=8;autoexpire=0;"' in cfg
     assert "$sht(trunkseen=>$si) = $Ts;" in cfg
+
+
+def test_indialog_relays_guard_loops_and_pin_the_overlay():
+    misc = (ROOT / "kamailio" / "misc.cfg").read_text()
+    assert '"482", "Loop Detected"' in misc
+    assert "Loop Detected" in misc.split("t_relay")[0]  # guard precedes relay
+    assert 'xlog("L_WARN"' in misc
+    assert "route(TUNNEL_SOCKET)" in misc  # conditional pin inside WITHINDLG
+    assert "100\\.64\\." in misc            # destination-scoped, not blanket
+    assert '!is_method("ACK") || !t_check_trans()' in misc  # ACK exemption
+    assert "Unknown Dialog Source" in misc  # flow check stays intact
