@@ -75,6 +75,10 @@ def test_indialog_guard_compares_exact_hosts_and_pins_the_full_overlay():
     # equality: a substring match would 482 prefix-colliding flows, e.g. peer
     # 100.64.0.90 against edge .0.9 or public 203.0.113.100 against a .10 edge.
     assert "$(du{uri.host})" in misc
+    # with the last local Route stripped, $du is null and the R-URI is the
+    # destination: the pin must fall back to $rd or relays leave on the public
+    # socket and die on strict NATs (UPDATE -> 408 observed live).
+    assert "$du == $null" in misc and "$rd" in misc
     assert "$var(dhost) == PUBIP || $var(dhost) == WGIP" in misc
     assert '[@:]" + PUBIP' not in misc
     match = re.search(r'\$var\(dhost\) =~ "\^(\(\?[^"]+\)|[^"]+)"', misc)
