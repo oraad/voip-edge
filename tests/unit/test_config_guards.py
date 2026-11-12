@@ -77,10 +77,24 @@ def test_indialog_guard_compares_exact_hosts_and_pins_the_full_overlay():
     assert "$(du{uri.host})" in misc
     assert "$var(dhost) == PUBIP || $var(dhost) == WGIP" in misc
     assert '[@:]" + PUBIP' not in misc
-    match = re.search(r'\$var\(dhost\) =~ "\^(100\\.[^"]+)"', misc)
+    match = re.search(r'\$var\(dhost\) =~ "\^(\(\?[^"]+\)|[^"]+)"', misc)
     assert match, "overlay pin must anchor the destination host from its start"
-    overlay = re.compile("^" + match.group(1))
-    assert overlay.search("100.64.10.5")   # WireGuard peer
-    assert overlay.search("100.89.0.42")   # tunnel pools inside 100.64.0.0/10
-    assert not overlay.search("100.128.1.1")  # beyond the /10 boundary
-    assert not overlay.search("10.89.0.42")
+    pinned = re.compile("^(?:" + match.group(1) + ")")
+    assert pinned.match("100.64.10.5")     # WireGuard peer
+    assert pinned.match("100.89.0.42")     # tunnel pools inside 100.64.0.0/10
+    assert pinned.match("10.87.4.10")      # home LANs, routed only via the hub
+    assert pinned.match("192.168.86.5")
+    assert pinned.match("172.20.1.1")
+    assert not pinned.match("100.128.1.1")  # beyond the /10 boundary
+    assert not pinned.match("8.8.8.8")      # public flows keep the default socket
+    assert not pinned.match("192.0.2.10")
+
+
+def test_interhome_legs_anchored_in_rtpengine():
+    invite = (ROOT / "kamailio" / "invite.cfg").read_text()
+    media = (ROOT / "kamailio" / "media.cfg").read_text()
+    assert "$avp(interhome) = 1" in invite
+    assert "direction=internal direction=internal" in media
+    branch = invite.split('# 2: landline -> on-net')[1].split("# 3:")[0]
+    assert "$avp(interhome) = 1" in branch
+    assert "route(MEDIA_DECIDE)" in branch and "route(MEDIA_OFFER)" in branch
