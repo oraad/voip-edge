@@ -102,3 +102,10 @@ def test_interhome_legs_anchored_in_rtpengine():
     branch = invite.split('# 2: landline -> on-net')[1].split("# 3:")[0]
     assert "$avp(interhome) = 1" in branch
     assert "route(MEDIA_DECIDE)" in branch and "route(MEDIA_OFFER)" in branch
+
+
+def test_home_to_phone_from_rewrite_spares_tenant_domains():
+    invite = (ROOT / "kamailio" / "invite.cfg").read_text()
+    # An inter-home leg arrives with From already at the calling home's
+    # tenant domain; rewriting to the callee tenant would misroute redial.
+    assert 'if ($var(o_trusted) == 1 && !($fd =~ "TENANTSUFFIXRE$"))' in invite
