@@ -113,10 +113,13 @@ def test_home_to_phone_from_rewrite_spares_tenant_domains():
 
 def test_rtpe_flags_generate_rtcp_for_homer_stats():
     media = (ROOT / "kamailio" / "media.cfg").read_text()
-    # rtpengine only forwards RTCP reports to Homer when it generates RTCP
-    # itself; the codec module that generates it compiles only with
-    # transcoding, so force-transcoding arms the per-call statistics timer.
-    # The base flags carry the feature so every anchored branch and the
-    # stored answer/delete flags inherit it.
-    assert '$var(rtpe_flags) = "replace-origin replace-session-connection ICE=remove generate-RTCP force-transcoding";' in media
-    assert '$sht(rtpcache=>$ci) = "replace-origin replace-session-connection ICE=remove generate-RTCP force-transcoding"' in media
+    dockerfile = (ROOT / "Dockerfile.rtpengine").read_text()
+    # generate-RTCP is kept on the base flags so real transcoding (mixed
+    # codecs) gets measured and sent to Homer. The image must therefore
+    # carry the codec module - it compiles only WITH_TRANSCODING. But no
+    # call is forced onto the userspace codec path by these flags: plain
+    # passthrough legs stay untouched.
+    assert '$var(rtpe_flags) = "replace-origin replace-session-connection ICE=remove generate-RTCP";' in media
+    assert '$sht(rtpcache=>$ci) = "replace-origin replace-session-connection ICE=remove generate-RTCP"' in media
+    assert "force-transcoding" not in media
+    assert 'DEB_BUILD_PROFILES="pkg.ngcp-rtpengine.nobcg729"' in dockerfile
