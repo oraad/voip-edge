@@ -109,3 +109,12 @@ def test_home_to_phone_from_rewrite_spares_tenant_domains():
     # An inter-home leg arrives with From already at the calling home's
     # tenant domain; rewriting to the callee tenant would misroute redial.
     assert 'if ($var(o_trusted) == 1 && !($fd =~ "TENANTSUFFIXRE$"))' in invite
+
+
+def test_rtpe_flags_generate_rtcp_for_homer_stats():
+    media = (ROOT / "kamailio" / "media.cfg").read_text()
+    # rtpengine only forwards RTCP reports to Homer when it generates RTCP
+    # itself; the base flags carry the feature so every anchored branch and
+    # the stored answer/delete flags inherit it.
+    assert '$var(rtpe_flags) = "replace-origin replace-session-connection ICE=remove generate-rtcp";' in media
+    assert '$sht(rtpcache=>$ci) = "replace-origin replace-session-connection ICE=remove generate-rtcp"' in media
