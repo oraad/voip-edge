@@ -11,10 +11,16 @@
 #  connect; userspace forwarding table=-1.)
 #
 # Build choices: relay-only daemon (no recording daemon / CLI / man pages),
-# no transcoding, no iptables kernel hooks, no MQTT/systemd integration —
-# this deployment does pure userspace relay (table=-1), so the image links
-# only what the daemon unconditionally needs (lib/deps.Makefile +
-# daemon/Makefile LDLIBS).
+# no iptables kernel hooks, no MQTT/systemd integration — this deployment
+# does pure userspace relay (table=-1).
+#
+# Transcoding IS enabled (no-transcoding profile removed): the RTCP
+# statistics generator that feeds Homer's RTP-stats lives in the codec
+# module, which compiles only WITH_TRANSCODING. Upstream's flag generator
+# hard-requires ffmpeg + spandsp dev packages for that build; their
+# runtime libraries must match what the binary links (verified by the
+# --version smoke test below). G.711/G.722/GSM codecs are in-tree and
+# need no extra runtime libs.
 #
 # Note: upstream's flag generator still *requires* a few dev packages at
 # build time even when the feature isn't linked (opus, jwt, mysqlclient) —
@@ -32,13 +38,15 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
         libevent-dev libpcre2-dev libwebsockets-dev zlib1g-dev \
         libncurses-dev libopus-dev libjwt-dev libhiredis-dev libpcap0.8-dev \
         default-libmysqlclient-dev \
+        libspandsp-dev libavcodec-dev libavformat-dev libavutil-dev \
+        libavfilter-dev libswscale-dev libswresample-dev \
  && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 --branch "$RTPE_VERSION" \
         https://github.com/sipwise/rtpengine.git /src
 
 WORKDIR /src
-RUN DEB_BUILD_PROFILES="pkg.ngcp-rtpengine.no-transcoding pkg.ngcp-rtpengine.nobcg729" \
+RUN DEB_BUILD_PROFILES="pkg.ngcp-rtpengine.nobcg729" \
         make -C daemon -j"$(nproc)" rtpengine
 
 
@@ -59,12 +67,15 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
         libatomic1 \
         libpcap0.8t64 libhiredis1.1.0 \
         libjson-glib-1.0-0 libwebsockets19t64 \
+        libspandsp2t64 libopus0 libmariadb3 \
+        libavcodec61 libavformat61 libavutil59 libavfilter10 \
+        libswscale8 libswresample5 \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/daemon/rtpengine /usr/sbin/rtpengine
 
 # fail the BUILD (not the first call) if any shared library is missing:
-RUN /usr/sbin/rtpengine --version
+RUN /usr/sbin/rtpengine --version || { ldd /usr/sbin/rtpengine | grep "not found"; exit 1; }
 
 # control: /etc/rtpengine/rtpengine.conf (mounted by compose)
 ENTRYPOINT ["/usr/sbin/rtpengine", "--config-file=/etc/rtpengine/rtpengine.conf", "--foreground", "--log-stderr"]
