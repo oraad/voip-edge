@@ -116,5 +116,5 @@ def test_rtpe_flags_generate_rtcp_for_homer_stats():
     # rtpengine only forwards RTCP reports to Homer when it generates RTCP
     # itself; the base flags carry the feature so every anchored branch and
     # the stored answer/delete flags inherit it.
-    assert '$var(rtpe_flags) = "replace-origin replace-session-connection ICE=remove generate-rtcp";' in media
-    assert '$sht(rtpcache=>$ci) = "replace-origin replace-session-connection ICE=remove generate-rtcp"' in media
+    assert '$var(rtpe_flags) = "replace-origin replace-session-connection ICE=remove generate-RTCP";' in media
+    assert '$sht(rtpcache=>$ci) = "replace-origin replace-session-connection ICE=remove generate-RTCP"' in media
